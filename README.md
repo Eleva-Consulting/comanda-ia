@@ -41,6 +41,7 @@ Material didático sobre os conceitos e tecnologias usadas no projeto está na p
 - [01 — JavaScript, TypeScript e Node.js](./docs/01-js-ts-nodejs.md)
 - [02 — Frameworks e APIs (com Fastify)](./docs/02-frameworks-e-apis.md)
 - [03 — Rotas, parâmetros e validação com schemas](./docs/03-rotas-schemas-fastify.md)
+- [04 — PostgreSQL e Docker Compose](./docs/04-postgresql-docker.md)
 
 ## Como rodar localmente
 

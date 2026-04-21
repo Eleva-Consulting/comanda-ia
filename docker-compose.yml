@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: comanda-ia-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: comanda_ia
+      POSTGRES_PASSWORD: senha_local_dev
+      POSTGRES_DB: comanda_ia_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
