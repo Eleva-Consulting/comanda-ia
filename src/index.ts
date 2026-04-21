@@ -1,17 +1,8 @@
-import Fastify from 'fastify';
-
-const fastify = Fastify({
-  logger: true,
-});
-
-fastify.get('/', async (request, reply) => {
-  return { 
-    mensagem: 'Olá! Bem-vindo à API do comanda-ia 🍗',
-    versao: '0.0.1',
-  };
-});
+import { buildServer } from './server.js';
 
 const iniciar = async () => {
+  const fastify = await buildServer();
+
   try {
     await fastify.listen({ port: 3000, host: '0.0.0.0' });
     console.log('Servidor rodando em http://localhost:3000');
