@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Estabelecimento {
+  id        String   @id @default(uuid())
+  nome      String
+  telefone  String
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  itens    ItemCardapio[]
+  pedidos  Pedido[]
+
+  @@map("estabelecimentos")
+}
+
+model ItemCardapio {
+  id           String  @id @default(uuid())
+  nome         String
+  descricao    String?
+  preco        Decimal @db.Decimal(10, 2)
+  disponivel   Boolean @default(true)
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  @@map("itens_cardapio")
+}
+
+model Pedido {
+  id              String   @id @default(uuid())
+  clienteNome     String
+  clienteFone     String
+  enderecoEntrega String?
+  total           Decimal  @db.Decimal(10, 2)
+  status          String   @default("recebido")
+  criadoEm        DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  @@map("pedidos")
+}
