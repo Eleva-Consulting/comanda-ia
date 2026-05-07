@@ -43,6 +43,7 @@ Material didático sobre os conceitos e tecnologias usadas no projeto está na p
 - [03 — Rotas, parâmetros e validação com schemas](./docs/03-rotas-schemas-fastify.md)
 - [04 — PostgreSQL e Docker Compose](./docs/04-postgresql-docker.md)
 - [05 — Prisma ORM e banco de dados](./docs/05-prisma-banco-dados.md)
+- [06 — CRUD completo, relacionamentos e queries avançadas](./docs/06-crud-relacionamentos.md)
 
 ## Como rodar localmente
 

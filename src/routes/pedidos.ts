@@ -10,35 +10,51 @@ const CriarPedidoSchema = Type.Object({
   total: Type.Number({ minimum: 0 }),
 });
 
+const AtualizarPedidoSchema = Type.Object({
+  status: Type.Union([
+    Type.Literal('recebido'),
+    Type.Literal('em_preparo'),
+    Type.Literal('pronto'),
+    Type.Literal('entregue'),
+    Type.Literal('cancelado'),
+  ]),
+});
+
 const PedidoParamsSchema = Type.Object({
   id: Type.String(),
 });
 
 export async function pedidosRoutes(fastify: FastifyInstance) {
   fastify.get('/pedidos', async (request, reply) => {
-    const pedidos = await prisma.pedido.findMany({
-      orderBy: { criadoEm: 'desc' },
-    });
-    return pedidos;
+  const pedidos = await prisma.pedido.findMany({
+    orderBy: { criadoEm: 'desc' },
+    include: {
+      estabelecimento: true,
+    },
   });
+  return pedidos;
+});
 
   fastify.get('/pedidos/:id', {
-    schema: {
-      params: PedidoParamsSchema,
+  schema: {
+    params: PedidoParamsSchema,
+  },
+}, async (request, reply) => {
+  const { id } = request.params as { id: string };
+
+  const pedido = await prisma.pedido.findUnique({
+    where: { id },
+    include: {
+      estabelecimento: true,
     },
-  }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-
-    const pedido = await prisma.pedido.findUnique({
-      where: { id },
-    });
-
-    if (!pedido) {
-      return reply.status(404).send({ erro: 'Pedido não encontrado' });
-    }
-
-    return pedido;
   });
+
+  if (!pedido) {
+    return reply.status(404).send({ erro: 'Pedido não encontrado' });
+  }
+
+  return pedido;
+});
 
   fastify.post('/pedidos', {
     schema: {
@@ -58,5 +74,42 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     });
 
     return reply.status(201).send(pedido);
+  });
+
+  fastify.patch('/pedidos/:id', {
+    schema: {
+      params: PedidoParamsSchema,
+      body: AtualizarPedidoSchema,
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const dados = request.body as { status: string };
+
+    try {
+      const pedido = await prisma.pedido.update({
+        where: { id },
+        data: dados,
+      });
+      return pedido;
+    } catch (erro) {
+      return reply.status(404).send({ erro: 'Pedido não encontrado' });
+    }
+  });
+
+  fastify.delete('/pedidos/:id', {
+    schema: {
+      params: PedidoParamsSchema,
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      await prisma.pedido.delete({
+        where: { id },
+      });
+      return reply.status(204).send();
+    } catch (erro) {
+      return reply.status(404).send({ erro: 'Pedido não encontrado' });
+    }
   });
 }
