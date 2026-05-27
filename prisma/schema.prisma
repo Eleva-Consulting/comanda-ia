@@ -19,6 +19,7 @@ model Estabelecimento {
 
   itens    ItemCardapio[]
   pedidos  Pedido[]
+  usuarios  Usuario[]
 
   @@map("estabelecimentos")
 }
@@ -49,4 +50,22 @@ model Pedido {
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
 
   @@map("pedidos")
+}
+enum Role {
+  DONO
+  OPERADOR
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  senhaHash String
+  nome      String
+  role      Role     @default(DONO)
+  criadoEm  DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  @@map("usuarios")
 }

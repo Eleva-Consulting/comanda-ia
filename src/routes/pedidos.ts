@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
+import { autenticar } from '../plugins/auth.js';
 
 const CriarPedidoSchema = Type.Object({
-  estabelecimentoId: Type.String(),
   clienteNome: Type.String({ minLength: 2, maxLength: 100 }),
   clienteFone: Type.String({ minLength: 8, maxLength: 20 }),
   enderecoEntrega: Type.Optional(Type.String()),
@@ -25,91 +25,97 @@ const PedidoParamsSchema = Type.Object({
 });
 
 export async function pedidosRoutes(fastify: FastifyInstance) {
-  fastify.get('/pedidos', async (request, reply) => {
-  const pedidos = await prisma.pedido.findMany({
-    orderBy: { criadoEm: 'desc' },
-    include: {
-      estabelecimento: true,
-    },
-  });
-  return pedidos;
-});
+  // LIST — só pedidos do meu estabelecimento
+  fastify.get('/pedidos', {
+    onRequest: [autenticar],
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
 
+    const pedidos = await prisma.pedido.findMany({
+      where: { estabelecimentoId },
+      orderBy: { criadoEm: 'desc' },
+    });
+    return pedidos;
+  });
+
+  // READ — busca composta: id + tenant
   fastify.get('/pedidos/:id', {
-  schema: {
-    params: PedidoParamsSchema,
-  },
-}, async (request, reply) => {
-  const { id } = request.params as { id: string };
+    onRequest: [autenticar],
+    schema: { params: PedidoParamsSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { estabelecimentoId } = request.user;
 
-  const pedido = await prisma.pedido.findUnique({
-    where: { id },
-    include: {
-      estabelecimento: true,
-    },
+    const pedido = await prisma.pedido.findFirst({
+      where: { id, estabelecimentoId },
+    });
+
+    if (!pedido) {
+      return reply.status(404).send({ erro: 'Pedido não encontrado' });
+    }
+    return pedido;
   });
 
-  if (!pedido) {
-    return reply.status(404).send({ erro: 'Pedido não encontrado' });
-  }
-
-  return pedido;
-});
-
+  // CREATE — estabelecimentoId vem do token, não do body
   fastify.post('/pedidos', {
-    schema: {
-      body: CriarPedidoSchema,
-    },
+    onRequest: [autenticar],
+    schema: { body: CriarPedidoSchema },
   }, async (request, reply) => {
     const dados = request.body as {
-      estabelecimentoId: string;
       clienteNome: string;
       clienteFone: string;
       enderecoEntrega?: string;
       total: number;
     };
+    const { estabelecimentoId } = request.user;
 
     const pedido = await prisma.pedido.create({
-      data: dados,
+      data: {
+        ...dados,
+        estabelecimentoId,
+      },
     });
-
     return reply.status(201).send(pedido);
   });
 
+  // UPDATE — updateMany com filtro composto
   fastify.patch('/pedidos/:id', {
-    schema: {
-      params: PedidoParamsSchema,
-      body: AtualizarPedidoSchema,
-    },
+    onRequest: [autenticar],
+    schema: { params: PedidoParamsSchema, body: AtualizarPedidoSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const dados = request.body as { status: string };
+    const { estabelecimentoId } = request.user;
 
-    try {
-      const pedido = await prisma.pedido.update({
-        where: { id },
-        data: dados,
-      });
-      return pedido;
-    } catch (erro) {
+    const resultado = await prisma.pedido.updateMany({
+      where: { id, estabelecimentoId },
+      data: dados,
+    });
+
+    if (resultado.count === 0) {
       return reply.status(404).send({ erro: 'Pedido não encontrado' });
     }
+
+    // updateMany não retorna o objeto, buscamos novamente
+    const pedidoAtualizado = await prisma.pedido.findUnique({ where: { id } });
+    return pedidoAtualizado;
   });
 
+  // DELETE — deleteMany com filtro composto
   fastify.delete('/pedidos/:id', {
-    schema: {
-      params: PedidoParamsSchema,
-    },
+    onRequest: [autenticar],
+    schema: { params: PedidoParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { estabelecimentoId } = request.user;
 
-    try {
-      await prisma.pedido.delete({
-        where: { id },
-      });
-      return reply.status(204).send();
-    } catch (erro) {
+    const resultado = await prisma.pedido.deleteMany({
+      where: { id, estabelecimentoId },
+    });
+
+    if (resultado.count === 0) {
       return reply.status(404).send({ erro: 'Pedido não encontrado' });
     }
+    return reply.status(204).send();
   });
 }

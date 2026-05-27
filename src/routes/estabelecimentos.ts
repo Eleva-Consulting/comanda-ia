@@ -1,73 +1,35 @@
 import { FastifyInstance } from 'fastify';
-import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
-
-const EstabelecimentoParamsSchema = Type.Object({
-  id: Type.String(),
-});
-
-const CriarEstabelecimentoSchema = Type.Object({
-  nome: Type.String({ minLength: 2, maxLength: 100 }),
-  telefone: Type.String({ minLength: 8, maxLength: 20 }),
-});
+import { autenticar } from '../plugins/auth.js';
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
-  fastify.get('/estabelecimentos', async (request, reply) => {
-    const estabelecimentos = await prisma.estabelecimento.findMany({
-      orderBy: { nome: 'asc' },
-    });
-    return estabelecimentos;
-  });
-
-  fastify.get('/estabelecimentos/:id', {
-    schema: {
-      params: EstabelecimentoParamsSchema,
-    },
+  // Dados do meu estabelecimento
+  fastify.get('/meu-estabelecimento', {
+    onRequest: [autenticar],
   }, async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { estabelecimentoId } = request.user;
 
     const estabelecimento = await prisma.estabelecimento.findUnique({
-      where: { id },
+      where: { id: estabelecimentoId },
     });
 
     if (!estabelecimento) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
-
     return estabelecimento;
   });
 
-  fastify.post('/estabelecimentos', {
-    schema: {
-      body: CriarEstabelecimentoSchema,
-    },
+  // Dashboard do meu estabelecimento (cardápio, pedidos recentes, estatísticas)
+  fastify.get('/meu-estabelecimento/dashboard', {
+    onRequest: [autenticar],
   }, async (request, reply) => {
-    const dados = request.body as { nome: string; telefone: string };
-
-    const estabelecimento = await prisma.estabelecimento.create({
-      data: dados,
-    });
-
-    return reply.status(201).send(estabelecimento);
-  });
-
-  fastify.get('/estabelecimentos/:id/dashboard', {
-    schema: {
-      params: EstabelecimentoParamsSchema,
-    },
-  }, async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { estabelecimentoId } = request.user;
 
     const estabelecimento = await prisma.estabelecimento.findUnique({
-      where: { id },
+      where: { id: estabelecimentoId },
       include: {
-        itens: {
-          orderBy: { nome: 'asc' },
-        },
-        pedidos: {
-          orderBy: { criadoEm: 'desc' },
-          take: 10,
-        },
+        itens: { orderBy: { nome: 'asc' } },
+        pedidos: { orderBy: { criadoEm: 'desc' }, take: 10 },
       },
     });
 
@@ -77,7 +39,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
 
     const estatisticas = await prisma.pedido.groupBy({
       by: ['status'],
-      where: { estabelecimentoId: id },
+      where: { estabelecimentoId },
       _count: { id: true },
     });
 
