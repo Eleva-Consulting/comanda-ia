@@ -7,6 +7,7 @@ import { pedidosRoutes } from './routes/pedidos.js';
 import { cardapioRoutes } from './routes/cardapio.js';
 import { estabelecimentosRoutes } from './routes/estabelecimentos.js';
 import { authRoutes } from './routes/auth.js';
+import { webhookRoutes } from './routes/webhook.js';
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -20,7 +21,7 @@ export async function buildServer() {
     },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
-  // Plugins (carregados antes das rotas)
+  // Plugins (antes das rotas)
   await fastify.register(fastifyJwt, {
     secret: process.env.JWT_SECRET!,
     sign: { expiresIn: '7d' },
@@ -30,6 +31,7 @@ export async function buildServer() {
   await fastify.register(rootRoutes);
   await fastify.register(saudeRoutes);
   await fastify.register(authRoutes);
+  await fastify.register(webhookRoutes);
   await fastify.register(pedidosRoutes);
   await fastify.register(cardapioRoutes);
   await fastify.register(estabelecimentosRoutes);

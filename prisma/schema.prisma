@@ -10,6 +10,29 @@ datasource db {
   provider = "postgresql"
 }
 
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  DONO
+  OPERADOR
+}
+
+enum StatusConversa {
+  ativa
+  finalizada
+}
+
+enum PapelMensagem {
+  cliente
+  assistente
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
 model Estabelecimento {
   id        String   @id @default(uuid())
   nome      String
@@ -17,19 +40,34 @@ model Estabelecimento {
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
 
-  itens    ItemCardapio[]
-  pedidos  Pedido[]
+  itens     ItemCardapio[]
+  pedidos   Pedido[]
   usuarios  Usuario[]
+  conversas Conversa[]
 
   @@map("estabelecimentos")
 }
 
+model Usuario {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  senhaHash String
+  nome      String
+  role      Role     @default(DONO)
+  criadoEm  DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  @@map("usuarios")
+}
+
 model ItemCardapio {
-  id           String  @id @default(uuid())
-  nome         String
-  descricao    String?
-  preco        Decimal @db.Decimal(10, 2)
-  disponivel   Boolean @default(true)
+  id         String  @id @default(uuid())
+  nome       String
+  descricao  String?
+  preco      Decimal @db.Decimal(10, 2)
+  disponivel Boolean @default(true)
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
@@ -49,23 +87,47 @@ model Pedido {
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
 
+  itens ItemPedido[]
+
   @@map("pedidos")
 }
-enum Role {
-  DONO
-  OPERADOR
+
+model ItemPedido {
+  id         String  @id @default(uuid())
+  nomeItem   String
+  quantidade Int
+  precoUnit  Decimal @db.Decimal(10, 2)
+
+  pedidoId String
+  pedido   Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@map("itens_pedido")
 }
 
-model Usuario {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  senhaHash String
-  nome      String
-  role      Role     @default(DONO)
-  criadoEm  DateTime @default(now())
+model Conversa {
+  id           String         @id @default(uuid())
+  clienteFone  String
+  clienteNome  String?
+  status       StatusConversa @default(ativa)
+  criadoEm     DateTime       @default(now())
+  atualizadoEm DateTime       @updatedAt
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
 
-  @@map("usuarios")
+  mensagens Mensagem[]
+
+  @@map("conversas")
+}
+
+model Mensagem {
+  id       String        @id @default(uuid())
+  papel    PapelMensagem
+  conteudo String
+  criadoEm DateTime      @default(now())
+
+  conversaId String
+  conversa   Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  @@map("mensagens")
 }
