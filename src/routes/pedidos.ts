@@ -25,7 +25,7 @@ const PedidoParamsSchema = Type.Object({
 });
 
 export async function pedidosRoutes(fastify: FastifyInstance) {
-  // LIST — só pedidos do meu estabelecimento
+  // LIST — pedidos do meu estabelecimento, COM os itens
   fastify.get('/pedidos', {
     onRequest: [autenticar],
   }, async (request, reply) => {
@@ -34,6 +34,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const pedidos = await prisma.pedido.findMany({
       where: { estabelecimentoId },
       orderBy: { criadoEm: 'desc' },
+      include: { itens: true },
     });
     return pedidos;
   });
@@ -48,6 +49,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
     const pedido = await prisma.pedido.findFirst({
       where: { id, estabelecimentoId },
+      include: { itens: true },
     });
 
     if (!pedido) {
@@ -56,7 +58,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     return pedido;
   });
 
-  // CREATE — estabelecimentoId vem do token, não do body
+  // CREATE
   fastify.post('/pedidos', {
     onRequest: [autenticar],
     schema: { body: CriarPedidoSchema },
@@ -70,15 +72,13 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const pedido = await prisma.pedido.create({
-      data: {
-        ...dados,
-        estabelecimentoId,
-      },
+      data: { ...dados, estabelecimentoId },
+      include: { itens: true },
     });
     return reply.status(201).send(pedido);
   });
 
-  // UPDATE — updateMany com filtro composto
+  // UPDATE — updateMany com filtro composto, retorna o pedido com itens
   fastify.patch('/pedidos/:id', {
     onRequest: [autenticar],
     schema: { params: PedidoParamsSchema, body: AtualizarPedidoSchema },
@@ -96,12 +96,14 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Pedido não encontrado' });
     }
 
-    // updateMany não retorna o objeto, buscamos novamente
-    const pedidoAtualizado = await prisma.pedido.findUnique({ where: { id } });
+    const pedidoAtualizado = await prisma.pedido.findUnique({
+      where: { id },
+      include: { itens: true },
+    });
     return pedidoAtualizado;
   });
 
-  // DELETE — deleteMany com filtro composto
+  // DELETE
   fastify.delete('/pedidos/:id', {
     onRequest: [autenticar],
     schema: { params: PedidoParamsSchema },

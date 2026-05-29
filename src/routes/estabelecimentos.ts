@@ -3,7 +3,6 @@ import { prisma } from '../database.js';
 import { autenticar } from '../plugins/auth.js';
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
-  // Dados do meu estabelecimento
   fastify.get('/meu-estabelecimento', {
     onRequest: [autenticar],
   }, async (request, reply) => {
@@ -19,7 +18,6 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     return estabelecimento;
   });
 
-  // Dashboard do meu estabelecimento (cardápio, pedidos recentes, estatísticas)
   fastify.get('/meu-estabelecimento/dashboard', {
     onRequest: [autenticar],
   }, async (request, reply) => {
@@ -37,6 +35,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
+    // Contagem por status
     const estatisticas = await prisma.pedido.groupBy({
       by: ['status'],
       where: { estabelecimentoId },
@@ -47,6 +46,21 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       (soma, item) => soma + item._count.id,
       0
     );
+
+    // Agregações financeiras — soma e média do total dos pedidos
+    // (excluindo cancelados, que não geram receita real)
+    const agregacoes = await prisma.pedido.aggregate({
+      where: {
+        estabelecimentoId,
+        status: { not: 'cancelado' },
+      },
+      _sum: { total: true },
+      _avg: { total: true },
+    });
+
+    // Decimal → number (mesmo trick do contexto da IA)
+    const faturamentoTotal = Number(agregacoes._sum.total ?? 0);
+    const ticketMedio = Number(agregacoes._avg.total ?? 0);
 
     return {
       estabelecimento: {
@@ -59,6 +73,8 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       pedidosRecentes: estabelecimento.pedidos,
       estatisticas: {
         totalPedidos,
+        faturamentoTotal,
+        ticketMedio,
         porStatus: estatisticas.map((item) => ({
           status: item.status,
           quantidade: item._count.id,

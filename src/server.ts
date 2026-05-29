@@ -22,13 +22,14 @@ export async function buildServer() {
     },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
-  // CORS — aceita tanto localhost quanto 127.0.0.1 em dev
+  // CORS — aceita localhost e 127.0.0.1, e todos os métodos REST
   await fastify.register(fastifyCors, {
     origin: [
       'http://localhost:5173',
       'http://127.0.0.1:5173',
     ],
     credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   });
 
   await fastify.register(fastifyJwt, {
