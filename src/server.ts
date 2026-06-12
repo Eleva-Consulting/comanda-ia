@@ -9,6 +9,7 @@ import { cardapioRoutes } from './routes/cardapio.js';
 import { estabelecimentosRoutes } from './routes/estabelecimentos.js';
 import { authRoutes } from './routes/auth.js';
 import { webhookRoutes } from './routes/webhook.js';
+import { publicoRoutes } from './routes/publico.js';
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -22,7 +23,6 @@ export async function buildServer() {
     },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
-  // CORS — aceita localhost e 127.0.0.1, e todos os métodos REST
   await fastify.register(fastifyCors, {
     origin: [
       'http://localhost:5173',
@@ -41,6 +41,7 @@ export async function buildServer() {
   await fastify.register(saudeRoutes);
   await fastify.register(authRoutes);
   await fastify.register(webhookRoutes);
+  await fastify.register(publicoRoutes);
   await fastify.register(pedidosRoutes);
   await fastify.register(cardapioRoutes);
   await fastify.register(estabelecimentosRoutes);

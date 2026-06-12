@@ -37,12 +37,13 @@ model Estabelecimento {
   id        String   @id @default(uuid())
   nome      String
   telefone  String
+  slug      String   @unique
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
 
+  usuarios  Usuario[]
   itens     ItemCardapio[]
   pedidos   Pedido[]
-  usuarios  Usuario[]
   conversas Conversa[]
 
   @@map("estabelecimentos")
