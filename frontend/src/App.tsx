@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router'
 import Login from './pages/Login'
 import Cozinha from './pages/Cozinha'
 import Dashboard from './pages/Dashboard'
+import Cardapio from './pages/Cardapio'
 import RotaProtegida from './components/RotaProtegida'
 
 function App() {
@@ -22,6 +23,14 @@ function App() {
         element={
           <RotaProtegida>
             <Cozinha />
+          </RotaProtegida>
+        }
+      />
+      <Route
+        path="/cardapio"
+        element={
+          <RotaProtegida>
+            <Cardapio />
           </RotaProtegida>
         }
       />

@@ -12,6 +12,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  
   "devDependencies": {
     "@fastify/type-provider-typebox": "^6.1.0",
     "@types/bcrypt": "^6.0.0",

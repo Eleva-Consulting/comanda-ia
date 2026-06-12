@@ -36,7 +36,7 @@ export default function Layout({ children, headerExtra }: Props) {
             <nav className="flex items-center gap-1">
               <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
               <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
-              {/* TODO Passo B: <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink> */}
+              <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>
             </nav>
           </div>
           <div className="flex items-center gap-3">
