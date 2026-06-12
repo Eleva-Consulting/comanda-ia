@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { API_URL } from '../lib/api'
 
 interface UseSocketReturn {
   socket: Socket | null
@@ -7,12 +8,6 @@ interface UseSocketReturn {
   erro: string | null
 }
 
-/**
- * Hook que gerencia uma conexão Socket.IO autenticada.
- * - Conecta automaticamente quando recebe um token
- * - Desconecta quando o token é removido ou o componente desmonta
- * - Expõe o estado da conexão e o socket pra escutar eventos
- */
 export function useSocket(token: string | null): UseSocketReturn {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [conectado, setConectado] = useState(false)
@@ -25,7 +20,7 @@ export function useSocket(token: string | null): UseSocketReturn {
       return
     }
 
-    const novoSocket = io('http://localhost:3000', {
+    const novoSocket = io(API_URL, {
       auth: { token },
     })
 
@@ -45,7 +40,6 @@ export function useSocket(token: string | null): UseSocketReturn {
 
     setSocket(novoSocket)
 
-    // Cleanup quando o componente desmonta ou o token muda
     return () => {
       novoSocket.disconnect()
     }

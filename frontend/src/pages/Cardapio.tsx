@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed } from 'lucide-react'
 import Layout from '../components/Layout'
+import { API_URL } from '../lib/api'
 
 interface ItemCardapio {
   id: string
@@ -26,7 +27,6 @@ export default function Cardapio() {
   const [salvando, setSalvando] = useState(false)
   const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(null)
 
-  // Form state
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
   const [preco, setPreco] = useState('')
@@ -39,7 +39,7 @@ export default function Cardapio() {
   async function carregarItens() {
     setCarregando(true)
     try {
-      const r = await fetch('http://localhost:3000/cardapio', {
+      const r = await fetch(`${API_URL}/cardapio`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const dados: ItemCardapio[] = await r.json()
@@ -87,8 +87,8 @@ export default function Cardapio() {
       if (descricao.trim()) body.descricao = descricao.trim()
 
       const url = editando
-        ? `http://localhost:3000/cardapio/${editando.id}`
-        : 'http://localhost:3000/cardapio'
+        ? `${API_URL}/cardapio/${editando.id}`
+        : `${API_URL}/cardapio`
       const method = editando ? 'PATCH' : 'POST'
 
       const r = await fetch(url, {
@@ -125,7 +125,7 @@ export default function Cardapio() {
   async function handleToggleDisponivel(item: ItemCardapio) {
     setAcaoEmAndamento(item.id)
     try {
-      const r = await fetch(`http://localhost:3000/cardapio/${item.id}`, {
+      const r = await fetch(`${API_URL}/cardapio/${item.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +149,7 @@ export default function Cardapio() {
 
     setAcaoEmAndamento(item.id)
     try {
-      const r = await fetch(`http://localhost:3000/cardapio/${item.id}`, {
+      const r = await fetch(`${API_URL}/cardapio/${item.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -169,7 +169,7 @@ export default function Cardapio() {
         <div>
           <h2 className="text-2xl font-extrabold">Cardápio</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Itens que sua IA vai oferecer no WhatsApp
+            Itens que aparecem no link público do cardápio
           </p>
         </div>
         <button
@@ -266,10 +266,6 @@ export default function Cardapio() {
   )
 }
 
-// ============================================================================
-// Toggle de disponibilidade
-// ============================================================================
-
 function Toggle({
   ativo,
   carregando,
@@ -296,10 +292,6 @@ function Toggle({
     </button>
   )
 }
-
-// ============================================================================
-// Modal de criação/edição
-// ============================================================================
 
 function ModalForm({
   editando,

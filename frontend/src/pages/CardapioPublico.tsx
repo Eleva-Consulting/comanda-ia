@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 import { ChefHat, Plus, Minus, ShoppingBag, X, Loader2, CheckCircle2, Phone, User, MapPin } from 'lucide-react'
+import { API_URL } from '../lib/api'
 
 interface ItemPublico {
   id: string
@@ -36,7 +37,7 @@ export default function CardapioPublico() {
 
   useEffect(() => {
     if (!slug) return
-    fetch(`http://localhost:3000/publico/${slug}`)
+    fetch(`${API_URL}/publico/${slug}`)
       .then(async (r) => {
         if (!r.ok) throw new Error('Estabelecimento não encontrado')
         return r.json() as Promise<CardapioData>
@@ -68,9 +69,6 @@ export default function CardapioPublico() {
       }, 0)
     : 0
 
-  // ============================================================================
-  // Estados de loading e erro
-  // ============================================================================
   if (carregando) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950">
@@ -93,17 +91,12 @@ export default function CardapioPublico() {
     )
   }
 
-  // Tela pós-pedido
   if (pedidoConfirmado) {
     return <TelaConfirmacao pedido={pedidoConfirmado} nomeEstabelecimento={dados.estabelecimento.nome} />
   }
 
-  // ============================================================================
-  // Tela principal
-  // ============================================================================
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-zinc-100 pb-32">
-      {/* Header */}
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500">
@@ -116,7 +109,6 @@ export default function CardapioPublico() {
         </div>
       </header>
 
-      {/* Lista de itens */}
       <main className="mx-auto max-w-2xl px-4 py-6">
         {dados.cardapio.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-8 text-center">
@@ -137,7 +129,6 @@ export default function CardapioPublico() {
         )}
       </main>
 
-      {/* Barra fixa do carrinho */}
       {totalItens > 0 && (
         <BarraCarrinho
           totalItens={totalItens}
@@ -146,7 +137,6 @@ export default function CardapioPublico() {
         />
       )}
 
-      {/* Modal de checkout */}
       {checkoutAberto && (
         <ModalCheckout
           slug={slug!}
@@ -164,10 +154,6 @@ export default function CardapioPublico() {
     </div>
   )
 }
-
-// ============================================================================
-// ITEM CARD
-// ============================================================================
 
 function ItemCard({
   item,
@@ -221,10 +207,6 @@ function ItemCard({
   )
 }
 
-// ============================================================================
-// BARRA FIXA DO CARRINHO
-// ============================================================================
-
 function BarraCarrinho({
   totalItens,
   totalReais,
@@ -253,10 +235,6 @@ function BarraCarrinho({
     </div>
   )
 }
-
-// ============================================================================
-// MODAL DE CHECKOUT
-// ============================================================================
 
 function ModalCheckout({
   slug,
@@ -295,7 +273,7 @@ function ModalCheckout({
         })),
       }
 
-      const r = await fetch(`http://localhost:3000/publico/${slug}/pedido`, {
+      const r = await fetch(`${API_URL}/publico/${slug}/pedido`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -419,10 +397,6 @@ function ModalCheckout({
     </div>
   )
 }
-
-// ============================================================================
-// TELA DE CONFIRMAÇÃO
-// ============================================================================
 
 function TelaConfirmacao({
   pedido,

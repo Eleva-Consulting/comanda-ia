@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { ChefHat, Mail, Lock, Loader2 } from 'lucide-react'
+import { API_URL } from '../lib/api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -16,7 +17,7 @@ export default function Login() {
     setCarregando(true)
 
     try {
-      const resposta = await fetch('http://localhost:3000/auth/login', {
+      const resposta = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, senha }),

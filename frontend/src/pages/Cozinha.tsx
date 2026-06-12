@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Clock, User, Flame, Check, PackageCheck, Loader2 } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
+import { API_URL } from '../lib/api'
 
 type Status = 'recebido' | 'em_preparo' | 'pronto' | 'entregue' | 'cancelado'
 
@@ -56,7 +57,7 @@ export default function Cozinha() {
   useEffect(() => {
     if (!token) return
 
-    fetch('http://localhost:3000/pedidos', {
+    fetch(`${API_URL}/pedidos`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -83,7 +84,7 @@ export default function Cozinha() {
   async function atualizarStatus(pedidoId: string, novoStatus: Status) {
     setAtualizandoId(pedidoId)
     try {
-      const resposta = await fetch(`http://localhost:3000/pedidos/${pedidoId}`, {
+      const resposta = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

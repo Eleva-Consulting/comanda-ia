@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, type LucideIcon } from 'lucide-react'
 import Layout from '../components/Layout'
+import { API_URL } from '../lib/api'
 
 interface DashboardData {
   estabelecimento: {
@@ -47,10 +48,7 @@ const statusBadgeColor: Record<string, string> = {
 }
 
 function formatarBRL(valor: number): string {
-  return valor.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  })
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 function formatarData(data: string): string {
@@ -70,7 +68,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!token) return
 
-    fetch('http://localhost:3000/meu-estabelecimento/dashboard', {
+    fetch(`${API_URL}/meu-estabelecimento/dashboard`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
