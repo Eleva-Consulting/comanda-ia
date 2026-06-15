@@ -3,101 +3,106 @@ import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 
-const SALT_ROUNDS = 12;
-
-// ============================================================================
-// SCHEMAS
-// ============================================================================
-
 const SignupSchema = Type.Object({
-  estabelecimento: Type.Object({
-    nome: Type.String({ minLength: 2, maxLength: 100 }),
-    telefone: Type.String({ minLength: 8, maxLength: 20 }),
-  }),
-  dono: Type.Object({
-    nome: Type.String({ minLength: 2, maxLength: 100 }),
-    email: Type.String({
-      minLength: 5,
-      maxLength: 200,
-      pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
-    }),
-    senha: Type.String({ minLength: 8, maxLength: 100 }),
-  }),
+  nomeEstabelecimento: Type.String({ minLength: 2, maxLength: 100 }),
+  telefoneEstabelecimento: Type.String({ minLength: 8, maxLength: 20 }),
+  nome: Type.String({ minLength: 2, maxLength: 100 }),
+  email: Type.String({ format: 'email' }),
+  senha: Type.String({ minLength: 8, maxLength: 100 }),
 });
 
 const LoginSchema = Type.Object({
-  email: Type.String({
-    minLength: 5,
-    maxLength: 200,
-    pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
-  }),
-  senha: Type.String({ minLength: 1, maxLength: 100 }),
+  email: Type.String({ format: 'email' }),
+  senha: Type.String(),
 });
 
-// ============================================================================
-// ROTAS
-// ============================================================================
+function slugify(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+async function gerarSlugUnico(base: string): Promise<string> {
+  const slugBase = slugify(base);
+  let candidato = slugBase;
+  let tentativa = 1;
+
+  while (true) {
+    const existente = await prisma.estabelecimento.findUnique({
+      where: { slug: candidato },
+    });
+    if (!existente) return candidato;
+    tentativa++;
+    candidato = `${slugBase}-${tentativa}`;
+  }
+}
 
 export async function authRoutes(fastify: FastifyInstance) {
-  // --------------------------------------------------------------------------
-  // POST /auth/signup
-  // Cria estabelecimento + usuário DONO em uma operação atômica
-  // --------------------------------------------------------------------------
   fastify.post('/auth/signup', {
     schema: { body: SignupSchema },
   }, async (request, reply) => {
-    const { estabelecimento, dono } = request.body as {
-      estabelecimento: { nome: string; telefone: string };
-      dono: { nome: string; email: string; senha: string };
+    const dados = request.body as {
+      nomeEstabelecimento: string;
+      telefoneEstabelecimento: string;
+      nome: string;
+      email: string;
+      senha: string;
     };
 
-    const senhaHash = await bcrypt.hash(dono.senha, SALT_ROUNDS);
+    const emailExistente = await prisma.usuario.findUnique({
+      where: { email: dados.email },
+    });
+    if (emailExistente) {
+      return reply.status(409).send({ erro: 'Email já cadastrado' });
+    }
 
-    try {
-      const resultado = await prisma.estabelecimento.create({
-        data: {
-          nome: estabelecimento.nome,
-          telefone: estabelecimento.telefone,
-          usuarios: {
-            create: {
-              nome: dono.nome,
-              email: dono.email,
-              senhaHash,
-              role: 'DONO',
-            },
+    const slug = await gerarSlugUnico(dados.nomeEstabelecimento);
+    const senhaHash = await bcrypt.hash(dados.senha, 12);
+
+    const resultado = await prisma.estabelecimento.create({
+      data: {
+        nome: dados.nomeEstabelecimento,
+        telefone: dados.telefoneEstabelecimento,
+        slug,
+        usuarios: {
+          create: {
+            nome: dados.nome,
+            email: dados.email,
+            senhaHash,
+            role: 'DONO',
           },
         },
-        include: {
-          usuarios: true,
-        },
-      });
+      },
+      include: { usuarios: true },
+    });
 
-      // Remove o hash da resposta — nunca expor senha (mesmo hasheada)
-      const usuarioCriado = resultado.usuarios[0];
-      const { senhaHash: _, ...usuarioSeguro } = usuarioCriado;
+    const usuarioCriado = resultado.usuarios[0];
 
-      return reply.status(201).send({
-        estabelecimento: {
-          id: resultado.id,
-          nome: resultado.nome,
-          telefone: resultado.telefone,
-          ativo: resultado.ativo,
-          criadoEm: resultado.criadoEm,
-        },
-        usuario: usuarioSeguro,
-      });
-    } catch (erro: any) {
-      if (erro.code === 'P2002') {
-        return reply.status(409).send({ erro: 'Email já cadastrado' });
-      }
-      throw erro;
-    }
+    const token = fastify.jwt.sign({
+      userId: usuarioCriado.id,
+      estabelecimentoId: resultado.id,
+      role: usuarioCriado.role,
+    });
+
+    return reply.status(201).send({
+      token,
+      usuario: {
+        id: usuarioCriado.id,
+        nome: usuarioCriado.nome,
+        email: usuarioCriado.email,
+        role: usuarioCriado.role,
+      },
+      estabelecimento: {
+        id: resultado.id,
+        nome: resultado.nome,
+        slug: resultado.slug,
+      },
+    });
   });
 
-  // --------------------------------------------------------------------------
-  // POST /auth/login
-  // Verifica credenciais e devolve um JWT
-  // --------------------------------------------------------------------------
   fastify.post('/auth/login', {
     schema: { body: LoginSchema },
   }, async (request, reply) => {
@@ -107,7 +112,6 @@ export async function authRoutes(fastify: FastifyInstance) {
       where: { email },
     });
 
-    // Mensagem genérica de propósito — evita user enumeration
     if (!usuario) {
       return reply.status(401).send({ erro: 'Credenciais inválidas' });
     }
@@ -124,14 +128,14 @@ export async function authRoutes(fastify: FastifyInstance) {
       role: usuario.role,
     });
 
-    return reply.send({
+    return {
       token,
       usuario: {
         id: usuario.id,
-        email: usuario.email,
         nome: usuario.nome,
+        email: usuario.email,
         role: usuario.role,
       },
-    });
+    };
   });
 }

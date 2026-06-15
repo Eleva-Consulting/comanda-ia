@@ -1,22 +1,23 @@
+import 'dotenv/config';
 import { buildServer } from './server.js';
 import { inicializarSocket } from './socket.js';
 
-const iniciar = async () => {
+async function main() {
   const fastify = await buildServer();
 
-  // Garante que todos os plugins (inclusive JWT) carregaram antes de usar fastify.jwt
   await fastify.ready();
-
-  // Anexa o Socket.IO ao servidor HTTP do Fastify
   inicializarSocket(fastify);
 
+  const port = Number(process.env.PORT) || 3000;
+  const host = '0.0.0.0';
+
   try {
-    await fastify.listen({ port: 3000, host: '0.0.0.0' });
-    console.log('Servidor rodando em http://localhost:3000');
-  } catch (erro) {
-    fastify.log.error(erro);
+    await fastify.listen({ port, host });
+    fastify.log.info(`Servidor rodando em ${host}:${port}`);
+  } catch (err) {
+    fastify.log.error(err);
     process.exit(1);
   }
-};
+}
 
-iniciar();
+main();

@@ -11,6 +11,13 @@ import { authRoutes } from './routes/auth.js';
 import { webhookRoutes } from './routes/webhook.js';
 import { publicoRoutes } from './routes/publico.js';
 
+// Monta a lista de origens permitidas dinamicamente
+function origensPermitidas(): string[] {
+  const dev = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  const prod = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
+  return [...dev, ...prod];
+}
+
 export async function buildServer() {
   const fastify = Fastify({
     logger: true,
@@ -24,10 +31,7 @@ export async function buildServer() {
   }).withTypeProvider<TypeBoxTypeProvider>();
 
   await fastify.register(fastifyCors, {
-    origin: [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-    ],
+    origin: origensPermitidas(),
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   });
