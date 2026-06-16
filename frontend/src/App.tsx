@@ -8,6 +8,7 @@ import Cardapio from './pages/Cardapio'
 import CardapioPublico from './pages/CardapioPublico'
 import RotaProtegida from './components/RotaProtegida'
 import RotaAdmin from './components/RotaAdmin'
+import RotaDono from './components/RotaDono'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminEstabelecimentos from './pages/admin/AdminEstabelecimentos'
 import EsqueciSenha from './pages/EsqueciSenha'
@@ -26,9 +27,9 @@ function App() {
 
       {/* Painel do estabelecimento (DONO / OPERADOR) */}
       <Route path="/"          element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<RotaProtegida><Dashboard /></RotaProtegida>} />
+      <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
       <Route path="/cozinha"   element={<RotaProtegida><Cozinha /></RotaProtegida>} />
-      <Route path="/cardapio"  element={<RotaProtegida><Cardapio /></RotaProtegida>} />
+      <Route path="/cardapio"  element={<RotaDono><Cardapio /></RotaDono>} />
 
       {/* Painel da plataforma (SUPER_ADMIN) */}
       <Route path="/admin"                    element={<RotaAdmin><AdminDashboard /></RotaAdmin>} />
