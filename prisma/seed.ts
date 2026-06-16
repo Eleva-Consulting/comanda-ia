@@ -13,8 +13,22 @@ async function main() {
   await prisma.estabelecimento.deleteMany()
   console.log('🗑️  Dados anteriores limpos')
 
+  // ── Super Admin da plataforma (sem estabelecimento) ──────────────────────
+  const senhaSuperAdmin = await bcrypt.hash('superadmin123', 12)
+  await prisma.usuario.create({
+    data: {
+      nome: 'Super Admin',
+      email: 'admin@comanda-ia.dev',
+      senhaHash: senhaSuperAdmin,
+      role: 'SUPER_ADMIN',
+      estabelecimentoId: null,
+    },
+  })
+  console.log('✅ Super Admin criado (admin@comanda-ia.dev)')
+
+  // ── Estabelecimentos de teste ─────────────────────────────────────────────
   const senhaVinicius = await bcrypt.hash('senhaforte123', 12)
-  const senhaCarlos = await bcrypt.hash('outrasenha123', 12)
+  const senhaCarlos   = await bcrypt.hash('outrasenha123', 12)
 
   const galeteria = await prisma.estabelecimento.create({
     data: {
@@ -63,6 +77,10 @@ async function main() {
   console.log(`✅ ${pizzaria.nome} (slug: ${pizzaria.slug})`)
 
   console.log('\n🎉 Seed concluído!')
+  console.log('\nCredenciais:')
+  console.log('  Super Admin → admin@comanda-ia.dev / superadmin123')
+  console.log('  Galeteria   → vinicius@teste.com  / senhaforte123')
+  console.log('  Pizzaria    → carlos@teste.com    / outrasenha123')
 }
 
 main()
