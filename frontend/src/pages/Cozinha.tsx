@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Loader2 } from 'lucide-react'
+import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2 } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
-type Status = 'recebido' | 'em_preparo' | 'pronto' | 'entregue' | 'cancelado'
+type Status = 'recebido' | 'em_preparo' | 'pronto' | 'a_caminho' | 'entregue' | 'cancelado'
 
 interface PedidosResponse {
   dados: Pedido[]
@@ -12,37 +12,40 @@ interface PedidosResponse {
 }
 
 interface ItemPedido {
-  id: string
-  nomeItem: string
+  id:         string
+  nomeItem:   string
   quantidade: number
-  precoUnit: number | string
+  precoUnit:  number | string
+  observacao: string | null
 }
 
 interface Pedido {
-  id: string
+  id:          string
   clienteNome: string
   clienteFone: string
-  total: number | string
-  status: Status
-  criadoEm: string
-  itens: ItemPedido[]
+  total:       number | string
+  status:      Status
+  criadoEm:   string
+  itens:       ItemPedido[]
 }
 
 const statusConfig: Record<Status, { label: string; badge: string }> = {
   recebido:   { label: 'Novo',       badge: 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' },
-  em_preparo: { label: 'Em preparo', badge: 'bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/30' },
-  pronto:     { label: 'Pronto',     badge: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30' },
-  entregue:   { label: 'Entregue',   badge: 'bg-zinc-700 text-zinc-400 ring-1 ring-zinc-600' },
+  em_preparo: { label: 'Em preparo', badge: 'bg-yellow-500/10 text-yellow-400 ring-1 ring-yellow-500/30' },
+  pronto:     { label: 'Pronto',     badge: 'bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/30' },
+  a_caminho:  { label: 'A caminho',  badge: 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/30' },
+  entregue:   { label: 'Entregue',   badge: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30' },
   cancelado:  { label: 'Cancelado',  badge: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/30' },
 }
 
 const proximaAcao: Partial<Record<Status, { proximoStatus: Status; label: string; Icone: typeof Flame }>> = {
-  recebido:   { proximoStatus: 'em_preparo', label: 'Iniciar preparo', Icone: Flame },
-  em_preparo: { proximoStatus: 'pronto',     label: 'Marcar pronto',   Icone: Check },
-  pronto:     { proximoStatus: 'entregue',   label: 'Marcar entregue', Icone: PackageCheck },
+  recebido:   { proximoStatus: 'em_preparo', label: 'Iniciar preparo',   Icone: Flame },
+  em_preparo: { proximoStatus: 'pronto',     label: 'Marcar pronto',     Icone: Check },
+  pronto:     { proximoStatus: 'a_caminho',  label: 'Saiu para entrega', Icone: Truck },
+  a_caminho:  { proximoStatus: 'entregue',   label: 'Marcar entregue',   Icone: PackageCheck },
 }
 
-const statusAtivos: Status[] = ['recebido', 'em_preparo', 'pronto']
+const statusAtivos: Status[] = ['recebido', 'em_preparo', 'pronto', 'a_caminho']
 
 function formatarTempo(criadoEm: string): string {
   const diff = Date.now() - new Date(criadoEm).getTime()
@@ -56,14 +59,14 @@ export default function Cozinha() {
   const token = localStorage.getItem('token')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [atualizandoId, setAtualizandoId] = useState<string | null>(null)
+  const [cancelandoId, setCancelandoId] = useState<string | null>(null)
   const [carregandoInicial, setCarregandoInicial] = useState(true)
   const { socket, conectado, erro } = useSocket(token)
 
   useEffect(() => {
     if (!token) return
 
-    // Busca apenas pedidos ativos; Socket.IO cuida dos novos em tempo real
-    fetch(`${API_URL}/pedidos?status=recebido,em_preparo,pronto&limite=100`, {
+    fetch(`${API_URL}/pedidos?status=recebido,em_preparo,pronto,a_caminho&limite=100`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -77,13 +80,20 @@ export default function Cozinha() {
   useEffect(() => {
     if (!socket) return
 
-    const handler = (pedido: Pedido) => {
+    const onNovo = (pedido: Pedido) => {
       setPedidos((prev) => [pedido, ...prev])
     }
 
-    socket.on('pedido:novo', handler)
+    const onAtualizado = (pedido: Pedido) => {
+      setPedidos((prev) => prev.map((p) => (p.id === pedido.id ? pedido : p)))
+    }
+
+    socket.on('pedido:novo', onNovo)
+    socket.on('pedido:atualizado', onAtualizado)
+
     return () => {
-      socket.off('pedido:novo', handler)
+      socket.off('pedido:novo', onNovo)
+      socket.off('pedido:atualizado', onAtualizado)
     }
   }, [socket])
 
@@ -91,7 +101,7 @@ export default function Cozinha() {
     setAtualizandoId(pedidoId)
     try {
       const resposta = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
-        method: 'PATCH',
+        method:  'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -110,6 +120,24 @@ export default function Cozinha() {
       alert('Não foi possível atualizar o pedido. Tente de novo.')
     } finally {
       setAtualizandoId(null)
+    }
+  }
+
+  async function cancelarPedido(pedidoId: string) {
+    setCancelandoId(pedidoId)
+    try {
+      const resposta = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ status: 'cancelado' }),
+      })
+      if (!resposta.ok) throw new Error('Falha ao cancelar')
+      const pedidoAtualizado: Pedido = await resposta.json()
+      setPedidos((prev) => prev.map((p) => (p.id === pedidoId ? pedidoAtualizado : p)))
+    } catch (e) {
+      console.error('Erro ao cancelar pedido:', e)
+    } finally {
+      setCancelandoId(null)
     }
   }
 
@@ -139,6 +167,7 @@ export default function Cozinha() {
             const cfg = statusConfig[pedido.status]
             const acao = proximaAcao[pedido.status]
             const atualizando = atualizandoId === pedido.id
+            const cancelando = cancelandoId === pedido.id
 
             return (
               <div
@@ -147,7 +176,7 @@ export default function Cozinha() {
               >
                 <div className="mb-4 flex items-start justify-between">
                   <div>
-                    <p className="font-mono text-xs text-zinc-500">#{pedido.id.slice(0, 8)}</p>
+                    <p className="font-mono text-xs text-zinc-500">#{pedido.id.slice(-6)}</p>
                     <div className="mt-1 flex items-center gap-1.5 text-zinc-400">
                       <Clock className="h-3.5 w-3.5" />
                       <span className="text-xs">{formatarTempo(pedido.criadoEm)}</span>
@@ -165,27 +194,53 @@ export default function Cozinha() {
 
                 <div className="mb-4 flex-1 space-y-2 border-t border-zinc-800 pt-4">
                   {pedido.itens.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/15 text-sm font-bold text-orange-400">
-                        {item.quantidade}
-                      </span>
-                      <span className="text-sm text-zinc-200">{item.nomeItem}</span>
+                    <div key={item.id}>
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/15 text-sm font-bold text-orange-400">
+                          {item.quantidade}
+                        </span>
+                        <span className="text-sm text-zinc-200">{item.nomeItem}</span>
+                      </div>
+                      {item.observacao && (
+                        <p className="ml-10 mt-0.5 text-xs text-zinc-500 italic">{item.observacao}</p>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between border-t border-zinc-800 pt-4">
-                  <span className="text-lg font-bold">R$ {Number(pedido.total).toFixed(2)}</span>
-                  {acao && (
+                <div className="border-t border-zinc-800 pt-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-lg font-bold">R$ {Number(pedido.total).toFixed(2)}</span>
                     <button
-                      onClick={() => atualizarStatus(pedido.id, acao.proximoStatus)}
-                      disabled={atualizando}
-                      className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                      onClick={() => window.open(`/imprimir/${pedido.id}`, '_blank')}
+                      className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                      title="Imprimir comanda"
                     >
-                      {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <acao.Icone className="h-4 w-4" />}
-                      {acao.label}
+                      <Printer className="h-4 w-4" />
                     </button>
-                  )}
+                  </div>
+                  <div className="flex gap-2">
+                    {acao && (
+                      <button
+                        onClick={() => atualizarStatus(pedido.id, acao.proximoStatus)}
+                        disabled={atualizando || cancelando}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                      >
+                        {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <acao.Icone className="h-4 w-4" />}
+                        {acao.label}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Cancelar este pedido?')) cancelarPedido(pedido.id)
+                      }}
+                      disabled={atualizando || cancelando}
+                      className="rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20 disabled:opacity-40"
+                      title="Cancelar pedido"
+                    >
+                      {cancelando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             )
