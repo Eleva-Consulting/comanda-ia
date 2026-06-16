@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, apenasAdmin } from '../plugins/auth.js';
 import { enviarEmail, templates } from '../mailer.js';
+import { gerarSlugUnico } from '../utils/slug.js';
 
 const AdminParamsSchema = Type.Object({
   id: Type.String(),
@@ -14,6 +16,14 @@ const AtualizarStatusEstabelecimentoSchema = Type.Object({
     Type.Literal('ativo'),
     Type.Literal('suspenso'),
   ]),
+});
+
+const CriarEstabelecimentoSchema = Type.Object({
+  nomeEstabelecimento: Type.String({ minLength: 2, maxLength: 100 }),
+  telefone:            Type.String({ minLength: 8, maxLength: 20 }),
+  nomeDono:            Type.String({ minLength: 2, maxLength: 100 }),
+  emailDono:           Type.String({ format: 'email' }),
+  senhaDono:           Type.String({ minLength: 8, maxLength: 100 }),
 });
 
 type EstabelecimentoComCount = {
@@ -33,6 +43,60 @@ type EstabelecimentoComCount = {
 export async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook('onRequest', autenticar);
   fastify.addHook('onRequest', apenasAdmin);
+
+  // ── POST /admin/estabelecimentos ─────────────────────────────────────────────
+  // Super Admin cria estabelecimento + DONO diretamente como 'ativo'
+  fastify.post('/admin/estabelecimentos', {
+    schema: { body: CriarEstabelecimentoSchema },
+  }, async (request, reply) => {
+    const dados = request.body as {
+      nomeEstabelecimento: string;
+      telefone: string;
+      nomeDono: string;
+      emailDono: string;
+      senhaDono: string;
+    };
+
+    const emailExistente = await prisma.usuario.findUnique({ where: { email: dados.emailDono } });
+    if (emailExistente) {
+      return reply.status(409).send({ erro: 'Email já cadastrado' });
+    }
+
+    const slug = await gerarSlugUnico(dados.nomeEstabelecimento);
+    const senhaHash = await bcrypt.hash(dados.senhaDono, 12);
+
+    const resultado = await prisma.estabelecimento.create({
+      data: {
+        nome:     dados.nomeEstabelecimento,
+        telefone: dados.telefone,
+        slug,
+        status:   'ativo',
+        usuarios: {
+          create: {
+            nome:      dados.nomeDono,
+            email:     dados.emailDono,
+            senhaHash,
+            role:      'DONO',
+          },
+        },
+      },
+      include: {
+        _count: { select: { usuarios: true, pedidos: true, itens: true } },
+      },
+    });
+
+    return reply.status(201).send({
+      id:           resultado.id,
+      nome:         resultado.nome,
+      slug:         resultado.slug,
+      telefone:     resultado.telefone,
+      status:       resultado.status,
+      criadoEm:     resultado.criadoEm,
+      totalUsuarios: resultado._count.usuarios,
+      totalPedidos:  resultado._count.pedidos,
+      totalItens:    resultado._count.itens,
+    });
+  });
 
   // ── GET /admin/estabelecimentos ──────────────────────────────────────────
   fastify.get('/admin/estabelecimentos', async () => {
