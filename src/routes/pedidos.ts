@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar } from '../plugins/auth.js';
+import { getIO } from '../socket.js';
 import type { StatusPedido } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -29,16 +30,50 @@ const AtualizarPedidoSchema = Type.Object({
   ]),
 });
 
+const AtualizarStatusSchema = Type.Object({
+  status: Type.Union([
+    Type.Literal('recebido'),
+    Type.Literal('em_preparo'),
+    Type.Literal('pronto'),
+    Type.Literal('a_caminho'),
+    Type.Literal('entregue'),
+    Type.Literal('cancelado'),
+  ]),
+});
+
+const ManualPedidoSchema = Type.Object({
+  clienteNome: Type.String({ minLength: 2, maxLength: 100 }),
+  clienteFone: Type.String({ minLength: 8, maxLength: 20 }),
+  itens: Type.Array(
+    Type.Object({
+      itemCardapioId: Type.String({ minLength: 1 }),
+      quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+      observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+    }),
+    { minItems: 1 }
+  ),
+});
+
 const PedidoParamsSchema = Type.Object({
   id: Type.String(),
 });
+
+// Transições de status permitidas
+const transicoesPermitidas: Record<StatusPedido, StatusPedido[]> = {
+  recebido:   ['em_preparo', 'cancelado'],
+  em_preparo: ['pronto', 'cancelado'],
+  pronto:     ['a_caminho', 'entregue', 'cancelado'],
+  a_caminho:  ['entregue', 'cancelado'],
+  entregue:   [],
+  cancelado:  [],
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Retorna lista de StatusPedido válidos a partir de string "a,b,c" */
 function parsearFiltroStatus(raw: string | undefined): StatusPedido[] | undefined {
   if (!raw) return undefined;
-  const validos: StatusPedido[] = ['recebido', 'em_preparo', 'pronto', 'entregue', 'cancelado'];
+  const validos: StatusPedido[] = ['recebido', 'em_preparo', 'pronto', 'a_caminho', 'entregue', 'cancelado'];
   const candidatos = raw.split(',').map((s) => s.trim()) as StatusPedido[];
   const filtrados = candidatos.filter((s) => validos.includes(s));
   return filtrados.length > 0 ? filtrados : undefined;
@@ -174,9 +209,9 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // Transação garante que verificação de propriedade e update são atômicos.
   fastify.patch('/pedidos/:id', {
     onRequest: [autenticar],
-    schema: { params: PedidoParamsSchema, body: AtualizarPedidoSchema },
+    schema: { params: PedidoParamsSchema, body: AtualizarStatusSchema },
   }, async (request, reply) => {
-    const { id }    = request.params as { id: string };
+    const { id }     = request.params as { id: string };
     const { status } = request.body as { status: StatusPedido };
     const { estabelecimentoId } = request.user;
 
@@ -186,9 +221,12 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       });
       if (!existente) return null;
 
+      const permitidos = transicoesPermitidas[existente.status];
+      if (!permitidos.includes(status)) return 'transicao_invalida' as const;
+
       return tx.pedido.update({
-        where: { id },
-        data:  { status },
+        where:   { id },
+        data:    { status },
         include: { itens: true },
       });
     });
@@ -196,7 +234,11 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     if (!pedidoAtualizado) {
       return reply.status(404).send({ erro: 'Pedido não encontrado' });
     }
+    if (pedidoAtualizado === 'transicao_invalida') {
+      return reply.status(422).send({ erro: 'Transição de status não permitida' });
+    }
 
+    getIO().to(estabelecimentoId!).emit('pedido:atualizado', pedidoAtualizado);
     return pedidoAtualizado;
   });
 
