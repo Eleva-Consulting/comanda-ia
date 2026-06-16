@@ -191,4 +191,27 @@ export async function adminRoutes(fastify: FastifyInstance) {
       totalUsuarios,
     };
   });
+
+  // ── DELETE /admin/estabelecimentos/:id ───────────────────────────────────────
+  fastify.delete('/admin/estabelecimentos/:id', {
+    schema: { params: AdminParamsSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const existente = await prisma.estabelecimento.findUnique({ where: { id } });
+    if (!existente) {
+      return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
+    }
+
+    await prisma.$transaction([
+      prisma.conversa.deleteMany({ where: { estabelecimentoId: id } }),
+      prisma.pedido.deleteMany({ where: { estabelecimentoId: id } }),
+      prisma.itemCardapio.deleteMany({ where: { estabelecimentoId: id } }),
+      prisma.categoria.deleteMany({ where: { estabelecimentoId: id } }),
+      prisma.usuario.deleteMany({ where: { estabelecimentoId: id } }),
+      prisma.estabelecimento.delete({ where: { id } }),
+    ]);
+
+    return reply.status(204).send();
+  });
 }
