@@ -23,7 +23,7 @@ export default function Layout({ children, headerExtra }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 font-sans text-zinc-100">
+    <div className="min-h-dvh bg-zinc-950 font-sans text-zinc-100">
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
         {/* Linha superior: logo + ações */}
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
