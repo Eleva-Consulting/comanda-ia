@@ -31,9 +31,15 @@ export default function Login() {
       }
 
       localStorage.setItem('token', dados.token)
-      navigate('/cozinha')
+
+      // Redireciona por role: SUPER_ADMIN vai para /admin, demais para /dashboard
+      if (dados.usuario.role === 'SUPER_ADMIN') {
+        navigate('/admin')
+      } else {
+        navigate('/dashboard')
+      }
     } catch (e) {
-      console.error('Erro detalhado no login:', e)
+      console.error('Erro no login:', e)
       setErro('Falha de conexão com o servidor')
     } finally {
       setCarregando(false)
@@ -41,7 +47,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 font-sans">
+    <div className="flex min-h-dvh items-center justify-center bg-zinc-950 px-4 font-sans">
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500">

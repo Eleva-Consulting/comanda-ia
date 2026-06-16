@@ -5,6 +5,9 @@ import Dashboard from './pages/Dashboard'
 import Cardapio from './pages/Cardapio'
 import CardapioPublico from './pages/CardapioPublico'
 import RotaProtegida from './components/RotaProtegida'
+import RotaAdmin from './components/RotaAdmin'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminEstabelecimentos from './pages/admin/AdminEstabelecimentos'
 
 function App() {
   return (
@@ -13,20 +16,15 @@ function App() {
       <Route path="/c/:slug" element={<CardapioPublico />} />
       <Route path="/login" element={<Login />} />
 
-      {/* Protegidas */}
+      {/* Painel do estabelecimento (DONO / OPERADOR) */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route
-        path="/dashboard"
-        element={<RotaProtegida><Dashboard /></RotaProtegida>}
-      />
-      <Route
-        path="/cozinha"
-        element={<RotaProtegida><Cozinha /></RotaProtegida>}
-      />
-      <Route
-        path="/cardapio"
-        element={<RotaProtegida><Cardapio /></RotaProtegida>}
-      />
+      <Route path="/dashboard" element={<RotaProtegida><Dashboard /></RotaProtegida>} />
+      <Route path="/cozinha" element={<RotaProtegida><Cozinha /></RotaProtegida>} />
+      <Route path="/cardapio" element={<RotaProtegida><Cardapio /></RotaProtegida>} />
+
+      {/* Painel da plataforma (SUPER_ADMIN) */}
+      <Route path="/admin" element={<RotaAdmin><AdminDashboard /></RotaAdmin>} />
+      <Route path="/admin/estabelecimentos" element={<RotaAdmin><AdminEstabelecimentos /></RotaAdmin>} />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
