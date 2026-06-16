@@ -12,6 +12,7 @@ import { authRoutes } from './routes/auth.js';
 import { webhookRoutes } from './routes/webhook.js';
 import { publicoRoutes } from './routes/publico.js';
 import { adminRoutes } from './routes/admin.js';
+import { operadoresRoutes } from './routes/operadores.js';
 
 function origensPermitidas(): string[] {
   const dev = ['http://localhost:5173', 'http://127.0.0.1:5173'];
@@ -60,6 +61,7 @@ export async function buildServer() {
   await fastify.register(pedidosRoutes);
   await fastify.register(cardapioRoutes);
   await fastify.register(estabelecimentosRoutes);
+  await fastify.register(operadoresRoutes);
 
   // Rotas exclusivas do Super Admin
   await fastify.register(adminRoutes);
