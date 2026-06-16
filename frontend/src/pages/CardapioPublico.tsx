@@ -13,7 +13,7 @@ interface ItemPublico {
 }
 
 interface CardapioData {
-  estabelecimento: { nome: string; slug: string }
+  estabelecimento: { nome: string; slug: string; aceitandoPedidos: boolean }
   cardapio: ItemPublico[]
 }
 
@@ -112,6 +112,12 @@ export default function CardapioPublico() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-6">
+        {!dados.estabelecimento.aceitandoPedidos && (
+          <div className="mx-4 mb-4 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-center">
+            <p className="font-semibold text-orange-400">Estamos temporariamente fechados</p>
+            <p className="mt-0.5 text-sm text-orange-400/70">Voltamos em breve!</p>
+          </div>
+        )}
         {dados.cardapio.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-8 text-center">
             <p className="text-zinc-400">O restaurante ainda não cadastrou itens no cardápio.</p>
@@ -130,6 +136,7 @@ export default function CardapioPublico() {
         <BarraCarrinho
           totalItens={totalItens}
           totalReais={totalReais}
+          aceitandoPedidos={dados.estabelecimento.aceitandoPedidos}
           onFinalizar={() => setCheckoutAberto(true)}
         />
       )}
@@ -274,10 +281,12 @@ function ItemCard({
 function BarraCarrinho({
   totalItens,
   totalReais,
+  aceitandoPedidos,
   onFinalizar,
 }: {
   totalItens: number
   totalReais: number
+  aceitandoPedidos: boolean
   onFinalizar: () => void
 }) {
   return (
@@ -285,7 +294,8 @@ function BarraCarrinho({
       <div className="mx-auto max-w-2xl p-4">
         <button
           onClick={onFinalizar}
-          className="flex w-full items-center justify-between rounded-xl bg-orange-500 px-5 py-4 font-bold text-white transition hover:bg-orange-600"
+          disabled={!aceitandoPedidos}
+          className="flex w-full items-center justify-between rounded-xl bg-orange-500 px-5 py-4 font-bold text-white transition hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5" />
