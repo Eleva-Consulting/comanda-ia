@@ -42,6 +42,25 @@ export const templates = {
     `;
   },
 
+  resetSenha(nome: string, urlRedefinicao: string): string {
+    return `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
+      <h2 style="color:#f97316">Redefinição de senha</h2>
+      <p>Olá, <strong>${nome}</strong>!</p>
+      <p>Recebemos uma solicitação para redefinir a senha da sua conta na Comanda IA.</p>
+      <p>Clique no botão abaixo para criar uma nova senha. O link expira em <strong>1 hora</strong>.</p>
+      <p>
+        <a href="${urlRedefinicao}"
+           style="display:inline-block;background:#f97316;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px">
+          Redefinir senha →
+        </a>
+      </p>
+      <p style="color:#71717a;font-size:13px">Se você não solicitou a redefinição, ignore este email com segurança.</p>
+      <p style="color:#a1a1aa;font-size:12px;margin-top:32px">Comanda IA — Plataforma de pedidos para food service</p>
+    </div>
+  `;
+  },
+
   cadastroAprovado(nome: string, nomeEstabelecimento: string, urlFrontend: string): string {
     return `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">

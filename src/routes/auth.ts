@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { prisma } from '../database.js';
 import { enviarEmail, templates } from '../mailer.js';
 import { gerarSlugUnico } from '../utils/slug.js';
@@ -16,6 +17,15 @@ const SignupSchema = Type.Object({
 const LoginSchema = Type.Object({
   email: Type.String({ format: 'email' }),
   senha: Type.String(),
+});
+
+const EsqueciSenhaSchema = Type.Object({
+  email: Type.String({ format: 'email' }),
+});
+
+const RedefinirSenhaSchema = Type.Object({
+  token:     Type.String({ minLength: 1 }),
+  novaSenha: Type.String({ minLength: 8, maxLength: 100 }),
 });
 
 export async function authRoutes(fastify: FastifyInstance) {
@@ -124,5 +134,62 @@ export async function authRoutes(fastify: FastifyInstance) {
         role: usuario.role,
       },
     };
+  });
+
+  // ── POST /auth/esqueci-senha ─────────────────────────────────────────────────
+  fastify.post('/auth/esqueci-senha', {
+    schema: { body: EsqueciSenhaSchema },
+  }, async (request) => {
+    const { email } = request.body as { email: string };
+
+    const usuario = await prisma.usuario.findUnique({ where: { email } });
+
+    // Resposta idêntica seja o email cadastrado ou não — não vaza informação
+    const resposta = { mensagem: 'Se este email estiver cadastrado, você receberá as instruções em instantes.' };
+
+    if (!usuario) return resposta;
+
+    const token = randomUUID();
+    const expiracao = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { resetToken: token, resetTokenExpiracao: expiracao },
+    });
+
+    const urlFrontend = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    const urlRedefinicao = `${urlFrontend}/redefinir-senha?token=${token}`;
+
+    enviarEmail({
+      to:      usuario.email,
+      subject: 'Redefinição de senha — Comanda IA',
+      html:    templates.resetSenha(usuario.nome, urlRedefinicao),
+    }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de reset'));
+
+    return resposta;
+  });
+
+  // ── POST /auth/redefinir-senha ───────────────────────────────────────────────
+  fastify.post('/auth/redefinir-senha', {
+    schema: { body: RedefinirSenhaSchema },
+  }, async (request, reply) => {
+    const { token, novaSenha } = request.body as { token: string; novaSenha: string };
+
+    const usuario = await prisma.usuario.findFirst({
+      where: { resetToken: token },
+    });
+
+    if (!usuario || !usuario.resetTokenExpiracao || usuario.resetTokenExpiracao < new Date()) {
+      return reply.status(400).send({ erro: 'Link inválido ou expirado. Solicite um novo.' });
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 12);
+
+    await prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { senhaHash, resetToken: null, resetTokenExpiracao: null },
+    });
+
+    return { mensagem: 'Senha redefinida com sucesso' };
   });
 }
