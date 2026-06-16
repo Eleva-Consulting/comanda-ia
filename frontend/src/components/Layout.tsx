@@ -25,21 +25,25 @@ export default function Layout({ children, headerExtra }: Props) {
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-zinc-100">
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500">
-                <ChefHat className="h-6 w-6 text-white" />
-              </div>
-              <h1 className="text-lg font-bold leading-tight">Comanda IA</h1>
+        {/* Linha superior: logo + ações */}
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 sm:h-10 sm:w-10">
+              <ChefHat className="h-5 w-5 text-white sm:h-6 sm:w-6" />
             </div>
-            <nav className="flex items-center gap-1">
-              <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
-              <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
-              <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>
-            </nav>
+            <h1 className="hidden text-lg font-bold leading-tight sm:block">Comanda IA</h1>
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Nav — visível só em sm+ na linha do header */}
+          <nav className="hidden items-center gap-1 sm:flex">
+            <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+            <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
+            <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>
+          </nav>
+
+          {/* Ações direita */}
+          <div className="flex items-center gap-2">
             {headerExtra}
             <button
               onClick={handleSair}
@@ -50,8 +54,16 @@ export default function Layout({ children, headerExtra }: Props) {
             </button>
           </div>
         </div>
+
+        {/* Nav mobile — barra inferior do header, só em telas pequenas */}
+        <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
+          <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+          <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
+          <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>
+        </div>
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
     </div>
   )
 }
