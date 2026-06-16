@@ -242,6 +242,65 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     return pedidoAtualizado;
   });
 
+  // ── POST /pedidos/manual ────────────────────────────────────────────────────
+  fastify.post('/pedidos/manual', {
+    onRequest: [autenticar],
+    schema: { body: ManualPedidoSchema },
+  }, async (request, reply) => {
+    const { clienteNome, clienteFone, itens } = request.body as {
+      clienteNome: string;
+      clienteFone: string;
+      itens: { itemCardapioId: string; quantidade: number; observacao?: string }[];
+    };
+    const { estabelecimentoId } = request.user;
+
+    const itemIds = itens.map((i) => i.itemCardapioId);
+
+    const itensCardapio = await prisma.itemCardapio.findMany({
+      where: {
+        id:                { in: itemIds },
+        estabelecimentoId: estabelecimentoId!,
+        disponivel:        true,
+      },
+    });
+
+    if (itensCardapio.length !== itemIds.length) {
+      return reply.status(400).send({
+        erro: 'Um ou mais itens não estão disponíveis ou não pertencem a este estabelecimento',
+      });
+    }
+
+    const itensComSnapshot = itens.map((pedidoItem) => {
+      const ic = itensCardapio.find((ic) => ic.id === pedidoItem.itemCardapioId)!;
+      return {
+        nomeItem:   ic.nome,
+        quantidade: pedidoItem.quantidade,
+        precoUnit:  Number(ic.preco),
+        observacao: pedidoItem.observacao,
+      };
+    });
+
+    const total = itensComSnapshot.reduce(
+      (soma, item) => soma + item.precoUnit * item.quantidade,
+      0
+    );
+
+    const pedido = await prisma.pedido.create({
+      data: {
+        clienteNome,
+        clienteFone,
+        total,
+        estabelecimentoId: estabelecimentoId!,
+        itens: { create: itensComSnapshot },
+      },
+      include: { itens: true },
+    });
+
+    getIO().to(estabelecimentoId!).emit('pedido:novo', pedido);
+
+    return reply.status(201).send(pedido);
+  });
+
   // ── DELETE /pedidos/:id ─────────────────────────────────────────────────────
   fastify.delete('/pedidos/:id', {
     onRequest: [autenticar],
