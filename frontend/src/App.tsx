@@ -10,6 +10,8 @@ import RotaProtegida from './components/RotaProtegida'
 import RotaAdmin from './components/RotaAdmin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminEstabelecimentos from './pages/admin/AdminEstabelecimentos'
+import EsqueciSenha from './pages/EsqueciSenha'
+import RedefinirSenha from './pages/RedefinirSenha'
 
 function App() {
   return (
@@ -19,6 +21,8 @@ function App() {
       <Route path="/login"                 element={<Login />} />
       <Route path="/cadastro"              element={<Cadastro />} />
       <Route path="/aguardando-aprovacao"  element={<AguardandoAprovacao />} />
+      <Route path="/esqueci-senha"         element={<EsqueciSenha />} />
+      <Route path="/redefinir-senha"       element={<RedefinirSenha />} />
 
       {/* Painel do estabelecimento (DONO / OPERADOR) */}
       <Route path="/"          element={<Navigate to="/dashboard" replace />} />

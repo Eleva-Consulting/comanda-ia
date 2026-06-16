@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useLocation } from 'react-router'
 import { ChefHat, Mail, Lock, Loader2 } from 'lucide-react'
 import { API_URL } from '../lib/api'
 
@@ -10,6 +10,8 @@ export default function Login() {
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(false)
+  const location = useLocation()
+  const mensagemSucesso = (location.state as { mensagem?: string } | null)?.mensagem ?? null
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -34,6 +36,8 @@ export default function Login() {
 
       if (dados.usuario.role === 'SUPER_ADMIN') {
         navigate('/admin')
+      } else if (dados.usuario.role === 'OPERADOR') {
+        navigate('/cozinha')
       } else {
         navigate('/dashboard')
       }
@@ -87,6 +91,12 @@ export default function Login() {
             </div>
           </label>
 
+          {mensagemSucesso && (
+            <p className="mb-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400 ring-1 ring-emerald-500/30">
+              {mensagemSucesso}
+            </p>
+          )}
+
           {erro && (
             <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
               {erro}
@@ -107,6 +117,12 @@ export default function Login() {
             Não tem conta?{' '}
             <Link to="/cadastro" className="font-medium text-orange-400 hover:text-orange-300">
               Cadastrar estabelecimento
+            </Link>
+          </p>
+
+          <p className="mt-2 text-center text-sm text-zinc-500">
+            <Link to="/esqueci-senha" className="font-medium text-zinc-400 hover:text-zinc-300">
+              Esqueceu sua senha?
             </Link>
           </p>
         </form>
