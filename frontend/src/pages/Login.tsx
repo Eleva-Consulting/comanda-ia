@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { ChefHat, Mail, Lock, Loader2 } from 'lucide-react'
 import { API_URL } from '../lib/api'
 
@@ -32,7 +32,6 @@ export default function Login() {
 
       localStorage.setItem('token', dados.token)
 
-      // Redireciona por role: SUPER_ADMIN vai para /admin, demais para /dashboard
       if (dados.usuario.role === 'SUPER_ADMIN') {
         navigate('/admin')
       } else {
@@ -57,10 +56,7 @@ export default function Login() {
           <p className="mt-1 text-sm text-zinc-400">Entre na sua conta</p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8"
-        >
+        <form onSubmit={handleSubmit} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
           <label className="mb-4 block">
             <span className="mb-2 block text-sm font-medium text-zinc-300">Email</span>
             <div className="relative">
@@ -103,14 +99,16 @@ export default function Login() {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           >
             {carregando ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Entrando...
-              </>
-            ) : (
-              'Entrar'
-            )}
+              <><Loader2 className="h-4 w-4 animate-spin" /> Entrando...</>
+            ) : 'Entrar'}
           </button>
+
+          <p className="mt-4 text-center text-sm text-zinc-500">
+            Não tem conta?{' '}
+            <Link to="/cadastro" className="font-medium text-orange-400 hover:text-orange-300">
+              Cadastrar estabelecimento
+            </Link>
+          </p>
         </form>
       </div>
     </div>

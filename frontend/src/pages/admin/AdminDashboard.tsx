@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Building2, ShoppingBag, Wallet, Users, TrendingDown, Loader2 } from 'lucide-react'
+import { Building2, ShoppingBag, Wallet, Users, Clock, XCircle, Loader2 } from 'lucide-react'
 import LayoutAdmin from '../../components/LayoutAdmin'
 import { API_URL } from '../../lib/api'
 
 interface Metricas {
   totalEstabelecimentos: number
   estabelecimentosAtivos: number
+  estabelecimentosPendentes: number
   estabelecimentosSuspensos: number
   totalPedidos: number
   faturamentoTotal: number
@@ -17,25 +18,21 @@ function formatarBRL(valor: number) {
 }
 
 function KpiCard({
-  label,
-  valor,
-  Icone,
-  cor,
+  label, valor, Icone, cor,
 }: {
   label: string
   valor: string
   Icone: React.ElementType
-  cor: 'violet' | 'emerald' | 'sky' | 'orange' | 'red'
+  cor: 'orange' | 'emerald' | 'sky' | 'red' | 'zinc'
 }) {
   const cores = {
-    violet:  { bg: 'bg-violet-500/10',  text: 'text-violet-400' },
+    orange:  { bg: 'bg-orange-500/10',  text: 'text-orange-400' },
     emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
     sky:     { bg: 'bg-sky-500/10',     text: 'text-sky-400' },
-    orange:  { bg: 'bg-orange-500/10',  text: 'text-orange-400' },
     red:     { bg: 'bg-red-500/10',     text: 'text-red-400' },
+    zinc:    { bg: 'bg-zinc-700',       text: 'text-zinc-400' },
   }
   const c = cores[cor]
-
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
       <div className="flex items-center justify-between">
@@ -90,42 +87,12 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <KpiCard
-          label="Estabelecimentos ativos"
-          valor={metricas.estabelecimentosAtivos.toString()}
-          Icone={Building2}
-          cor="violet"
-        />
-        <KpiCard
-          label="Estabelecimentos suspensos"
-          valor={metricas.estabelecimentosSuspensos.toString()}
-          Icone={TrendingDown}
-          cor="red"
-        />
-        <KpiCard
-          label="Total de usuários"
-          valor={metricas.totalUsuarios.toString()}
-          Icone={Users}
-          cor="sky"
-        />
-        <KpiCard
-          label="Total de pedidos"
-          valor={metricas.totalPedidos.toString()}
-          Icone={ShoppingBag}
-          cor="orange"
-        />
-        <KpiCard
-          label="Faturamento da plataforma"
-          valor={formatarBRL(metricas.faturamentoTotal)}
-          Icone={Wallet}
-          cor="emerald"
-        />
-        <KpiCard
-          label="Total de estabelecimentos"
-          valor={metricas.totalEstabelecimentos.toString()}
-          Icone={Building2}
-          cor="violet"
-        />
+        <KpiCard label="Estabelecimentos ativos"   valor={metricas.estabelecimentosAtivos.toString()}   Icone={Building2}   cor="emerald" />
+        <KpiCard label="Aguardando aprovação"       valor={metricas.estabelecimentosPendentes.toString()} Icone={Clock}       cor="orange"  />
+        <KpiCard label="Suspensos"                  valor={metricas.estabelecimentosSuspensos.toString()} Icone={XCircle}     cor="red"     />
+        <KpiCard label="Total de usuários"          valor={metricas.totalUsuarios.toString()}             Icone={Users}       cor="sky"     />
+        <KpiCard label="Total de pedidos"           valor={metricas.totalPedidos.toString()}              Icone={ShoppingBag} cor="zinc"    />
+        <KpiCard label="Faturamento da plataforma"  valor={formatarBRL(metricas.faturamentoTotal)}        Icone={Wallet}      cor="emerald" />
       </div>
     </LayoutAdmin>
   )

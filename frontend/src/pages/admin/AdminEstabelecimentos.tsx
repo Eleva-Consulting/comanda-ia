@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { Building2, Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import LayoutAdmin from '../../components/LayoutAdmin'
 import { API_URL } from '../../lib/api'
 
@@ -8,22 +8,42 @@ interface Estabelecimento {
   nome: string
   slug: string
   telefone: string
-  ativo: boolean
+  status: 'pendente' | 'ativo' | 'suspenso'
   criadoEm: string
   totalUsuarios: number
   totalPedidos: number
   totalItens: number
 }
 
+type StatusEstabelecimento = 'pendente' | 'ativo' | 'suspenso'
+
 function formatarData(data: string) {
   return new Date(data).toLocaleDateString('pt-BR')
+}
+
+const badgeStatus = {
+  ativo: {
+    label: 'Ativo',
+    classe: 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30',
+    Icone: CheckCircle2,
+  },
+  pendente: {
+    label: 'Pendente',
+    classe: 'bg-orange-500/10 text-orange-400 ring-orange-500/30',
+    Icone: Clock,
+  },
+  suspenso: {
+    label: 'Suspenso',
+    classe: 'bg-red-500/10 text-red-400 ring-red-500/30',
+    Icone: XCircle,
+  },
 }
 
 export default function AdminEstabelecimentos() {
   const token = localStorage.getItem('token')
   const [lista, setLista] = useState<Estabelecimento[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [suspendendo, setSuspendendo] = useState<string | null>(null)
+  const [atualizando, setAtualizando] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`${API_URL}/admin/estabelecimentos`, {
@@ -35,24 +55,31 @@ export default function AdminEstabelecimentos() {
       .finally(() => setCarregando(false))
   }, [token])
 
-  async function toggleSuspender(id: string) {
-    setSuspendendo(id)
+  async function mudarStatus(id: string, status: StatusEstabelecimento) {
+    setAtualizando(id)
     try {
-      const resp = await fetch(`${API_URL}/admin/estabelecimentos/${id}/suspender`, {
+      const resp = await fetch(`${API_URL}/admin/estabelecimentos/${id}/status`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
       })
       if (!resp.ok) return
       const atualizado = await resp.json()
       setLista((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, ativo: atualizado.ativo } : e))
+        prev.map((e) => (e.id === id ? { ...e, status: atualizado.status } : e))
       )
     } catch (err) {
       console.error(err)
     } finally {
-      setSuspendendo(null)
+      setAtualizando(null)
     }
   }
+
+  const pendentes = lista.filter((e) => e.status === 'pendente')
+  const demais = lista.filter((e) => e.status !== 'pendente')
 
   if (carregando) {
     return (
@@ -66,76 +93,138 @@ export default function AdminEstabelecimentos() {
 
   return (
     <LayoutAdmin>
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-extrabold">Estabelecimentos</h2>
-          <p className="mt-1 text-sm text-zinc-400">{lista.length} cadastrados na plataforma</p>
-        </div>
+      <div className="mb-8">
+        <h2 className="text-2xl font-extrabold">Estabelecimentos</h2>
+        <p className="mt-1 text-sm text-zinc-400">{lista.length} cadastrados na plataforma</p>
       </div>
 
-      {lista.length === 0 ? (
+      {/* Pendentes primeiro — requerem ação */}
+      {pendentes.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-3 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-orange-400" />
+            <p className="text-sm font-semibold text-orange-400">
+              {pendentes.length} aguardando aprovação
+            </p>
+          </div>
+          <div className="space-y-3">
+            {pendentes.map((e) => (
+              <CardEstabelecimento
+                key={e.id}
+                e={e}
+                atualizando={atualizando}
+                mudarStatus={mudarStatus}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ativos e suspensos */}
+      {demais.length > 0 && (
+        <div className="space-y-3">
+          {demais.map((e) => (
+            <CardEstabelecimento
+              key={e.id}
+              e={e}
+              atualizando={atualizando}
+              mudarStatus={mudarStatus}
+            />
+          ))}
+        </div>
+      )}
+
+      {lista.length === 0 && (
         <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 text-zinc-500">
           <Building2 className="h-10 w-10" />
           <p>Nenhum estabelecimento cadastrado.</p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {lista.map((e) => (
-            <div
-              key={e.id}
-              className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 sm:flex-row sm:items-center sm:justify-between"
-            >
-              {/* Info */}
-              <div className="flex items-start gap-4">
-                <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${e.ativo ? 'bg-violet-500/15' : 'bg-zinc-800'}`}>
-                  <Building2 className={`h-5 w-5 ${e.ativo ? 'text-violet-400' : 'text-zinc-500'}`} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold">{e.nome}</p>
-                    {e.ativo ? (
-                      <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/30">
-                        <CheckCircle2 className="h-3 w-3" /> Ativo
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400 ring-1 ring-red-500/30">
-                        <XCircle className="h-3 w-3" /> Suspenso
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    /{e.slug} · desde {formatarData(e.criadoEm)}
-                  </p>
-                  <div className="mt-2 flex gap-4 text-xs text-zinc-400">
-                    <span>{e.totalUsuarios} usuário{e.totalUsuarios !== 1 ? 's' : ''}</span>
-                    <span>{e.totalPedidos} pedido{e.totalPedidos !== 1 ? 's' : ''}</span>
-                    <span>{e.totalItens} item{e.totalItens !== 1 ? 'ns' : ''} no cardápio</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Ação */}
-              <button
-                onClick={() => toggleSuspender(e.id)}
-                disabled={suspendendo === e.id}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                  e.ativo
-                    ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 ring-1 ring-red-500/30'
-                    : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/30'
-                }`}
-              >
-                {suspendendo === e.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : e.ativo ? (
-                  <><XCircle className="h-4 w-4" /> Suspender</>
-                ) : (
-                  <><CheckCircle2 className="h-4 w-4" /> Reativar</>
-                )}
-              </button>
-            </div>
-          ))}
-        </div>
       )}
     </LayoutAdmin>
+  )
+}
+
+function CardEstabelecimento({
+  e,
+  atualizando,
+  mudarStatus,
+}: {
+  e: Estabelecimento
+  atualizando: string | null
+  mudarStatus: (id: string, status: StatusEstabelecimento) => void
+}) {
+  const badge = badgeStatus[e.status]
+  const ocupado = atualizando === e.id
+
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 sm:flex-row sm:items-center sm:justify-between">
+      {/* Info */}
+      <div className="flex items-start gap-4">
+        <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${e.status === 'ativo' ? 'bg-orange-500/10' : 'bg-zinc-800'}`}>
+          <Building2 className={`h-5 w-5 ${e.status === 'ativo' ? 'text-orange-400' : 'text-zinc-500'}`} />
+        </div>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold">{e.nome}</p>
+            <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${badge.classe}`}>
+              <badge.Icone className="h-3 w-3" />
+              {badge.label}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            /{e.slug} · desde {formatarData(e.criadoEm)}
+          </p>
+          <div className="mt-2 flex gap-4 text-xs text-zinc-400">
+            <span>{e.totalUsuarios} usuário{e.totalUsuarios !== 1 ? 's' : ''}</span>
+            <span>{e.totalPedidos} pedido{e.totalPedidos !== 1 ? 's' : ''}</span>
+            <span>{e.totalItens} item{e.totalItens !== 1 ? 'ns' : ''} no cardápio</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Ações */}
+      <div className="flex shrink-0 gap-2">
+        {e.status === 'pendente' && (
+          <>
+            <button
+              onClick={() => mudarStatus(e.id, 'ativo')}
+              disabled={ocupado}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Aprovar
+            </button>
+            <button
+              onClick={() => mudarStatus(e.id, 'suspenso')}
+              disabled={ocupado}
+              className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 ring-1 ring-red-500/30 transition hover:bg-red-500/20 disabled:opacity-50"
+            >
+              <XCircle className="h-4 w-4" />
+              Rejeitar
+            </button>
+          </>
+        )}
+        {e.status === 'ativo' && (
+          <button
+            onClick={() => mudarStatus(e.id, 'suspenso')}
+            disabled={ocupado}
+            className="flex items-center gap-1.5 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 ring-1 ring-red-500/30 transition hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+            Suspender
+          </button>
+        )}
+        {e.status === 'suspenso' && (
+          <button
+            onClick={() => mudarStatus(e.id, 'ativo')}
+            disabled={ocupado}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/20 disabled:opacity-50"
+          >
+            {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Reativar
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
