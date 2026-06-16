@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Building2, Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import type { FormEvent } from 'react'
+import { Building2, Loader2, CheckCircle2, XCircle, Clock, Plus, X } from 'lucide-react'
 import LayoutAdmin from '../../components/LayoutAdmin'
 import { API_URL } from '../../lib/api'
 
@@ -45,6 +46,15 @@ export default function AdminEstabelecimentos() {
   const [carregando, setCarregando] = useState(true)
   const [atualizando, setAtualizando] = useState<string | null>(null)
 
+  const [novoModalAberto, setNovoModalAberto] = useState(false)
+  const [criando, setCriando] = useState(false)
+  const [erroModal, setErroModal] = useState<string | null>(null)
+  const [nomeEst, setNomeEst] = useState('')
+  const [telefone, setTelefone] = useState('')
+  const [nomeDono, setNomeDono] = useState('')
+  const [emailDono, setEmailDono] = useState('')
+  const [senhaDono, setSenhaDono] = useState('')
+
   useEffect(() => {
     fetch(`${API_URL}/admin/estabelecimentos`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -78,6 +88,49 @@ export default function AdminEstabelecimentos() {
     }
   }
 
+  function abrirNovoModal() {
+    setNomeEst('')
+    setTelefone('')
+    setNomeDono('')
+    setEmailDono('')
+    setSenhaDono('')
+    setErroModal(null)
+    setNovoModalAberto(true)
+  }
+
+  async function criarEstabelecimento(e: FormEvent) {
+    e.preventDefault()
+    setErroModal(null)
+    setCriando(true)
+    try {
+      const resp = await fetch(`${API_URL}/admin/estabelecimentos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          nomeEstabelecimento: nomeEst,
+          telefone,
+          nomeDono,
+          emailDono,
+          senhaDono,
+        }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) {
+        setErroModal(dados.erro ?? 'Erro ao criar estabelecimento')
+        return
+      }
+      setLista((prev) => [dados, ...prev])
+      setNovoModalAberto(false)
+    } catch {
+      setErroModal('Falha de conexão')
+    } finally {
+      setCriando(false)
+    }
+  }
+
   const pendentes = lista.filter((e) => e.status === 'pendente')
   const demais = lista.filter((e) => e.status !== 'pendente')
 
@@ -93,9 +146,18 @@ export default function AdminEstabelecimentos() {
 
   return (
     <LayoutAdmin>
-      <div className="mb-8">
-        <h2 className="text-2xl font-extrabold">Estabelecimentos</h2>
-        <p className="mt-1 text-sm text-zinc-400">{lista.length} cadastrados na plataforma</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-extrabold">Estabelecimentos</h2>
+          <p className="mt-1 text-sm text-zinc-400">{lista.length} cadastrados na plataforma</p>
+        </div>
+        <button
+          onClick={abrirNovoModal}
+          className="flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+        >
+          <Plus className="h-4 w-4" />
+          Novo Estabelecimento
+        </button>
       </div>
 
       {/* Pendentes primeiro — requerem ação */}
@@ -138,6 +200,104 @@ export default function AdminEstabelecimentos() {
         <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-800 text-zinc-500">
           <Building2 className="h-10 w-10" />
           <p>Nenhum estabelecimento cadastrado.</p>
+        </div>
+      )}
+
+      {novoModalAberto && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-8">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-lg font-bold">Novo Estabelecimento</h3>
+              <button
+                onClick={() => setNovoModalAberto(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={criarEstabelecimento} className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Estabelecimento</p>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Nome</span>
+                <input
+                  type="text"
+                  required
+                  value={nomeEst}
+                  onChange={(e) => setNomeEst(e.target.value)}
+                  placeholder="Ex: Galeteria do João"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Telefone</span>
+                <input
+                  type="text"
+                  required
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
+                  placeholder="(51) 99999-0000"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                />
+              </label>
+              <p className="pt-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Responsável (DONO)</p>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Nome</span>
+                <input
+                  type="text"
+                  required
+                  value={nomeDono}
+                  onChange={(e) => setNomeDono(e.target.value)}
+                  placeholder="Nome completo"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Email</span>
+                <input
+                  type="email"
+                  required
+                  value={emailDono}
+                  onChange={(e) => setEmailDono(e.target.value)}
+                  placeholder="dono@email.com"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Senha provisória</span>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={senhaDono}
+                  onChange={(e) => setSenhaDono(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                />
+              </label>
+              {erroModal && (
+                <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+                  {erroModal}
+                </p>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setNovoModalAberto(false)}
+                  className="rounded-xl border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-400 transition hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={criando}
+                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                >
+                  {criando && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Criar estabelecimento
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </LayoutAdmin>
