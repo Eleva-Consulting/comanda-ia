@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { enviarEmail, templates } from '../mailer.js';
+import { gerarSlugUnico } from '../utils/slug.js';
 
 const SignupSchema = Type.Object({
   nomeEstabelecimento: Type.String({ minLength: 2, maxLength: 100 }),
@@ -16,27 +17,6 @@ const LoginSchema = Type.Object({
   email: Type.String({ format: 'email' }),
   senha: Type.String(),
 });
-
-function slugify(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-async function gerarSlugUnico(base: string): Promise<string> {
-  const slugBase = slugify(base);
-  let candidato = slugBase;
-  let tentativa = 1;
-  while (true) {
-    const existente = await prisma.estabelecimento.findUnique({ where: { slug: candidato } });
-    if (!existente) return candidato;
-    tentativa++;
-    candidato = `${slugBase}-${tentativa}`;
-  }
-}
 
 export async function authRoutes(fastify: FastifyInstance) {
   // ── POST /auth/signup ────────────────────────────────────────────────────
