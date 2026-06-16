@@ -8,6 +8,7 @@ interface ItemPublico {
   nome: string
   descricao: string | null
   preco: number
+  foto: string | null
 }
 
 interface CardapioData {
@@ -167,42 +168,52 @@ function ItemCard({
   onRemover: () => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-      <div className="min-w-0 flex-1">
-        <h3 className="font-bold">{item.nome}</h3>
-        {item.descricao && (
-          <p className="mt-1 text-sm text-zinc-400 line-clamp-2">{item.descricao}</p>
-        )}
-        <p className="mt-2 font-extrabold text-orange-400">{formatarBRL(item.preco)}</p>
-      </div>
+    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
+      {item.foto && (
+        <img
+          src={item.foto}
+          alt={item.nome}
+          loading="lazy"
+          className="h-44 w-full object-cover"
+        />
+      )}
+      <div className="flex items-center justify-between gap-4 p-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-bold">{item.nome}</h3>
+          {item.descricao && (
+            <p className="mt-1 text-sm text-zinc-400 line-clamp-2">{item.descricao}</p>
+          )}
+          <p className="mt-2 font-extrabold text-orange-400">{formatarBRL(item.preco)}</p>
+        </div>
 
-      {quantidade === 0 ? (
-        <button
-          onClick={onAdicionar}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600"
-          aria-label="Adicionar"
-        >
-          <Plus className="h-5 w-5" />
-        </button>
-      ) : (
-        <div className="flex shrink-0 items-center gap-2 rounded-xl bg-zinc-800 px-1 py-1">
-          <button
-            onClick={onRemover}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
-            aria-label="Remover um"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <span className="min-w-6 text-center font-bold">{quantidade}</span>
+        {quantidade === 0 ? (
           <button
             onClick={onAdicionar}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
-            aria-label="Adicionar mais um"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600"
+            aria-label="Adicionar"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-5 w-5" />
           </button>
-        </div>
-      )}
+        ) : (
+          <div className="flex shrink-0 items-center gap-2 rounded-xl bg-zinc-800 px-1 py-1">
+            <button
+              onClick={onRemover}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
+              aria-label="Remover um"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <span className="min-w-6 text-center font-bold">{quantidade}</span>
+            <button
+              onClick={onAdicionar}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
+              aria-label="Adicionar mais um"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

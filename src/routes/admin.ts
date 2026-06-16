@@ -1,6 +1,20 @@
 import { FastifyInstance } from 'fastify';
+import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, apenasAdmin } from '../plugins/auth.js';
+import { enviarEmail, templates } from '../mailer.js';
+
+const AdminParamsSchema = Type.Object({
+  id: Type.String(),
+});
+
+const AtualizarStatusEstabelecimentoSchema = Type.Object({
+  status: Type.Union([
+    Type.Literal('pendente'),
+    Type.Literal('ativo'),
+    Type.Literal('suspenso'),
+  ]),
+});
 
 type EstabelecimentoComCount = {
   id: string;
@@ -43,14 +57,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // ── PATCH /admin/estabelecimentos/:id/status ─────────────────────────────
-  // Aprova (ativo), suspende (suspenso) ou coloca pendente
-  fastify.patch('/admin/estabelecimentos/:id/status', async (request, reply) => {
-    const { id } = request.params as { id: string };
+  // Aprova (ativo), suspende (suspenso) ou coloca pendente.
+  // TypeBox valida e rejeita automaticamente status inválido com 400.
+  fastify.patch('/admin/estabelecimentos/:id/status', {
+    schema: {
+      params: AdminParamsSchema,
+      body:   AtualizarStatusEstabelecimentoSchema,
+    },
+  }, async (request, reply) => {
+    const { id }     = request.params as { id: string };
     const { status } = request.body as { status: 'pendente' | 'ativo' | 'suspenso' };
-
-    if (!['pendente', 'ativo', 'suspenso'].includes(status)) {
-      return reply.status(400).send({ erro: 'Status inválido' });
-    }
 
     const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id } });
     if (!estabelecimento) {
@@ -61,6 +77,22 @@ export async function adminRoutes(fastify: FastifyInstance) {
       where: { id },
       data: { status },
     });
+
+    // Envia email de aprovação ao DONO quando o estabelecimento é ativado — fire-and-forget
+    if (status === 'ativo') {
+      prisma.usuario.findFirst({
+        where:  { estabelecimentoId: id, role: 'DONO' },
+        select: { email: true, nome: true },
+      }).then((dono) => {
+        if (!dono) return;
+        const urlFrontend = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+        return enviarEmail({
+          to:      dono.email,
+          subject: `${atualizado.nome} foi aprovado na Comanda IA!`,
+          html:    templates.cadastroAprovado(dono.nome, atualizado.nome, urlFrontend),
+        });
+      }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de aprovação'));
+    }
 
     return { id: atualizado.id, nome: atualizado.nome, status: atualizado.status };
   });

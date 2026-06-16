@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
+import { enviarEmail, templates } from '../mailer.js';
 
 const SignupSchema = Type.Object({
   nomeEstabelecimento: Type.String({ minLength: 2, maxLength: 100 }),
@@ -76,6 +77,14 @@ export async function authRoutes(fastify: FastifyInstance) {
       },
       include: { usuarios: true },
     });
+
+    // Notifica o novo DONO — fire-and-forget
+    const dono = resultado.usuarios[0];
+    enviarEmail({
+      to:      dono.email,
+      subject: `Cadastro recebido — ${resultado.nome}`,
+      html:    templates.cadastroPendente(dono.nome, resultado.nome),
+    }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de cadastro'));
 
     return reply.status(201).send({
       mensagem: 'Cadastro realizado! Aguarde a aprovação da plataforma para acessar o sistema.',

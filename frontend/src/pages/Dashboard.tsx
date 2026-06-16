@@ -8,7 +8,7 @@ interface DashboardData {
     id: string
     nome: string
     telefone: string
-    ativo: boolean
+    status: 'pendente' | 'ativo' | 'suspenso'
   }
   cardapio: Array<{
     id: string

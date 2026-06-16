@@ -2,30 +2,37 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { getIO } from '../socket.js';
+import { enviarEmail, templates } from '../mailer.js';
 
 const SlugParamsSchema = Type.Object({
   slug: Type.String({ minLength: 1, maxLength: 100 }),
 });
 
 const FazerPedidoSchema = Type.Object({
-  clienteNome: Type.String({ minLength: 2, maxLength: 100 }),
-  clienteFone: Type.String({ minLength: 8, maxLength: 20 }),
+  clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
+  clienteFone:     Type.String({ minLength: 8, maxLength: 20 }),
   enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
   itens: Type.Array(
     Type.Object({
       itemCardapioId: Type.String(),
-      quantidade: Type.Integer({ minimum: 1, maximum: 100 }),
+      quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
     }),
     { minItems: 1 }
   ),
 });
 
-type ItemPedidoInput = { itemCardapioId: string; quantidade: number };
-type ItemCardapioRow = { id: string; nome: string; preco: unknown; descricao?: string | null; [key: string]: unknown };
+type ItemPedidoInput  = { itemCardapioId: string; quantidade: number };
+type ItemCardapioRow  = {
+  id:         string;
+  nome:       string;
+  preco:      unknown;
+  descricao:  string | null | undefined;
+  foto:       string | null | undefined;
+};
 
 export async function publicoRoutes(fastify: FastifyInstance) {
-  // GET /publico/:slug — carrega cardápio público (sem auth)
-  // Bloqueado para estabelecimentos não ativos
+  // GET /publico/:slug — cardápio público (sem auth)
+  // Bloqueado para estabelecimentos não ativos.
   fastify.get('/publico/:slug', {
     schema: { params: SlugParamsSchema },
   }, async (request, reply) => {
@@ -38,7 +45,6 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       },
     });
 
-    // Só estabelecimentos com status 'ativo' são acessíveis publicamente
     if (!estabelecimento || estabelecimento.status !== 'ativo') {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
@@ -46,10 +52,11 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     return {
       estabelecimento: { nome: estabelecimento.nome, slug: estabelecimento.slug },
       cardapio: estabelecimento.itens.map((item: ItemCardapioRow) => ({
-        id: item.id,
-        nome: item.nome,
-        descricao: item.descricao,
-        preco: Number(item.preco),
+        id:       item.id,
+        nome:     item.nome,
+        descricao: item.descricao ?? null,
+        preco:    Number(item.preco),
+        foto:     item.foto ?? null,
       })),
     };
   });
@@ -60,18 +67,29 @@ export async function publicoRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const { slug } = request.params as { slug: string };
     const { clienteNome, clienteFone, enderecoEntrega, itens } = request.body as {
-      clienteNome: string;
-      clienteFone: string;
+      clienteNome:      string;
+      clienteFone:      string;
       enderecoEntrega?: string;
-      itens: ItemPedidoInput[];
+      itens:            ItemPedidoInput[];
     };
 
-    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { slug } });
+    // Carrega o estabelecimento e o email do DONO em uma única query
+    const estabelecimento = await prisma.estabelecimento.findUnique({
+      where: { slug },
+      include: {
+        usuarios: {
+          where:  { role: 'DONO' },
+          select: { email: true, nome: true },
+          take:   1,
+        },
+      },
+    });
+
     if (!estabelecimento || estabelecimento.status !== 'ativo') {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
-    const itemIds = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
+    const itemIds      = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
     const itensCardapio: ItemCardapioRow[] = await prisma.itemCardapio.findMany({
       where: { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
     });
@@ -83,16 +101,16 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     const itensComSnapshot = itens.map((pedidoItem: ItemPedidoInput) => {
       const ic = itensCardapio.find((ic: ItemCardapioRow) => ic.id === pedidoItem.itemCardapioId)!;
       return {
-        nomeItem: ic.nome,
+        nomeItem:   ic.nome,
         quantidade: pedidoItem.quantidade,
-        precoUnit: Number(ic.preco),
+        precoUnit:  Number(ic.preco),
       };
     });
 
     const total = itensComSnapshot.reduce(
       (soma: number, item: { precoUnit: number; quantidade: number }) =>
         soma + item.precoUnit * item.quantidade,
-      0
+      0,
     );
 
     const pedido = await prisma.pedido.create({
@@ -106,9 +124,26 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     getIO().to(estabelecimento.id).emit('pedido:novo', pedido);
 
+    // Notifica o DONO por email — fire-and-forget, nunca bloqueia o response
+    const dono = estabelecimento.usuarios[0];
+    if (dono) {
+      const urlFrontend = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+      enviarEmail({
+        to:      dono.email,
+        subject: `Novo pedido de ${clienteNome} — ${estabelecimento.nome}`,
+        html:    templates.novoPedido({
+          nomeEstabelecimento: estabelecimento.nome,
+          clienteNome,
+          itens: itensComSnapshot,
+          total,
+          urlFrontend,
+        }),
+      }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de novo pedido'));
+    }
+
     return reply.status(201).send({
-      id: pedido.id,
-      total: Number(pedido.total),
+      id:       pedido.id,
+      total:    Number(pedido.total),
       mensagem: 'Pedido recebido! A cozinha foi avisada.',
     });
   });

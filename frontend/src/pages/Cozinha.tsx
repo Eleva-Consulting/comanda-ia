@@ -6,6 +6,11 @@ import { API_URL } from '../lib/api'
 
 type Status = 'recebido' | 'em_preparo' | 'pronto' | 'entregue' | 'cancelado'
 
+interface PedidosResponse {
+  dados: Pedido[]
+  proximo: string | null
+}
+
 interface ItemPedido {
   id: string
   nomeItem: string
@@ -57,12 +62,13 @@ export default function Cozinha() {
   useEffect(() => {
     if (!token) return
 
-    fetch(`${API_URL}/pedidos`, {
+    // Busca apenas pedidos ativos; Socket.IO cuida dos novos em tempo real
+    fetch(`${API_URL}/pedidos?status=recebido,em_preparo,pronto&limite=100`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((dados: Pedido[]) => {
-        if (Array.isArray(dados)) setPedidos(dados)
+      .then((resp: PedidosResponse) => {
+        if (resp.dados && Array.isArray(resp.dados)) setPedidos(resp.dados)
       })
       .catch((e) => console.error('Erro ao buscar pedidos:', e))
       .finally(() => setCarregandoInicial(false))

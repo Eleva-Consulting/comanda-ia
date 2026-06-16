@@ -37,6 +37,14 @@ enum PapelMensagem {
   assistente
 }
 
+enum StatusPedido {
+  recebido
+  em_preparo
+  pronto
+  entregue
+  cancelado
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -78,6 +86,7 @@ model ItemCardapio {
   descricao  String?
   preco      Decimal @db.Decimal(10, 2)
   disponivel Boolean @default(true)
+  foto       String?
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
@@ -91,7 +100,7 @@ model Pedido {
   clienteFone     String
   enderecoEntrega String?
   total           Decimal  @db.Decimal(10, 2)
-  status          String   @default("recebido")
+  status          StatusPedido @default(recebido)
   criadoEm        DateTime @default(now())
 
   estabelecimentoId String

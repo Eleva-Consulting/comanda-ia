@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed, Camera, ImageOff } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -9,6 +9,7 @@ interface ItemCardapio {
   descricao: string | null
   preco: number | string
   disponivel: boolean
+  foto: string | null
 }
 
 function formatarBRL(valor: number): string {
@@ -31,6 +32,9 @@ export default function Cardapio() {
   const [descricao, setDescricao] = useState('')
   const [preco, setPreco] = useState('')
   const [disponivel, setDisponivel] = useState(true)
+
+  const fotoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [uploadandoFotoId, setUploadandoFotoId] = useState<string | null>(null)
 
   useEffect(() => {
     carregarItens()
@@ -144,6 +148,58 @@ export default function Cardapio() {
     }
   }
 
+  async function handleUploadFoto(item: ItemCardapio, arquivo: File) {
+    if (!arquivo.type.startsWith('image/')) {
+      alert('Selecione uma imagem (JPEG, PNG ou WEBP).')
+      return
+    }
+    if (arquivo.size > 5 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 5 MB.')
+      return
+    }
+
+    setUploadandoFotoId(item.id)
+    try {
+      const form = new FormData()
+      form.append('foto', arquivo)
+
+      const r = await fetch(`${API_URL}/cardapio/${item.id}/foto`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+        // Sem Content-Type — o browser define com boundary correto
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        throw new Error(err.erro ?? 'Erro ao enviar foto')
+      }
+      const atualizado: ItemCardapio = await r.json()
+      setItens((prev) => prev.map((i) => (i.id === atualizado.id ? atualizado : i)))
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Não foi possível enviar a foto.')
+    } finally {
+      setUploadandoFotoId(null)
+    }
+  }
+
+  async function handleRemoverFoto(item: ItemCardapio) {
+    if (!confirm(`Remover a foto de "${item.nome}"?`)) return
+    setUploadandoFotoId(item.id)
+    try {
+      const r = await fetch(`${API_URL}/cardapio/${item.id}/foto`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!r.ok) throw new Error('Falha ao remover foto')
+      const atualizado: ItemCardapio = await r.json()
+      setItens((prev) => prev.map((i) => (i.id === atualizado.id ? atualizado : i)))
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Não foi possível remover a foto.')
+    } finally {
+      setUploadandoFotoId(null)
+    }
+  }
+
   async function handleDeletar(item: ItemCardapio) {
     if (!confirm(`Remover "${item.nome}" do cardápio?`)) return
 
@@ -195,54 +251,116 @@ export default function Cardapio() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {itens.map((item) => (
-            <div
-              key={item.id}
-              className={`rounded-2xl border bg-zinc-900 p-5 transition ${
-                item.disponivel
-                  ? 'border-zinc-800 hover:border-zinc-700'
-                  : 'border-zinc-800/50 opacity-60'
-              }`}
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-lg font-bold">{item.nome}</h3>
-                  {item.descricao && (
-                    <p className="mt-1 text-sm text-zinc-400 line-clamp-2">{item.descricao}</p>
+          {itens.map((item) => {
+            const ocupado = acaoEmAndamento === item.id || uploadandoFotoId === item.id
+            return (
+              <div
+                key={item.id}
+                className={`overflow-hidden rounded-2xl border bg-zinc-900 transition ${
+                  item.disponivel
+                    ? 'border-zinc-800 hover:border-zinc-700'
+                    : 'border-zinc-800/50 opacity-60'
+                }`}
+              >
+                {/* Foto */}
+                <div className="group relative h-40 bg-zinc-800">
+                  {item.foto ? (
+                    <img
+                      src={item.foto}
+                      alt={item.nome}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <UtensilsCrossed className="h-8 w-8 text-zinc-600" />
+                    </div>
                   )}
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    onClick={() => abrirModalEditar(item)}
-                    disabled={acaoEmAndamento === item.id}
-                    className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
-                    title="Editar"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeletar(item)}
-                    disabled={acaoEmAndamento === item.id}
-                    className="rounded-lg p-2 text-zinc-400 transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
-                    title="Remover"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-between border-t border-zinc-800 pt-4">
-                <span className="text-xl font-extrabold">
-                  {formatarBRL(Number(item.preco))}
-                </span>
-                <Toggle
-                  ativo={item.disponivel}
-                  carregando={acaoEmAndamento === item.id}
-                  onChange={() => handleToggleDisponivel(item)}
-                />
+                  {/* Overlay de ações de foto */}
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    {uploadandoFotoId === item.id ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-white" />
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => fotoInputRefs.current[item.id]?.click()}
+                          className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/30"
+                          title={item.foto ? 'Trocar foto' : 'Adicionar foto'}
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                          {item.foto ? 'Trocar' : 'Adicionar'}
+                        </button>
+                        {item.foto && (
+                          <button
+                            onClick={() => handleRemoverFoto(item)}
+                            className="flex items-center gap-1.5 rounded-lg bg-red-500/80 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur transition hover:bg-red-500"
+                            title="Remover foto"
+                          >
+                            <ImageOff className="h-3.5 w-3.5" />
+                            Remover
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Input oculto de arquivo */}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    ref={(el) => { fotoInputRefs.current[item.id] = el }}
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0]
+                      if (arquivo) handleUploadFoto(item, arquivo)
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+
+                {/* Info do item */}
+                <div className="p-5">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-lg font-bold">{item.nome}</h3>
+                      {item.descricao && (
+                        <p className="mt-1 text-sm text-zinc-400 line-clamp-2">{item.descricao}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => abrirModalEditar(item)}
+                        disabled={ocupado}
+                        className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+                        title="Editar"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeletar(item)}
+                        disabled={ocupado}
+                        className="rounded-lg p-2 text-zinc-400 transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                        title="Remover"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-zinc-800 pt-4">
+                    <span className="text-xl font-extrabold">
+                      {formatarBRL(Number(item.preco))}
+                    </span>
+                    <Toggle
+                      ativo={item.disponivel}
+                      carregando={ocupado}
+                      onChange={() => handleToggleDisponivel(item)}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

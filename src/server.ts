@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
+import fastifyMultipart from '@fastify/multipart';
 import { rootRoutes } from './routes/root.js';
 import { saudeRoutes } from './routes/saude.js';
 import { pedidosRoutes } from './routes/pedidos.js';
@@ -34,6 +35,13 @@ export async function buildServer() {
     origin: origensPermitidas(),
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  });
+
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5 MB
+      files:    1,
+    },
   });
 
   await fastify.register(fastifyJwt, {
