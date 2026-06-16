@@ -105,6 +105,7 @@ export default function Layout({ children, headerExtra }: Props) {
                 </span>
               </NavLink>
             )}
+            {isDono && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -132,6 +133,7 @@ export default function Layout({ children, headerExtra }: Props) {
               </span>
             </NavLink>
           )}
+          {isDono && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
         </div>
       </header>
 

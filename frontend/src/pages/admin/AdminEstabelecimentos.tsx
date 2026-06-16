@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Building2, Loader2, CheckCircle2, XCircle, Clock, Plus, X } from 'lucide-react'
+import { Building2, Loader2, CheckCircle2, XCircle, Clock, Plus, X, Trash2 } from 'lucide-react'
 import LayoutAdmin from '../../components/LayoutAdmin'
 import { API_URL } from '../../lib/api'
 
@@ -45,6 +45,8 @@ export default function AdminEstabelecimentos() {
   const [lista, setLista] = useState<Estabelecimento[]>([])
   const [carregando, setCarregando] = useState(true)
   const [atualizando, setAtualizando] = useState<string | null>(null)
+  const [deletandoId, setDeletandoId] = useState<string | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   const [novoModalAberto, setNovoModalAberto] = useState(false)
   const [criando, setCriando] = useState(false)
@@ -85,6 +87,24 @@ export default function AdminEstabelecimentos() {
       console.error(err)
     } finally {
       setAtualizando(null)
+    }
+  }
+
+  async function deletarEstabelecimento(id: string) {
+    setDeletandoId(id)
+    try {
+      const resp = await fetch(`${API_URL}/admin/estabelecimentos/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (resp.ok || resp.status === 204) {
+        setLista((prev) => prev.filter((e) => e.id !== id))
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setDeletandoId(null)
+      setConfirmId(null)
     }
   }
 
@@ -176,6 +196,8 @@ export default function AdminEstabelecimentos() {
                 e={e}
                 atualizando={atualizando}
                 mudarStatus={mudarStatus}
+                deletandoId={deletandoId}
+                onDelete={() => setConfirmId(e.id)}
               />
             ))}
           </div>
@@ -191,6 +213,8 @@ export default function AdminEstabelecimentos() {
               e={e}
               atualizando={atualizando}
               mudarStatus={mudarStatus}
+              deletandoId={deletandoId}
+              onDelete={() => setConfirmId(e.id)}
             />
           ))}
         </div>
@@ -202,6 +226,36 @@ export default function AdminEstabelecimentos() {
           <p>Nenhum estabelecimento cadastrado.</p>
         </div>
       )}
+
+      {confirmId && (() => {
+        const estab = lista.find(e => e.id === confirmId)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+            <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h3 className="mb-2 font-bold text-lg">Excluir estabelecimento?</h3>
+              <p className="mb-1 text-zinc-300">"{estab?.nome}"</p>
+              <p className="mb-6 text-sm text-zinc-500">
+                Esta ação é irreversível. Todos os dados, pedidos e usuários vinculados serão removidos permanentemente.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmId(null)}
+                  className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => deletarEstabelecimento(confirmId)}
+                  disabled={deletandoId === confirmId}
+                  className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deletandoId === confirmId ? 'Excluindo…' : 'Excluir'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {novoModalAberto && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-8">
@@ -308,10 +362,14 @@ function CardEstabelecimento({
   e,
   atualizando,
   mudarStatus,
+  deletandoId,
+  onDelete,
 }: {
   e: Estabelecimento
   atualizando: string | null
   mudarStatus: (id: string, status: StatusEstabelecimento) => void
+  deletandoId: string | null
+  onDelete: () => void
 }) {
   const badge = badgeStatus[e.status]
   const ocupado = atualizando === e.id
@@ -384,6 +442,17 @@ function CardEstabelecimento({
             Reativar
           </button>
         )}
+        <button
+          onClick={onDelete}
+          disabled={deletandoId === e.id}
+          className="flex items-center justify-center rounded-xl bg-red-500/10 p-2 text-red-400 ring-1 ring-red-500/30 transition hover:bg-red-500/20 disabled:opacity-50"
+          title="Excluir estabelecimento"
+        >
+          {deletandoId === e.id
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Trash2 className="h-4 w-4" />
+          }
+        </button>
       </div>
     </div>
   )
