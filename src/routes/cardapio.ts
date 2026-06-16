@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
-import { autenticar } from '../plugins/auth.js';
+import { autenticar, apenasDono } from '../plugins/auth.js';
 import { r2Configurado, uploadParaR2, deletarDeR2 } from '../r2.js';
 
 const ItemParamsSchema = Type.Object({ id: Type.String() });
@@ -48,7 +48,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── POST /cardapio/categorias ─────────────────────────────────────────────
   fastify.post('/cardapio/categorias', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { body: CriarCategoriaSchema },
   }, async (request, reply) => {
     const { nome, ordem } = request.body as { nome: string; ordem?: number };
@@ -62,7 +62,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── PATCH /cardapio/categorias/:id ────────────────────────────────────────
   fastify.patch('/cardapio/categorias/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { params: ItemParamsSchema, body: AtualizarCategoriaSchema },
   }, async (request, reply) => {
     const { id }    = request.params as { id: string };
@@ -81,7 +81,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── DELETE /cardapio/categorias/:id ───────────────────────────────────────
   fastify.delete('/cardapio/categorias/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { params: ItemParamsSchema },
   }, async (request, reply) => {
     const { id }    = request.params as { id: string };
@@ -134,7 +134,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── POST /cardapio ────────────────────────────────────────────────────────
   fastify.post('/cardapio', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { body: CriarItemSchema },
   }, async (request, reply) => {
     const dados = request.body as {
@@ -151,7 +151,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── PATCH /cardapio/:id ───────────────────────────────────────────────────
   fastify.patch('/cardapio/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { params: ItemParamsSchema, body: AtualizarItemSchema },
   }, async (request, reply) => {
     const { id }  = request.params as { id: string };
@@ -172,7 +172,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── DELETE /cardapio/:id ──────────────────────────────────────────────────
   fastify.delete('/cardapio/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { params: ItemParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -190,7 +190,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── POST /cardapio/:id/foto ───────────────────────────────────────────────
   fastify.post('/cardapio/:id/foto', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { params: ItemParamsSchema },
   }, async (request, reply) => {
     if (!r2Configurado()) {
@@ -235,7 +235,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
   // ── DELETE /cardapio/:id/foto ─────────────────────────────────────────────
   fastify.delete('/cardapio/:id/foto', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, apenasDono],
     schema: { params: ItemParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };

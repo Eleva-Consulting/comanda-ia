@@ -74,7 +74,7 @@ model Usuario {
   role      Role     @default(DONO)
   criadoEm  DateTime @default(now())
 
-  resetToken           String?
+  resetToken           String?   @unique
   resetTokenExpiracao  DateTime?
 
   // Opcional: SUPER_ADMIN não pertence a nenhum estabelecimento

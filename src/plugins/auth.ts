@@ -51,3 +51,17 @@ export async function apenasAdmin(
     return reply.status(403).send({ erro: 'Acesso restrito à plataforma' });
   }
 }
+
+/**
+ * Garante que o usuário autenticado é DONO.
+ * Deve ser usado APÓS o hook autenticar.
+ * Bloqueia OPERADOR (e SUPER_ADMIN) de rotas de escrita do tenant.
+ */
+export async function apenasDono(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  if (request.user.role !== 'DONO') {
+    return reply.status(403).send({ erro: 'Acesso negado' });
+  }
+}

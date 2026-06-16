@@ -175,7 +175,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const { token, novaSenha } = request.body as { token: string; novaSenha: string };
 
-    const usuario = await prisma.usuario.findFirst({
+    const usuario = await prisma.usuario.findUnique({
       where: { resetToken: token },
     });
 
