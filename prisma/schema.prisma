@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -20,6 +17,16 @@ enum Role {
   OPERADOR
 }
 
+/// Status do ciclo de vida do estabelecimento na plataforma.
+/// pendente → aguardando aprovação do Super Admin após signup
+/// ativo    → operando normalmente
+/// suspenso → bloqueado pelo Super Admin
+enum StatusEstabelecimento {
+  pendente
+  ativo
+  suspenso
+}
+
 enum StatusConversa {
   ativa
   finalizada
@@ -35,12 +42,12 @@ enum PapelMensagem {
 // ============================================================================
 
 model Estabelecimento {
-  id        String   @id @default(uuid())
+  id        String                 @id @default(uuid())
   nome      String
   telefone  String
-  slug      String   @unique
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
+  slug      String                 @unique
+  status    StatusEstabelecimento  @default(pendente)
+  criadoEm  DateTime               @default(now())
 
   usuarios  Usuario[]
   itens     ItemCardapio[]

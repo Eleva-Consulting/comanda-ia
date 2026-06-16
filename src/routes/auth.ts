@@ -29,11 +29,8 @@ async function gerarSlugUnico(base: string): Promise<string> {
   const slugBase = slugify(base);
   let candidato = slugBase;
   let tentativa = 1;
-
   while (true) {
-    const existente = await prisma.estabelecimento.findUnique({
-      where: { slug: candidato },
-    });
+    const existente = await prisma.estabelecimento.findUnique({ where: { slug: candidato } });
     if (!existente) return candidato;
     tentativa++;
     candidato = `${slugBase}-${tentativa}`;
@@ -41,6 +38,8 @@ async function gerarSlugUnico(base: string): Promise<string> {
 }
 
 export async function authRoutes(fastify: FastifyInstance) {
+  // ── POST /auth/signup ────────────────────────────────────────────────────
+  // Cria estabelecimento com status 'pendente' — aguarda aprovação do Super Admin
   fastify.post('/auth/signup', {
     schema: { body: SignupSchema },
   }, async (request, reply) => {
@@ -52,9 +51,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       senha: string;
     };
 
-    const emailExistente = await prisma.usuario.findUnique({
-      where: { email: dados.email },
-    });
+    const emailExistente = await prisma.usuario.findUnique({ where: { email: dados.email } });
     if (emailExistente) {
       return reply.status(409).send({ erro: 'Email já cadastrado' });
     }
@@ -67,6 +64,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         nome: dados.nomeEstabelecimento,
         telefone: dados.telefoneEstabelecimento,
         slug,
+        status: 'pendente', // aguarda aprovação do Super Admin
         usuarios: {
           create: {
             nome: dados.nome,
@@ -79,30 +77,17 @@ export async function authRoutes(fastify: FastifyInstance) {
       include: { usuarios: true },
     });
 
-    const usuarioCriado = resultado.usuarios[0];
-
-    const token = fastify.jwt.sign({
-      userId: usuarioCriado.id,
-      estabelecimentoId: resultado.id,
-      role: usuarioCriado.role,
-    });
-
     return reply.status(201).send({
-      token,
-      usuario: {
-        id: usuarioCriado.id,
-        nome: usuarioCriado.nome,
-        email: usuarioCriado.email,
-        role: usuarioCriado.role,
-      },
+      mensagem: 'Cadastro realizado! Aguarde a aprovação da plataforma para acessar o sistema.',
       estabelecimento: {
-        id: resultado.id,
         nome: resultado.nome,
         slug: resultado.slug,
+        status: resultado.status,
       },
     });
   });
 
+  // ── POST /auth/login ─────────────────────────────────────────────────────
   fastify.post('/auth/login', {
     schema: { body: LoginSchema },
   }, async (request, reply) => {
@@ -110,6 +95,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     const usuario = await prisma.usuario.findUnique({
       where: { email },
+      include: { estabelecimento: true },
     });
 
     if (!usuario) {
@@ -117,9 +103,21 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     const senhaCorreta = await bcrypt.compare(senha, usuario.senhaHash);
-
     if (!senhaCorreta) {
       return reply.status(401).send({ erro: 'Credenciais inválidas' });
+    }
+
+    // Bloqueia login se o estabelecimento estiver pendente ou suspenso
+    // (SUPER_ADMIN não tem estabelecimento — passa direto)
+    if (usuario.estabelecimento && usuario.estabelecimento.status !== 'ativo') {
+      const mensagens: Record<string, string> = {
+        pendente:  'Seu cadastro ainda está aguardando aprovação da plataforma.',
+        suspenso:  'Seu estabelecimento foi suspenso. Entre em contato com o suporte.',
+      };
+      return reply.status(403).send({
+        erro: mensagens[usuario.estabelecimento.status] ?? 'Acesso bloqueado',
+        status: usuario.estabelecimento.status,
+      });
     }
 
     const token = fastify.jwt.sign({

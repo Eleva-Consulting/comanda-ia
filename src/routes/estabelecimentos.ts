@@ -57,7 +57,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
         id: estabelecimento.id,
         nome: estabelecimento.nome,
         telefone: estabelecimento.telefone,
-        ativo: estabelecimento.ativo,
+        status: estabelecimento.status,
       },
       cardapio: estabelecimento.itens,
       pedidosRecentes: estabelecimento.pedidos,

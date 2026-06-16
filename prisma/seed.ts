@@ -13,7 +13,7 @@ async function main() {
   await prisma.estabelecimento.deleteMany()
   console.log('🗑️  Dados anteriores limpos')
 
-  // ── Super Admin da plataforma (sem estabelecimento) ──────────────────────
+  // ── Super Admin da plataforma ─────────────────────────────────────────────
   const senhaSuperAdmin = await bcrypt.hash('superadmin123', 12)
   await prisma.usuario.create({
     data: {
@@ -26,7 +26,7 @@ async function main() {
   })
   console.log('✅ Super Admin criado (admin@comanda-ia.dev)')
 
-  // ── Estabelecimentos de teste ─────────────────────────────────────────────
+  // ── Estabelecimentos de teste (já ativos) ─────────────────────────────────
   const senhaVinicius = await bcrypt.hash('senhaforte123', 12)
   const senhaCarlos   = await bcrypt.hash('outrasenha123', 12)
 
@@ -36,6 +36,7 @@ async function main() {
       nome: 'Galeteria do Vinícius',
       telefone: '85999999999',
       slug: 'galeteria-do-vinicius',
+      status: 'ativo',
       usuarios: {
         create: {
           nome: 'Vinícius',
@@ -59,6 +60,7 @@ async function main() {
       nome: 'Pizzaria do Bairro',
       telefone: '85988888888',
       slug: 'pizzaria-do-bairro',
+      status: 'ativo',
       usuarios: {
         create: {
           nome: 'Carlos',
@@ -76,11 +78,32 @@ async function main() {
   })
   console.log(`✅ ${pizzaria.nome} (slug: ${pizzaria.slug})`)
 
+  // ── Estabelecimento pendente (simula um signup aguardando aprovação) ───────
+  const senhaTeste = await bcrypt.hash('teste123456', 12)
+  const hamburgueria = await prisma.estabelecimento.create({
+    data: {
+      nome: 'Hamburgueria do João',
+      telefone: '85977777777',
+      slug: 'hamburgueria-do-joao',
+      status: 'pendente',
+      usuarios: {
+        create: {
+          nome: 'João',
+          email: 'joao@teste.com',
+          senhaHash: senhaTeste,
+          role: 'DONO',
+        },
+      },
+    },
+  })
+  console.log(`⏳ ${hamburgueria.nome} (pendente — aguardando aprovação)`)
+
   console.log('\n🎉 Seed concluído!')
   console.log('\nCredenciais:')
-  console.log('  Super Admin → admin@comanda-ia.dev / superadmin123')
-  console.log('  Galeteria   → vinicius@teste.com  / senhaforte123')
-  console.log('  Pizzaria    → carlos@teste.com    / outrasenha123')
+  console.log('  Super Admin  → admin@comanda-ia.dev  / superadmin123')
+  console.log('  Galeteria    → vinicius@teste.com    / senhaforte123')
+  console.log('  Pizzaria     → carlos@teste.com      / outrasenha123')
+  console.log('  Hamburgueria → joao@teste.com        / teste123456  (pendente)')
 }
 
 main()

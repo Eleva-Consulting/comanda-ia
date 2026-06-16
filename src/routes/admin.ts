@@ -7,7 +7,7 @@ type EstabelecimentoComCount = {
   nome: string;
   slug: string;
   telefone: string;
-  ativo: boolean;
+  status: string;
   criadoEm: Date;
   _count: { usuarios: number; pedidos: number; itens: number };
 };
@@ -15,7 +15,6 @@ type EstabelecimentoComCount = {
 /**
  * Rotas exclusivas do Super Admin da plataforma.
  * Todas protegidas por autenticar + apenasAdmin.
- * Nunca expostas no painel do estabelecimento.
  */
 export async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook('onRequest', autenticar);
@@ -26,9 +25,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const estabelecimentos = await prisma.estabelecimento.findMany({
       orderBy: { criadoEm: 'desc' },
       include: {
-        _count: {
-          select: { usuarios: true, pedidos: true, itens: true },
-        },
+        _count: { select: { usuarios: true, pedidos: true, itens: true } },
       },
     });
 
@@ -37,7 +34,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       nome: e.nome,
       slug: e.slug,
       telefone: e.telefone,
-      ativo: e.ativo,
+      status: e.status,
       criadoEm: e.criadoEm,
       totalUsuarios: e._count.usuarios,
       totalPedidos: e._count.pedidos,
@@ -45,37 +42,44 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }));
   });
 
-  // ── PATCH /admin/estabelecimentos/:id/suspender ──────────────────────────
-  fastify.patch('/admin/estabelecimentos/:id/suspender', async (request, reply) => {
+  // ── PATCH /admin/estabelecimentos/:id/status ─────────────────────────────
+  // Aprova (ativo), suspende (suspenso) ou coloca pendente
+  fastify.patch('/admin/estabelecimentos/:id/status', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { status } = request.body as { status: 'pendente' | 'ativo' | 'suspenso' };
 
-    const estabelecimento = await prisma.estabelecimento.findUnique({
-      where: { id },
-    });
+    if (!['pendente', 'ativo', 'suspenso'].includes(status)) {
+      return reply.status(400).send({ erro: 'Status inválido' });
+    }
 
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id } });
     if (!estabelecimento) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
     const atualizado = await prisma.estabelecimento.update({
       where: { id },
-      data: { ativo: !estabelecimento.ativo },
+      data: { status },
     });
 
-    return { id: atualizado.id, nome: atualizado.nome, ativo: atualizado.ativo };
+    return { id: atualizado.id, nome: atualizado.nome, status: atualizado.status };
   });
 
   // ── GET /admin/metricas ──────────────────────────────────────────────────
   fastify.get('/admin/metricas', async () => {
     const [
       totalEstabelecimentos,
-      estabelecimentosAtivos,
+      ativos,
+      pendentes,
+      suspensos,
       totalPedidos,
       faturamentoAgregado,
       totalUsuarios,
     ] = await Promise.all([
       prisma.estabelecimento.count(),
-      prisma.estabelecimento.count({ where: { ativo: true } }),
+      prisma.estabelecimento.count({ where: { status: 'ativo' } }),
+      prisma.estabelecimento.count({ where: { status: 'pendente' } }),
+      prisma.estabelecimento.count({ where: { status: 'suspenso' } }),
       prisma.pedido.count(),
       prisma.pedido.aggregate({ _sum: { total: true } }),
       prisma.usuario.count({ where: { role: { not: 'SUPER_ADMIN' } } }),
@@ -83,8 +87,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     return {
       totalEstabelecimentos,
-      estabelecimentosAtivos,
-      estabelecimentosSuspensos: totalEstabelecimentos - estabelecimentosAtivos,
+      estabelecimentosAtivos: ativos,
+      estabelecimentosPendentes: pendentes,
+      estabelecimentosSuspensos: suspensos,
       totalPedidos,
       faturamentoTotal: Number(faturamentoAgregado._sum.total ?? 0),
       totalUsuarios,

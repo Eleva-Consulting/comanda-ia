@@ -21,9 +21,11 @@ const FazerPedidoSchema = Type.Object({
 });
 
 type ItemPedidoInput = { itemCardapioId: string; quantidade: number };
-type ItemCardapioRow = { id: string; nome: string; preco: unknown; [key: string]: unknown };
+type ItemCardapioRow = { id: string; nome: string; preco: unknown; descricao?: string | null; [key: string]: unknown };
 
 export async function publicoRoutes(fastify: FastifyInstance) {
+  // GET /publico/:slug — carrega cardápio público (sem auth)
+  // Bloqueado para estabelecimentos não ativos
   fastify.get('/publico/:slug', {
     schema: { params: SlugParamsSchema },
   }, async (request, reply) => {
@@ -36,7 +38,8 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       },
     });
 
-    if (!estabelecimento || !estabelecimento.ativo) {
+    // Só estabelecimentos com status 'ativo' são acessíveis publicamente
+    if (!estabelecimento || estabelecimento.status !== 'ativo') {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
@@ -51,6 +54,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     };
   });
 
+  // POST /publico/:slug/pedido — cliente final cria pedido (sem auth)
   fastify.post('/publico/:slug/pedido', {
     schema: { params: SlugParamsSchema, body: FazerPedidoSchema },
   }, async (request, reply) => {
@@ -63,7 +67,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     };
 
     const estabelecimento = await prisma.estabelecimento.findUnique({ where: { slug } });
-    if (!estabelecimento || !estabelecimento.ativo) {
+    if (!estabelecimento || estabelecimento.status !== 'ativo') {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
