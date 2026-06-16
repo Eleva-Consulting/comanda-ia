@@ -41,6 +41,7 @@ enum StatusPedido {
   recebido
   em_preparo
   pronto
+  a_caminho
   entregue
   cancelado
 }
@@ -54,8 +55,9 @@ model Estabelecimento {
   nome      String
   telefone  String
   slug      String                 @unique
-  status    StatusEstabelecimento  @default(pendente)
-  criadoEm  DateTime               @default(now())
+  status            StatusEstabelecimento  @default(pendente)
+  aceitandoPedidos  Boolean                @default(true)
+  criadoEm          DateTime               @default(now())
 
   usuarios   Usuario[]
   itens      ItemCardapio[]
@@ -133,7 +135,8 @@ model ItemPedido {
   id         String  @id @default(uuid())
   nomeItem   String
   quantidade Int
-  precoUnit  Decimal @db.Decimal(10, 2)
+  precoUnit  Decimal  @db.Decimal(10, 2)
+  observacao String?
 
   pedidoId String
   pedido   Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
