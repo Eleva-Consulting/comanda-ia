@@ -29,7 +29,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const itens = await prisma.itemCardapio.findMany({
-      where: { estabelecimentoId },
+      where: { estabelecimentoId: estabelecimentoId! },
       orderBy: { nome: 'asc' },
     });
     return itens;
@@ -44,7 +44,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const item = await prisma.itemCardapio.findFirst({
-      where: { id, estabelecimentoId },
+      where: { id, estabelecimentoId: estabelecimentoId! },
     });
 
     if (!item) {
@@ -69,7 +69,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const item = await prisma.itemCardapio.create({
       data: {
         ...dados,
-        estabelecimentoId,
+        estabelecimentoId: estabelecimentoId!,
       },
     });
     return reply.status(201).send(item);
@@ -90,7 +90,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.itemCardapio.updateMany({
-      where: { id, estabelecimentoId },
+      where: { id, estabelecimentoId: estabelecimentoId! },
       data: dados,
     });
 
@@ -111,7 +111,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.itemCardapio.deleteMany({
-      where: { id, estabelecimentoId },
+      where: { id, estabelecimentoId: estabelecimentoId! },
     });
 
     if (resultado.count === 0) {

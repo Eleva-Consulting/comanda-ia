@@ -32,7 +32,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const pedidos = await prisma.pedido.findMany({
-      where: { estabelecimentoId },
+      where: { estabelecimentoId: estabelecimentoId! },
       orderBy: { criadoEm: 'desc' },
       include: { itens: true },
     });
@@ -48,7 +48,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const pedido = await prisma.pedido.findFirst({
-      where: { id, estabelecimentoId },
+      where: { id, estabelecimentoId: estabelecimentoId! },
       include: { itens: true },
     });
 
@@ -72,7 +72,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const pedido = await prisma.pedido.create({
-      data: { ...dados, estabelecimentoId },
+      data: { ...dados, estabelecimentoId: estabelecimentoId! },
       include: { itens: true },
     });
     return reply.status(201).send(pedido);
@@ -88,7 +88,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.pedido.updateMany({
-      where: { id, estabelecimentoId },
+      where: { id, estabelecimentoId: estabelecimentoId! },
       data: dados,
     });
 
@@ -112,7 +112,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.pedido.deleteMany({
-      where: { id, estabelecimentoId },
+      where: { id, estabelecimentoId: estabelecimentoId! },
     });
 
     if (resultado.count === 0) {
