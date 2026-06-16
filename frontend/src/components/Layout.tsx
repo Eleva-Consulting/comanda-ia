@@ -27,17 +27,18 @@ export default function Layout({ children, headerExtra }: Props) {
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
         {/* Linha superior: logo + ações */}
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
+
+          {/* Logo clicável — leva para Home */}
+          <NavLink to="/dashboard" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 sm:h-10 sm:w-10">
               <ChefHat className="h-5 w-5 text-white sm:h-6 sm:w-6" />
             </div>
-            <h1 className="hidden text-lg font-bold leading-tight sm:block">Comanda IA</h1>
-          </div>
+            <h1 className="hidden text-lg font-bold leading-tight text-zinc-100 sm:block">Comanda IA</h1>
+          </NavLink>
 
-          {/* Nav — visível só em sm+ na linha do header */}
+          {/* Nav desktop — visível só em sm+ */}
           <nav className="hidden items-center gap-1 sm:flex">
-            <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+            <NavLink to="/dashboard" className={linkClass}>Home</NavLink>
             <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
             <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>
           </nav>
@@ -55,9 +56,9 @@ export default function Layout({ children, headerExtra }: Props) {
           </div>
         </div>
 
-        {/* Nav mobile — barra inferior do header, só em telas pequenas */}
+        {/* Nav mobile — barra inferior do header */}
         <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
-          <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+          <NavLink to="/dashboard" className={linkClass}>Home</NavLink>
           <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
           <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>
         </div>
