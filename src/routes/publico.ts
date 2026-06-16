@@ -22,12 +22,15 @@ const FazerPedidoSchema = Type.Object({
 });
 
 type ItemPedidoInput  = { itemCardapioId: string; quantidade: number };
+type CategoriaRow = { id: string; nome: string; ordem: number } | null;
+
 type ItemCardapioRow  = {
   id:         string;
   nome:       string;
   preco:      unknown;
   descricao:  string | null | undefined;
   foto:       string | null | undefined;
+  categoria?: CategoriaRow;
 };
 
 export async function publicoRoutes(fastify: FastifyInstance) {
@@ -41,7 +44,11 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     const estabelecimento = await prisma.estabelecimento.findUnique({
       where: { slug },
       include: {
-        itens: { where: { disponivel: true }, orderBy: { nome: 'asc' } },
+        itens: {
+          where:   { disponivel: true },
+          orderBy: { nome: 'asc' },
+          include: { categoria: { select: { id: true, nome: true, ordem: true } } },
+        },
       },
     });
 
@@ -52,11 +59,12 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     return {
       estabelecimento: { nome: estabelecimento.nome, slug: estabelecimento.slug },
       cardapio: estabelecimento.itens.map((item: ItemCardapioRow) => ({
-        id:       item.id,
-        nome:     item.nome,
+        id:        item.id,
+        nome:      item.nome,
         descricao: item.descricao ?? null,
-        preco:    Number(item.preco),
-        foto:     item.foto ?? null,
+        preco:     Number(item.preco),
+        foto:      item.foto ?? null,
+        categoria: item.categoria ?? null,
       })),
     };
   });

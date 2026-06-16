@@ -57,10 +57,11 @@ model Estabelecimento {
   status    StatusEstabelecimento  @default(pendente)
   criadoEm  DateTime               @default(now())
 
-  usuarios  Usuario[]
-  itens     ItemCardapio[]
-  pedidos   Pedido[]
-  conversas Conversa[]
+  usuarios   Usuario[]
+  itens      ItemCardapio[]
+  pedidos    Pedido[]
+  conversas  Conversa[]
+  categorias Categoria[]
 
   @@map("estabelecimentos")
 }
@@ -80,6 +81,17 @@ model Usuario {
   @@map("usuarios")
 }
 
+model Categoria {
+  id                String          @id @default(uuid())
+  nome              String
+  ordem             Int             @default(0)
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+  itens             ItemCardapio[]
+
+  @@map("categorias")
+}
+
 model ItemCardapio {
   id         String  @id @default(uuid())
   nome       String
@@ -90,6 +102,9 @@ model ItemCardapio {
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  categoriaId String?
+  categoria   Categoria? @relation(fields: [categoriaId], references: [id])
 
   @@map("itens_cardapio")
 }

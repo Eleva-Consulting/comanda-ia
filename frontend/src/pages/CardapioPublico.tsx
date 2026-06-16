@@ -9,6 +9,7 @@ interface ItemPublico {
   descricao: string | null
   preco: number
   foto: string | null
+  categoria: { id: string; nome: string; ordem: number } | null
 }
 
 interface CardapioData {
@@ -116,17 +117,12 @@ export default function CardapioPublico() {
             <p className="text-zinc-400">O restaurante ainda não cadastrou itens no cardápio.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {dados.cardapio.map((item) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                quantidade={carrinho[item.id] ?? 0}
-                onAdicionar={() => adicionar(item.id)}
-                onRemover={() => remover(item.id)}
-              />
-            ))}
-          </div>
+          <GruposCardapio
+            cardapio={dados.cardapio}
+            carrinho={carrinho}
+            onAdicionar={adicionar}
+            onRemover={remover}
+          />
         )}
       </main>
 
@@ -152,6 +148,63 @@ export default function CardapioPublico() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function GruposCardapio({
+  cardapio, carrinho, onAdicionar, onRemover,
+}: {
+  cardapio: ItemPublico[]
+  carrinho: Record<string, number>
+  onAdicionar: (id: string) => void
+  onRemover: (id: string) => void
+}) {
+  // Agrupa por categoria, mantendo a ordem definida pelo dono
+  const grupos = (() => {
+    const mapa = new Map<string, { nome: string; ordem: number; itens: ItemPublico[] }>()
+
+    for (const item of cardapio) {
+      if (item.categoria) {
+        const key = item.categoria.id
+        if (!mapa.has(key)) {
+          mapa.set(key, { nome: item.categoria.nome, ordem: item.categoria.ordem, itens: [] })
+        }
+        mapa.get(key)!.itens.push(item)
+      }
+    }
+
+    const comCategoria = [...mapa.values()].sort((a, b) => a.ordem - b.ordem)
+    const semCategoria = cardapio.filter((i) => !i.categoria)
+
+    return [
+      ...comCategoria,
+      ...(semCategoria.length > 0 ? [{ nome: null, ordem: Infinity, itens: semCategoria }] : []),
+    ]
+  })()
+
+  return (
+    <div className="space-y-8">
+      {grupos.map((grupo, idx) => (
+        <div key={idx}>
+          {grupo.nome && (
+            <h2 className="mb-3 border-b border-zinc-800 pb-2 text-sm font-bold uppercase tracking-widest text-orange-400">
+              {grupo.nome}
+            </h2>
+          )}
+          <div className="space-y-3">
+            {grupo.itens.map((item) => (
+              <ItemCard
+                key={item.id}
+                item={item}
+                quantidade={carrinho[item.id] ?? 0}
+                onAdicionar={() => onAdicionar(item.id)}
+                onRemover={() => onRemover(item.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
