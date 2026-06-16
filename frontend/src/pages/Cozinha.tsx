@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2 } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
@@ -27,6 +27,14 @@ interface Pedido {
   status:      Status
   criadoEm:   string
   itens:       ItemPedido[]
+}
+
+interface ItemCardapio {
+  id:         string
+  nome:       string
+  preco:      number
+  disponivel: boolean
+  categoria:  { id: string; nome: string; ordem: number } | null
 }
 
 const statusConfig: Record<Status, { label: string; badge: string }> = {
@@ -63,6 +71,20 @@ export default function Cozinha() {
   const [carregandoInicial, setCarregandoInicial] = useState(true)
   const { socket, conectado, erro } = useSocket(token)
 
+  // Pausa
+  const [aceitando, setAceitando]         = useState(true)
+  const [togglingPausa, setTogglingPausa] = useState(false)
+
+  // Modal novo pedido
+  const [modalAberto, setModalAberto]           = useState(false)
+  const [cardapio, setCardapio]                 = useState<ItemCardapio[]>([])
+  const [carregandoMenu, setCarregandoMenu]     = useState(false)
+  const [clienteNomeModal, setClienteNomeModal] = useState('')
+  const [clienteFoneModal, setClienteFoneModal] = useState('')
+  const [selecionados, setSelecionados]         = useState<Record<string, { quantidade: number; observacao: string }>>({})
+  const [enviandoManual, setEnviandoManual]     = useState(false)
+  const [erroModal, setErroModal]               = useState<string | null>(null)
+
   useEffect(() => {
     if (!token) return
 
@@ -96,6 +118,16 @@ export default function Cozinha() {
       socket.off('pedido:atualizado', onAtualizado)
     }
   }, [socket])
+
+  useEffect(() => {
+    if (!token) return
+    fetch(`${API_URL}/meu-estabelecimento`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((est) => setAceitando(est.aceitandoPedidos ?? true))
+      .catch(console.error)
+  }, [token])
 
   async function atualizarStatus(pedidoId: string, novoStatus: Status) {
     setAtualizandoId(pedidoId)
@@ -141,10 +173,126 @@ export default function Cozinha() {
     }
   }
 
+  async function togglePausa() {
+    setTogglingPausa(true)
+    try {
+      const resp = await fetch(`${API_URL}/meu-estabelecimento`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ aceitandoPedidos: !aceitando }),
+      })
+      if (resp.ok) setAceitando((v) => !v)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setTogglingPausa(false)
+    }
+  }
+
+  async function abrirModalNovoPedido() {
+    setClienteNomeModal('')
+    setClienteFoneModal('')
+    setSelecionados({})
+    setErroModal(null)
+    setModalAberto(true)
+    if (cardapio.length > 0) return
+    setCarregandoMenu(true)
+    try {
+      const resp = await fetch(`${API_URL}/cardapio`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const dados: ItemCardapio[] = await resp.json()
+      setCardapio(dados.filter((i) => i.disponivel))
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setCarregandoMenu(false)
+    }
+  }
+
+  function alterarQtd(itemId: string, delta: number) {
+    setSelecionados((prev) => {
+      const atual = prev[itemId]?.quantidade ?? 0
+      const nova  = atual + delta
+      if (nova <= 0) {
+        const { [itemId]: _, ...resto } = prev
+        return resto
+      }
+      return { ...prev, [itemId]: { quantidade: nova, observacao: prev[itemId]?.observacao ?? '' } }
+    })
+  }
+
+  function alterarObs(itemId: string, observacao: string) {
+    setSelecionados((prev) => ({
+      ...prev,
+      [itemId]: { quantidade: prev[itemId]?.quantidade ?? 1, observacao },
+    }))
+  }
+
+  const totalManual = cardapio.reduce((soma, item) => {
+    const sel = selecionados[item.id]
+    return soma + (sel ? item.preco * sel.quantidade : 0)
+  }, 0)
+
+  async function criarPedidoManual(e: FormEvent) {
+    e.preventDefault()
+    setErroModal(null)
+    const itens = Object.entries(selecionados).map(([itemCardapioId, { quantidade, observacao }]) => ({
+      itemCardapioId,
+      quantidade,
+      observacao: observacao || undefined,
+    }))
+    if (itens.length === 0) {
+      setErroModal('Selecione pelo menos um item')
+      return
+    }
+    setEnviandoManual(true)
+    try {
+      const resp = await fetch(`${API_URL}/pedidos/manual`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ clienteNome: clienteNomeModal, clienteFone: clienteFoneModal, itens }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroModal(dados.erro ?? 'Erro ao criar pedido'); return }
+      setPedidos((prev) => [dados, ...prev])
+      setModalAberto(false)
+    } catch {
+      setErroModal('Falha de conexão')
+    } finally {
+      setEnviandoManual(false)
+    }
+  }
+
   const pedidosVisiveis = pedidos.filter((p) => statusAtivos.includes(p.status))
 
   return (
-    <Layout headerExtra={<StatusConexao conectado={conectado} erro={erro} />}>
+    <Layout headerExtra={
+        <div className="flex items-center gap-2">
+          <button
+            onClick={abrirModalNovoPedido}
+            className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-orange-600"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Novo Pedido</span>
+          </button>
+          <button
+            onClick={togglePausa}
+            disabled={togglingPausa}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition disabled:opacity-50 ${
+              aceitando
+                ? 'border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                : 'border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20'
+            }`}
+          >
+            {aceitando
+              ? <PauseCircle className="h-4 w-4" />
+              : <PlayCircle className="h-4 w-4" />}
+            <span className="hidden sm:inline">{aceitando ? 'Pausar' : 'Reabrir'}</span>
+          </button>
+          <StatusConexao conectado={conectado} erro={erro} />
+        </div>
+      }>
       <div className="mb-6 flex items-baseline justify-between">
         <h2 className="text-2xl font-extrabold">Pedidos</h2>
         <span className="text-sm text-zinc-400">{pedidosVisiveis.length} ativos</span>
@@ -245,6 +393,111 @@ export default function Cozinha() {
               </div>
             )
           })}
+        </div>
+      )}
+      {/* Modal novo pedido manual */}
+      {modalAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="flex h-[90vh] w-full max-w-lg flex-col rounded-2xl border border-zinc-800 bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-800 p-5">
+              <h3 className="text-lg font-bold">Novo Pedido</h3>
+              <button onClick={() => setModalAberto(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={criarPedidoManual} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Nome *</span>
+                    <input
+                      required
+                      value={clienteNomeModal}
+                      onChange={(e) => setClienteNomeModal(e.target.value)}
+                      placeholder="Nome do cliente"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Telefone *</span>
+                    <input
+                      required
+                      value={clienteFoneModal}
+                      onChange={(e) => setClienteFoneModal(e.target.value)}
+                      placeholder="85 99999-9999"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                    />
+                  </label>
+                </div>
+                <div>
+                  <p className="mb-3 text-xs font-medium text-zinc-400">Itens</p>
+                  {carregandoMenu ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {cardapio.map((item) => {
+                        const sel = selecionados[item.id]
+                        return (
+                          <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">{item.nome}</p>
+                                <p className="text-xs text-orange-400">R$ {Number(item.preco).toFixed(2)}</p>
+                              </div>
+                              {sel ? (
+                                <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-800 px-1 py-1">
+                                  <button type="button" onClick={() => alterarQtd(item.id, -1)} className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700">
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <span className="min-w-5 text-center text-sm font-bold">{sel.quantidade}</span>
+                                  <button type="button" onClick={() => alterarQtd(item.id, 1)} className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700">
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => alterarQtd(item.id, 1)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white hover:bg-orange-600">
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                            {sel && (
+                              <input
+                                value={sel.observacao}
+                                onChange={(e) => alterarObs(item.id, e.target.value)}
+                                placeholder="Observação (opcional)"
+                                className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 placeholder-zinc-600 outline-none focus:border-orange-500"
+                              />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                {erroModal && (
+                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+                    {erroModal}
+                  </p>
+                )}
+              </div>
+              <div className="border-t border-zinc-800 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="text-sm text-zinc-400">Total</span>
+                  <span className="text-xl font-extrabold text-orange-400">R$ {totalManual.toFixed(2)}</span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={enviandoManual}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:bg-zinc-800 disabled:text-zinc-500"
+                >
+                  {enviandoManual && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Registrar Pedido
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </Layout>
