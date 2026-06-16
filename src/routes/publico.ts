@@ -20,8 +20,10 @@ const FazerPedidoSchema = Type.Object({
   ),
 });
 
+type ItemPedidoInput = { itemCardapioId: string; quantidade: number };
+type ItemCardapioRow = { id: string; nome: string; preco: unknown; [key: string]: unknown };
+
 export async function publicoRoutes(fastify: FastifyInstance) {
-  // GET /publico/:slug — carrega cardápio público (sem auth)
   fastify.get('/publico/:slug', {
     schema: { params: SlugParamsSchema },
   }, async (request, reply) => {
@@ -30,10 +32,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     const estabelecimento = await prisma.estabelecimento.findUnique({
       where: { slug },
       include: {
-        itens: {
-          where: { disponivel: true },
-          orderBy: { nome: 'asc' },
-        },
+        itens: { where: { disponivel: true }, orderBy: { nome: 'asc' } },
       },
     });
 
@@ -41,13 +40,9 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
-    // Retornamos só dados não-sensíveis — sem email do dono, sem IDs internos
     return {
-      estabelecimento: {
-        nome: estabelecimento.nome,
-        slug: estabelecimento.slug,
-      },
-      cardapio: estabelecimento.itens.map((item) => ({
+      estabelecimento: { nome: estabelecimento.nome, slug: estabelecimento.slug },
+      cardapio: estabelecimento.itens.map((item: ItemCardapioRow) => ({
         id: item.id,
         nome: item.nome,
         descricao: item.descricao,
@@ -56,7 +51,6 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // POST /publico/:slug/pedido — cliente final cria pedido (sem auth)
   fastify.post('/publico/:slug/pedido', {
     schema: { params: SlugParamsSchema, body: FazerPedidoSchema },
   }, async (request, reply) => {
@@ -65,68 +59,47 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       clienteNome: string;
       clienteFone: string;
       enderecoEntrega?: string;
-      itens: Array<{ itemCardapioId: string; quantidade: number }>;
+      itens: ItemPedidoInput[];
     };
 
-    // 1. Valida estabelecimento
-    const estabelecimento = await prisma.estabelecimento.findUnique({
-      where: { slug },
-    });
-
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { slug } });
     if (!estabelecimento || !estabelecimento.ativo) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
-    // 2. Busca os itens do cardápio de uma vez
-    const itemIds = itens.map((i) => i.itemCardapioId);
-    const itensCardapio = await prisma.itemCardapio.findMany({
-      where: {
-        id: { in: itemIds },
-        estabelecimentoId: estabelecimento.id,
-        disponivel: true,
-      },
+    const itemIds = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
+    const itensCardapio: ItemCardapioRow[] = await prisma.itemCardapio.findMany({
+      where: { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
     });
 
-    // 3. Valida que todos os itens existem e estão disponíveis
     if (itensCardapio.length !== itens.length) {
-      return reply.status(400).send({
-        erro: 'Algum item do pedido não está mais disponível',
-      });
+      return reply.status(400).send({ erro: 'Algum item do pedido não está mais disponível' });
     }
 
-    // 4. Monta os itens do pedido com SNAPSHOT (nome + preço do momento)
-    const itensComSnapshot = itens.map((pedidoItem) => {
-      const itemCardapio = itensCardapio.find(
-        (ic) => ic.id === pedidoItem.itemCardapioId
-      )!;
+    const itensComSnapshot = itens.map((pedidoItem: ItemPedidoInput) => {
+      const ic = itensCardapio.find((ic: ItemCardapioRow) => ic.id === pedidoItem.itemCardapioId)!;
       return {
-        nomeItem: itemCardapio.nome,
+        nomeItem: ic.nome,
         quantidade: pedidoItem.quantidade,
-        precoUnit: Number(itemCardapio.preco),
+        precoUnit: Number(ic.preco),
       };
     });
 
     const total = itensComSnapshot.reduce(
-      (soma, item) => soma + item.precoUnit * item.quantidade,
+      (soma: number, item: { precoUnit: number; quantidade: number }) =>
+        soma + item.precoUnit * item.quantidade,
       0
     );
 
-    // 5. Cria o pedido com seus itens (nested write, transação implícita)
     const pedido = await prisma.pedido.create({
       data: {
-        clienteNome,
-        clienteFone,
-        enderecoEntrega,
-        total,
+        clienteNome, clienteFone, enderecoEntrega, total,
         estabelecimentoId: estabelecimento.id,
-        itens: {
-          create: itensComSnapshot,
-        },
+        itens: { create: itensComSnapshot },
       },
       include: { itens: true },
     });
 
-    // 6. Emite via Socket.IO pra cozinha
     getIO().to(estabelecimento.id).emit('pedido:novo', pedido);
 
     return reply.status(201).send({

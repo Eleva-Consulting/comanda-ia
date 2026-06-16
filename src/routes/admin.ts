@@ -2,33 +2,37 @@ import { FastifyInstance } from 'fastify';
 import { prisma } from '../database.js';
 import { autenticar, apenasAdmin } from '../plugins/auth.js';
 
+type EstabelecimentoComCount = {
+  id: string;
+  nome: string;
+  slug: string;
+  telefone: string;
+  ativo: boolean;
+  criadoEm: Date;
+  _count: { usuarios: number; pedidos: number; itens: number };
+};
+
 /**
  * Rotas exclusivas do Super Admin da plataforma.
  * Todas protegidas por autenticar + apenasAdmin.
  * Nunca expostas no painel do estabelecimento.
  */
 export async function adminRoutes(fastify: FastifyInstance) {
-  // Aplica os dois guards em todas as rotas deste plugin
   fastify.addHook('onRequest', autenticar);
   fastify.addHook('onRequest', apenasAdmin);
 
   // ── GET /admin/estabelecimentos ──────────────────────────────────────────
-  // Lista todos os estabelecimentos da plataforma com contagem de usuários e pedidos
   fastify.get('/admin/estabelecimentos', async () => {
     const estabelecimentos = await prisma.estabelecimento.findMany({
       orderBy: { criadoEm: 'desc' },
       include: {
         _count: {
-          select: {
-            usuarios: true,
-            pedidos: true,
-            itens: true,
-          },
+          select: { usuarios: true, pedidos: true, itens: true },
         },
       },
     });
 
-    return estabelecimentos.map((e) => ({
+    return estabelecimentos.map((e: EstabelecimentoComCount) => ({
       id: e.id,
       nome: e.nome,
       slug: e.slug,
@@ -42,7 +46,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // ── PATCH /admin/estabelecimentos/:id/suspender ──────────────────────────
-  // Suspende ou reativa um estabelecimento (toggle)
   fastify.patch('/admin/estabelecimentos/:id/suspender', async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -59,15 +62,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
       data: { ativo: !estabelecimento.ativo },
     });
 
-    return {
-      id: atualizado.id,
-      nome: atualizado.nome,
-      ativo: atualizado.ativo,
-    };
+    return { id: atualizado.id, nome: atualizado.nome, ativo: atualizado.ativo };
   });
 
   // ── GET /admin/metricas ──────────────────────────────────────────────────
-  // Métricas globais da plataforma
   fastify.get('/admin/metricas', async () => {
     const [
       totalEstabelecimentos,
