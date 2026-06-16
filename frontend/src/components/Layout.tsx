@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { ChefHat, LogOut, Users, X } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
@@ -23,29 +23,33 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
   }`
 
-function tocarBeep() {
-  try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.frequency.value = 880
-    gain.gain.setValueAtTime(0.3, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2)
-    osc.start(ctx.currentTime)
-    osc.stop(ctx.currentTime + 0.2)
-  } catch {
-    // AudioContext indisponível no ambiente
-  }
-}
-
 export default function Layout({ children, headerExtra }: Props) {
   const navigate = useNavigate()
   const token = localStorage.getItem('token')
   const role = getRole()
   const { socket } = useSocket(token)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const audioCtxRef = useRef<AudioContext | null>(null)
+
+  function tocarBeep() {
+    try {
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioContext()
+      }
+      const ctx = audioCtxRef.current
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.value = 880
+      gain.gain.setValueAtTime(0.3, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2)
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + 0.2)
+    } catch {
+      // AudioContext indisponível no ambiente
+    }
+  }
 
   useEffect(() => {
     if (!socket) return

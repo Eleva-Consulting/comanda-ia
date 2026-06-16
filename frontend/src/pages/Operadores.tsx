@@ -75,13 +75,19 @@ export default function Operadores() {
   async function removerOperador(id: string) {
     setRemovendoId(id)
     try {
-      await fetch(`${API_URL}/estabelecimentos/operadores/${id}`, {
+      const resp = await fetch(`${API_URL}/estabelecimentos/operadores/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (!resp.ok) {
+        console.error('Erro ao remover operador', resp.status)
+        setErro('Não foi possível remover o operador. Tente novamente.')
+        return
+      }
       setOperadores((prev) => prev.filter((o) => o.id !== id))
     } catch (err) {
       console.error(err)
+      setErro('Falha de conexão ao remover operador.')
     } finally {
       setRemovendoId(null)
     }
@@ -104,6 +110,15 @@ export default function Operadores() {
           Novo Operador
         </button>
       </div>
+
+      {erro && !modalAberto && (
+        <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400 ring-1 ring-red-500/30 flex items-center justify-between gap-3">
+          <span>{erro}</span>
+          <button onClick={() => setErro(null)} className="shrink-0 text-red-400 hover:text-red-300">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {carregando ? (
         <div className="flex min-h-[300px] items-center justify-center">
