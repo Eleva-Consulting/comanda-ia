@@ -1,6 +1,13 @@
 import { FastifyInstance } from 'fastify';
+import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar } from '../plugins/auth.js';
+
+const AtualizarEstabelecimentoSchema = Type.Object({
+  aceitandoPedidos: Type.Optional(Type.Boolean()),
+  nome:             Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
+  telefone:         Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
+});
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
   fastify.get('/meu-estabelecimento', {
@@ -18,6 +25,25 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     return estabelecimento;
   });
 
+  fastify.patch('/meu-estabelecimento', {
+    onRequest: [autenticar],
+    schema: { body: AtualizarEstabelecimentoSchema },
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+    const dados = request.body as {
+      aceitandoPedidos?: boolean;
+      nome?: string;
+      telefone?: string;
+    };
+
+    const atualizado = await prisma.estabelecimento.update({
+      where: { id: estabelecimentoId! },
+      data:  dados,
+    });
+
+    return atualizado;
+  });
+
   fastify.get('/meu-estabelecimento/dashboard', {
     onRequest: [autenticar],
   }, async (request, reply) => {
@@ -26,7 +52,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     const estabelecimento = await prisma.estabelecimento.findUnique({
       where: { id: estabelecimentoId! },
       include: {
-        itens: { orderBy: { nome: 'asc' } },
+        itens:   { orderBy: { nome: 'asc' } },
         pedidos: { orderBy: { criadoEm: 'desc' }, take: 10 },
       },
     });
@@ -54,19 +80,19 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
 
     return {
       estabelecimento: {
-        id: estabelecimento.id,
-        nome: estabelecimento.nome,
+        id:       estabelecimento.id,
+        nome:     estabelecimento.nome,
         telefone: estabelecimento.telefone,
-        status: estabelecimento.status,
+        status:   estabelecimento.status,
       },
-      cardapio: estabelecimento.itens,
+      cardapio:        estabelecimento.itens,
       pedidosRecentes: estabelecimento.pedidos,
       estatisticas: {
         totalPedidos,
         faturamentoTotal: Number(agregacoes._sum.total ?? 0),
-        ticketMedio: Number(agregacoes._avg.total ?? 0),
+        ticketMedio:      Number(agregacoes._avg.total ?? 0),
         porStatus: estatisticas.map((item: { status: string; _count: { id: number } }) => ({
-          status: item.status,
+          status:     item.status,
           quantidade: item._count.id,
         })),
       },

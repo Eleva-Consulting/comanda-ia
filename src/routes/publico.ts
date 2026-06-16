@@ -57,7 +57,11 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     }
 
     return {
-      estabelecimento: { nome: estabelecimento.nome, slug: estabelecimento.slug },
+      estabelecimento: {
+        nome:             estabelecimento.nome,
+        slug:             estabelecimento.slug,
+        aceitandoPedidos: estabelecimento.aceitandoPedidos,
+      },
       cardapio: estabelecimento.itens.map((item: ItemCardapioRow) => ({
         id:        item.id,
         nome:      item.nome,
@@ -95,6 +99,10 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     if (!estabelecimento || estabelecimento.status !== 'ativo') {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
+    }
+
+    if (!estabelecimento.aceitandoPedidos) {
+      return reply.status(503).send({ erro: 'Estabelecimento temporariamente fechado' });
     }
 
     const itemIds      = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
