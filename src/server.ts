@@ -10,8 +10,8 @@ import { estabelecimentosRoutes } from './routes/estabelecimentos.js';
 import { authRoutes } from './routes/auth.js';
 import { webhookRoutes } from './routes/webhook.js';
 import { publicoRoutes } from './routes/publico.js';
+import { adminRoutes } from './routes/admin.js';
 
-// Monta a lista de origens permitidas dinamicamente
 function origensPermitidas(): string[] {
   const dev = ['http://localhost:5173', 'http://127.0.0.1:5173'];
   const prod = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
@@ -41,14 +41,20 @@ export async function buildServer() {
     sign: { expiresIn: '7d' },
   });
 
+  // Rotas públicas
   await fastify.register(rootRoutes);
   await fastify.register(saudeRoutes);
   await fastify.register(authRoutes);
   await fastify.register(webhookRoutes);
   await fastify.register(publicoRoutes);
+
+  // Rotas autenticadas (tenant)
   await fastify.register(pedidosRoutes);
   await fastify.register(cardapioRoutes);
   await fastify.register(estabelecimentosRoutes);
+
+  // Rotas exclusivas do Super Admin
+  await fastify.register(adminRoutes);
 
   return fastify;
 }

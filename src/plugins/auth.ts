@@ -8,38 +8,46 @@ declare module '@fastify/jwt' {
   interface FastifyJWT {
     payload: {
       userId: string;
-      estabelecimentoId: string;
-      role: 'DONO' | 'OPERADOR';
+      estabelecimentoId: string | null; // null para SUPER_ADMIN
+      role: 'SUPER_ADMIN' | 'DONO' | 'OPERADOR';
     };
     user: {
       userId: string;
-      estabelecimentoId: string;
-      role: 'DONO' | 'OPERADOR';
+      estabelecimentoId: string | null;
+      role: 'SUPER_ADMIN' | 'DONO' | 'OPERADOR';
     };
   }
 }
 
 // ============================================================================
-// MIDDLEWARE DE AUTENTICAÇÃO
+// MIDDLEWARES
 // ============================================================================
 
 /**
- * Hook onRequest que valida o JWT. Em caso de sucesso, popula request.user
- * com o payload. Em caso de falha, responde 401 e interrompe o pipeline.
+ * Valida o JWT. Em caso de sucesso, popula request.user com o payload.
+ * Usado em todas as rotas autenticadas.
  */
 export async function autenticar(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
   try {
-    // request.jwtVerify() faz tudo:
-    // 1. Lê o header Authorization
-    // 2. Extrai o "Bearer <token>"
-    // 3. Verifica a assinatura usando JWT_SECRET
-    // 4. Verifica se não expirou
-    // 5. Popula request.user com o payload
     await request.jwtVerify();
-  } catch (erro) {
+  } catch {
     return reply.status(401).send({ erro: 'Token inválido ou ausente' });
+  }
+}
+
+/**
+ * Garante que o usuário autenticado é SUPER_ADMIN.
+ * Deve ser usado APÓS o hook autenticar.
+ * Rotas do painel admin nunca são acessíveis por DONO ou OPERADOR.
+ */
+export async function apenasAdmin(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  if (request.user.role !== 'SUPER_ADMIN') {
+    return reply.status(403).send({ erro: 'Acesso restrito à plataforma' });
   }
 }
