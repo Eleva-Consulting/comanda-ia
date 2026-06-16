@@ -13,6 +13,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminEstabelecimentos from './pages/admin/AdminEstabelecimentos'
 import EsqueciSenha from './pages/EsqueciSenha'
 import RedefinirSenha from './pages/RedefinirSenha'
+import Operadores from './pages/Operadores'
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
       <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
       <Route path="/cozinha"   element={<RotaProtegida><Cozinha /></RotaProtegida>} />
       <Route path="/cardapio"  element={<RotaDono><Cardapio /></RotaDono>} />
+      <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
 
       {/* Painel da plataforma (SUPER_ADMIN) */}
       <Route path="/admin"                    element={<RotaAdmin><AdminDashboard /></RotaAdmin>} />
