@@ -74,6 +74,9 @@ model Usuario {
   role      Role     @default(DONO)
   criadoEm  DateTime @default(now())
 
+  resetToken           String?
+  resetTokenExpiracao  DateTime?
+
   // Opcional: SUPER_ADMIN não pertence a nenhum estabelecimento
   estabelecimentoId String?
   estabelecimento   Estabelecimento? @relation(fields: [estabelecimentoId], references: [id])
