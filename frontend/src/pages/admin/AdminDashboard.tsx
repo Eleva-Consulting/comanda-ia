@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, ShoppingBag, Wallet, Users, Clock, XCircle, Loader2 } from 'lucide-react'
+import { Building2, ShoppingBag, Users, Clock, XCircle, Loader2 } from 'lucide-react'
 import LayoutAdmin from '../../components/LayoutAdmin'
 import { API_URL } from '../../lib/api'
 
@@ -9,12 +9,7 @@ interface Metricas {
   estabelecimentosPendentes: number
   estabelecimentosSuspensos: number
   totalPedidos: number
-  faturamentoTotal: number
   totalUsuarios: number
-}
-
-function formatarBRL(valor: number) {
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 function KpiCard({
@@ -90,9 +85,13 @@ export default function AdminDashboard() {
         <KpiCard label="Estabelecimentos ativos"   valor={metricas.estabelecimentosAtivos.toString()}   Icone={Building2}   cor="emerald" />
         <KpiCard label="Aguardando aprovação"       valor={metricas.estabelecimentosPendentes.toString()} Icone={Clock}       cor="orange"  />
         <KpiCard label="Suspensos"                  valor={metricas.estabelecimentosSuspensos.toString()} Icone={XCircle}     cor="red"     />
-        <KpiCard label="Total de usuários"          valor={metricas.totalUsuarios.toString()}             Icone={Users}       cor="sky"     />
-        <KpiCard label="Total de pedidos"           valor={metricas.totalPedidos.toString()}              Icone={ShoppingBag} cor="zinc"    />
-        <KpiCard label="Faturamento da plataforma"  valor={formatarBRL(metricas.faturamentoTotal)}        Icone={Wallet}      cor="emerald" />
+        <KpiCard label="Total de usuários"  valor={metricas.totalUsuarios.toString()}  Icone={Users}       cor="sky"  />
+        <KpiCard label="Total de pedidos"   valor={metricas.totalPedidos.toString()}   Icone={ShoppingBag} cor="zinc" />
+        <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/50 p-5">
+          <p className="text-sm text-zinc-500">Receita de licenças</p>
+          <p className="mt-3 text-2xl font-extrabold text-zinc-600">—</p>
+          <p className="mt-1 text-xs text-zinc-600">Cobrança por assinatura em breve</p>
+        </div>
       </div>
     </LayoutAdmin>
   )

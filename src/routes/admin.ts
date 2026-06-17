@@ -169,7 +169,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
       pendentes,
       suspensos,
       totalPedidos,
-      faturamentoAgregado,
       totalUsuarios,
     ] = await Promise.all([
       prisma.estabelecimento.count(),
@@ -177,7 +176,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
       prisma.estabelecimento.count({ where: { status: 'pendente' } }),
       prisma.estabelecimento.count({ where: { status: 'suspenso' } }),
       prisma.pedido.count(),
-      prisma.pedido.aggregate({ _sum: { total: true } }),
       prisma.usuario.count({ where: { role: { not: 'SUPER_ADMIN' } } }),
     ]);
 
@@ -187,7 +185,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
       estabelecimentosPendentes: pendentes,
       estabelecimentosSuspensos: suspensos,
       totalPedidos,
-      faturamentoTotal: Number(faturamentoAgregado._sum.total ?? 0),
       totalUsuarios,
     };
   });
