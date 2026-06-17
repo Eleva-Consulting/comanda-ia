@@ -119,7 +119,7 @@ export default function Cozinha() {
     if (!socket) return
 
     const onNovo = (pedido: Pedido) => {
-      setPedidos((prev) => prev.some((p) => p.id === pedido.id) ? prev : [pedido, ...prev])
+      setPedidos((prev) => [pedido, ...prev.filter((p) => p.id !== pedido.id)])
     }
 
     const onAtualizado = (pedido: Pedido) => {
@@ -273,7 +273,6 @@ export default function Cozinha() {
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroModal(dados.erro ?? 'Erro ao criar pedido'); return }
-      setPedidos((prev) => [dados, ...prev])
       setModalAberto(false)
     } catch {
       setErroModal('Falha de conexão')
