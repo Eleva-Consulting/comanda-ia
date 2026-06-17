@@ -11,6 +11,7 @@ interface Estabelecimento {
   slug:             string
   status:           string
   aceitandoPedidos: boolean
+  chavePix:         string | null
 }
 
 export default function Configuracoes() {
@@ -25,6 +26,7 @@ export default function Configuracoes() {
 
   const [nome, setNome]         = useState('')
   const [telefone, setTelefone] = useState('')
+  const [chavePix, setChavePix] = useState('')
 
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, {
@@ -35,6 +37,7 @@ export default function Configuracoes() {
         setDados(est)
         setNome(est.nome)
         setTelefone(est.telefone)
+        setChavePix(est.chavePix ?? '')
       })
       .catch(console.error)
       .finally(() => setCarregando(false))
@@ -49,7 +52,7 @@ export default function Configuracoes() {
       const resp = await fetch(`${API_URL}/meu-estabelecimento`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ nome, telefone }),
+        body:    JSON.stringify({ nome, telefone, chavePix: chavePix.trim() || null }),
       })
       const atualizado = await resp.json()
       if (!resp.ok) { setErro(atualizado.erro ?? 'Erro ao salvar'); return }
@@ -141,6 +144,18 @@ export default function Configuracoes() {
               placeholder="(85) 99999-9999"
               className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
             />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-zinc-400">Chave PIX</span>
+            <input
+              type="text"
+              value={chavePix}
+              onChange={(e) => setChavePix(e.target.value)}
+              placeholder="CPF, CNPJ, email, telefone ou chave aleatória"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+            <p className="mt-1 text-xs text-zinc-600">Exibida para o cliente ao escolher PIX como pagamento</p>
           </label>
 
           {erro && (

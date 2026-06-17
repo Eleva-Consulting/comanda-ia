@@ -39,13 +39,15 @@ interface ItemPedido {
 }
 
 interface Pedido {
-  id:          string
-  clienteNome: string
-  clienteFone: string
-  status:      string
-  total:       number | string
-  criadoEm:   string
-  itens:       ItemPedido[]
+  id:             string
+  clienteNome:    string
+  clienteFone:    string
+  status:         string
+  total:          number | string
+  criadoEm:       string
+  itens:          ItemPedido[]
+  formaPagamento: string
+  tipoEntrega:    string
 }
 
 interface Resultado {
@@ -177,6 +179,14 @@ export default function Historico() {
               {aberto && (
                 <div className="border-t border-zinc-800 p-4">
                   <p className="mb-2 text-xs text-zinc-500">Fone: {pedido.clienteFone}</p>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
+                      {pedido.tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏪 Retirada'}
+                    </span>
+                    <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
+                      {({ pix: 'PIX', dinheiro: 'Dinheiro', cartao_credito: 'Crédito', cartao_debito: 'Débito' } as Record<string, string>)[pedido.formaPagamento] ?? pedido.formaPagamento}
+                    </span>
+                  </div>
                   <div className="space-y-1">
                     {pedido.itens.map((item) => (
                       <div key={item.id}>

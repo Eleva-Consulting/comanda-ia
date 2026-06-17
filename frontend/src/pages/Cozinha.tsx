@@ -20,13 +20,27 @@ interface ItemPedido {
 }
 
 interface Pedido {
-  id:          string
-  clienteNome: string
-  clienteFone: string
-  total:       number | string
-  status:      Status
-  criadoEm:   string
-  itens:       ItemPedido[]
+  id:              string
+  clienteNome:     string
+  clienteFone:     string
+  total:           number | string
+  status:          Status
+  criadoEm:        string
+  itens:           ItemPedido[]
+  formaPagamento:  'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
+  tipoEntrega:     'entrega' | 'retirada'
+}
+
+const formaPagamentoLabel: Record<string, string> = {
+  pix:            'PIX',
+  dinheiro:       'Dinheiro',
+  cartao_credito: 'Crédito',
+  cartao_debito:  'Débito',
+}
+
+const tipoEntregaLabel: Record<string, string> = {
+  entrega:  '🛵 Entrega',
+  retirada: '🏪 Retirada',
 }
 
 interface ItemCardapio {
@@ -335,9 +349,21 @@ export default function Cozinha() {
                   </span>
                 </div>
 
-                <div className="mb-4 flex items-center gap-2">
+                <div className="mb-2 flex items-center gap-2">
                   <User className="h-4 w-4 text-zinc-500" />
                   <span className="font-semibold">{pedido.clienteNome}</span>
+                </div>
+                <div className="mb-4 flex flex-wrap gap-1.5">
+                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
+                    {tipoEntregaLabel[pedido.tipoEntrega] ?? pedido.tipoEntrega}
+                  </span>
+                  <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                    pedido.formaPagamento === 'pix'
+                      ? 'bg-blue-500/15 text-blue-400'
+                      : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {formaPagamentoLabel[pedido.formaPagamento] ?? pedido.formaPagamento}
+                  </span>
                 </div>
 
                 <div className="mb-4 flex-1 space-y-2 border-t border-zinc-800 pt-4">
