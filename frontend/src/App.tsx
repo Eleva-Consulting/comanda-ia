@@ -16,6 +16,7 @@ import RedefinirSenha from './pages/RedefinirSenha'
 import Operadores from './pages/Operadores'
 import Historico from './pages/Historico'
 import ImprimirComanda from './pages/ImprimirComanda'
+import Configuracoes from './pages/Configuracoes'
 
 function App() {
   return (
@@ -34,7 +35,8 @@ function App() {
       <Route path="/cozinha"   element={<RotaProtegida><Cozinha /></RotaProtegida>} />
       <Route path="/cardapio"  element={<RotaDono><Cardapio /></RotaDono>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
-      <Route path="/historico"  element={<RotaDono><Historico /></RotaDono>} />
+      <Route path="/historico"      element={<RotaDono><Historico /></RotaDono>} />
+      <Route path="/configuracoes"  element={<RotaDono><Configuracoes /></RotaDono>} />
       <Route path="/imprimir/:pedidoId" element={<RotaProtegida><ImprimirComanda /></RotaProtegida>} />
 
       {/* Painel da plataforma (SUPER_ADMIN) */}
