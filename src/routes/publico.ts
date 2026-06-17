@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { getIO } from '../socket.js';
 import { enviarEmail, templates } from '../mailer.js';
+import type { FormaPagamento } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
   slug: Type.String({ minLength: 1, maxLength: 100 }),
@@ -12,6 +13,12 @@ const FazerPedidoSchema = Type.Object({
   clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
   clienteFone:     Type.String({ minLength: 8, maxLength: 20 }),
   enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
+  formaPagamento:  Type.Union([
+    Type.Literal('pix'),
+    Type.Literal('dinheiro'),
+    Type.Literal('cartao_credito'),
+    Type.Literal('cartao_debito'),
+  ]),
   itens: Type.Array(
     Type.Object({
       itemCardapioId: Type.String(),
@@ -61,6 +68,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         nome:             estabelecimento.nome,
         slug:             estabelecimento.slug,
         aceitandoPedidos: estabelecimento.aceitandoPedidos,
+        chavePix:         estabelecimento.chavePix,
       },
       cardapio: estabelecimento.itens.map((item: ItemCardapioRow) => ({
         id:        item.id,
@@ -78,10 +86,11 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     schema: { params: SlugParamsSchema, body: FazerPedidoSchema },
   }, async (request, reply) => {
     const { slug } = request.params as { slug: string };
-    const { clienteNome, clienteFone, enderecoEntrega, itens } = request.body as {
+    const { clienteNome, clienteFone, enderecoEntrega, formaPagamento, itens } = request.body as {
       clienteNome:      string;
       clienteFone:      string;
       enderecoEntrega?: string;
+      formaPagamento:   FormaPagamento;
       itens:            ItemPedidoInput[];
     };
 
@@ -131,7 +140,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     const pedido = await prisma.pedido.create({
       data: {
-        clienteNome, clienteFone, enderecoEntrega, total,
+        clienteNome, clienteFone, enderecoEntrega, total, formaPagamento,
         estabelecimentoId: estabelecimento.id,
         itens: { create: itensComSnapshot },
       },

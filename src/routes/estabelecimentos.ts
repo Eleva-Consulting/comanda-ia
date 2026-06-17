@@ -7,6 +7,7 @@ const AtualizarEstabelecimentoSchema = Type.Object({
   aceitandoPedidos: Type.Optional(Type.Boolean()),
   nome:             Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
   telefone:         Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
+  chavePix:         Type.Optional(Type.Union([Type.String({ maxLength: 100 }), Type.Null()])),
 });
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
@@ -32,8 +33,9 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
     const dados = request.body as {
       aceitandoPedidos?: boolean;
-      nome?: string;
-      telefone?: string;
+      nome?:             string;
+      telefone?:         string;
+      chavePix?:         string | null;
     };
 
     const atualizado = await prisma.estabelecimento.update({

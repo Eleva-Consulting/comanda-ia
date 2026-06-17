@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
-import type { StatusPedido } from '../generated/prisma/enums.js';
+import type { StatusPedido, FormaPagamento } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +44,12 @@ const AtualizarStatusSchema = Type.Object({
 const ManualPedidoSchema = Type.Object({
   clienteNome: Type.String({ minLength: 2, maxLength: 100 }),
   clienteFone: Type.String({ minLength: 8, maxLength: 20 }),
+  formaPagamento: Type.Optional(Type.Union([
+    Type.Literal('pix'),
+    Type.Literal('dinheiro'),
+    Type.Literal('cartao_credito'),
+    Type.Literal('cartao_debito'),
+  ])),
   itens: Type.Array(
     Type.Object({
       itemCardapioId: Type.String({ minLength: 1 }),
@@ -247,9 +253,10 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar],
     schema: { body: ManualPedidoSchema },
   }, async (request, reply) => {
-    const { clienteNome, clienteFone, itens } = request.body as {
-      clienteNome: string;
-      clienteFone: string;
+    const { clienteNome, clienteFone, formaPagamento, itens } = request.body as {
+      clienteNome:     string;
+      clienteFone:     string;
+      formaPagamento?: FormaPagamento;
       itens: { itemCardapioId: string; quantidade: number; observacao?: string }[];
     };
     const { estabelecimentoId } = request.user;
@@ -290,6 +297,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
         clienteNome,
         clienteFone,
         total,
+        formaPagamento: formaPagamento ?? 'dinheiro',
         estabelecimentoId: estabelecimentoId!,
         itens: { create: itensComSnapshot },
       },
