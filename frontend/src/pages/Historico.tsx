@@ -51,16 +51,15 @@ interface Pedido {
 }
 
 interface Resultado {
-  pedidos:    Pedido[]
-  total:      number | string
-  quantidade: number
+  dados:   Pedido[]
+  proximo: string | null
 }
 
 export default function Historico() {
   const token    = localStorage.getItem('token')
   const [de, setDe]         = useState(hoje())
   const [ate, setAte]       = useState(hoje())
-  const [dados, setDados]   = useState<Resultado | null>(null)
+  const [pedidos, setPedidos] = useState<Pedido[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandido, setExpandido] = useState<Set<string>>(new Set())
 
@@ -68,10 +67,13 @@ export default function Historico() {
     if (!token) return
     setLoading(true)
     try {
-      const resp = await fetch(`${API_URL}/pedidos?de=${de}&ate=${ate}`, {
+      const resp = await fetch(`${API_URL}/pedidos?dataInicio=${de}&dataFim=${ate}&limite=100`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (resp.ok) setDados(await resp.json())
+      if (resp.ok) {
+        const json: Resultado = await resp.json()
+        setPedidos(json.dados)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -124,34 +126,39 @@ export default function Historico() {
         </div>
 
         {/* Resumo */}
-        {dados && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-              <p className="text-2xl font-extrabold text-orange-400">{dados.quantidade}</p>
-              <p className="mt-1 text-xs text-zinc-400">Pedidos</p>
+        {pedidos && (() => {
+          const ativos    = pedidos.filter((p) => p.status !== 'cancelado')
+          const receita   = ativos.reduce((s, p) => s + Number(p.total), 0)
+          const quantidade = ativos.length
+          return (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
+                <p className="text-2xl font-extrabold text-orange-400">{quantidade}</p>
+                <p className="mt-1 text-xs text-zinc-400">Pedidos</p>
+              </div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
+                <p className="text-2xl font-extrabold text-orange-400">{fmt(receita)}</p>
+                <p className="mt-1 text-xs text-zinc-400">Receita</p>
+              </div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
+                <p className="text-2xl font-extrabold text-orange-400">
+                  {quantidade > 0 ? fmt(receita / quantidade) : 'R$ 0,00'}
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">Ticket médio</p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-              <p className="text-2xl font-extrabold text-orange-400">{fmt(dados.total)}</p>
-              <p className="mt-1 text-xs text-zinc-400">Receita</p>
-            </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-              <p className="text-2xl font-extrabold text-orange-400">
-                {dados.quantidade > 0 ? fmt(Number(dados.total) / dados.quantidade) : 'R$ 0,00'}
-              </p>
-              <p className="mt-1 text-xs text-zinc-400">Ticket médio</p>
-            </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Lista de pedidos */}
-        {dados && dados.pedidos.length === 0 && (
+        {pedidos && pedidos.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-zinc-600">
             <ShoppingBag className="h-12 w-12" />
             <p>Nenhum pedido no período selecionado</p>
           </div>
         )}
 
-        {dados && dados.pedidos.map((pedido) => {
+        {pedidos && pedidos.map((pedido) => {
           const aberto = expandido.has(pedido.id)
           const hora   = new Date(pedido.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
           const data   = new Date(pedido.criadoEm).toLocaleDateString('pt-BR')

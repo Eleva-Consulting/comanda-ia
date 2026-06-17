@@ -46,6 +46,18 @@ enum StatusPedido {
   cancelado
 }
 
+enum FormaPagamento {
+  pix
+  dinheiro
+  cartao_credito
+  cartao_debito
+}
+
+enum TipoEntrega {
+  entrega
+  retirada
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -57,6 +69,7 @@ model Estabelecimento {
   slug      String                 @unique
   status            StatusEstabelecimento  @default(pendente)
   aceitandoPedidos  Boolean                @default(true)
+  chavePix          String?
   criadoEm          DateTime               @default(now())
 
   usuarios   Usuario[]
@@ -120,7 +133,9 @@ model Pedido {
   clienteFone     String
   enderecoEntrega String?
   total           Decimal  @db.Decimal(10, 2)
-  status          StatusPedido @default(recebido)
+  status          StatusPedido   @default(recebido)
+  formaPagamento  FormaPagamento @default(pix)
+  tipoEntrega     TipoEntrega    @default(entrega)
   criadoEm        DateTime @default(now())
 
   estabelecimentoId String
