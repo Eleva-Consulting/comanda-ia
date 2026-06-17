@@ -290,7 +290,7 @@ export default function Cozinha() {
               : <PlayCircle className="h-4 w-4" />}
             <span className="hidden sm:inline">{aceitando ? 'Pausar' : 'Reabrir'}</span>
           </button>
-          <StatusConexao conectado={conectado} erro={erro} />
+          <StatusConexao conectado={conectado} erro={erro} aceitando={aceitando} />
         </div>
       }>
       <div className="mb-6 flex items-baseline justify-between">
@@ -504,12 +504,20 @@ export default function Cozinha() {
   )
 }
 
-function StatusConexao({ conectado, erro }: { conectado: boolean; erro: string | null }) {
+function StatusConexao({ conectado, erro, aceitando }: { conectado: boolean; erro: string | null; aceitando: boolean }) {
   if (erro) {
     return (
       <div className="flex items-center gap-2 rounded-full bg-red-500/10 px-3 py-1.5 ring-1 ring-red-500/30">
         <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>
         <span className="text-sm font-medium text-red-300">{erro}</span>
+      </div>
+    )
+  }
+  if (!aceitando) {
+    return (
+      <div className="flex items-center gap-2 rounded-full bg-orange-500/10 px-3 py-1.5 ring-1 ring-orange-500/30">
+        <span className="h-2.5 w-2.5 rounded-full bg-orange-500"></span>
+        <span className="text-sm font-medium text-orange-400">Pausada</span>
       </div>
     )
   }
@@ -522,7 +530,7 @@ function StatusConexao({ conectado, erro }: { conectado: boolean; erro: string |
         <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${conectado ? 'bg-emerald-500' : 'bg-zinc-500'}`}></span>
       </span>
       <span className="text-sm font-medium text-zinc-300">
-        {conectado ? 'Cozinha conectada' : 'Conectando...'}
+        {conectado ? 'Cozinha ativa' : 'Conectando...'}
       </span>
     </div>
   )
