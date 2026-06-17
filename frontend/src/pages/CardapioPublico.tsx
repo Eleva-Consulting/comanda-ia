@@ -13,7 +13,7 @@ interface ItemPublico {
 }
 
 interface CardapioData {
-  estabelecimento: { nome: string; slug: string; aceitandoPedidos: boolean }
+  estabelecimento: { nome: string; slug: string; aceitandoPedidos: boolean; chavePix: string | null }
   cardapio: ItemPublico[]
 }
 
@@ -22,6 +22,9 @@ interface PedidoConfirmado {
   total: number
   mensagem: string
 }
+
+type FormaPagamento = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
+type TipoEntrega = 'entrega' | 'retirada'
 
 function formatarBRL(valor: number): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -147,6 +150,7 @@ export default function CardapioPublico() {
           carrinho={carrinho}
           totalReais={totalReais}
           totalItens={totalItens}
+          chavePix={dados.estabelecimento.chavePix}
           onFechar={() => setCheckoutAberto(false)}
           onSucesso={(pedido) => {
             setPedidoConfirmado(pedido)
@@ -315,6 +319,7 @@ function ModalCheckout({
   carrinho,
   totalReais,
   totalItens,
+  chavePix,
   onFechar,
   onSucesso,
 }: {
@@ -322,6 +327,7 @@ function ModalCheckout({
   carrinho: Record<string, number>
   totalReais: number
   totalItens: number
+  chavePix: string | null
   onFechar: () => void
   onSucesso: (pedido: PedidoConfirmado) => void
 }) {
@@ -330,9 +336,11 @@ function ModalCheckout({
   const [endereco, setEndereco] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('entrega')
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('pix')
+  const [etapaPixAberta, setEtapaPixAberta] = useState(false)
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function enviarPedido() {
     setErro(null)
     setEnviando(true)
 
@@ -340,7 +348,9 @@ function ModalCheckout({
       const body = {
         clienteNome: clienteNome.trim(),
         clienteFone: clienteFone.trim(),
-        enderecoEntrega: endereco.trim() || undefined,
+        enderecoEntrega: tipoEntrega === 'entrega' ? endereco.trim() || undefined : undefined,
+        tipoEntrega,
+        formaPagamento,
         itens: Object.entries(carrinho).map(([itemCardapioId, quantidade]) => ({
           itemCardapioId,
           quantidade,
@@ -362,113 +372,225 @@ function ModalCheckout({
       onSucesso(pedido)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao enviar pedido')
+      setEtapaPixAberta(false)
     } finally {
       setEnviando(false)
     }
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
-      onClick={onFechar}
-    >
-      <div
-        className="w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-zinc-800 bg-zinc-900 p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-lg font-bold">Finalizar pedido</h3>
-          <button
-            onClick={onFechar}
-            disabled={enviando}
-            className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 disabled:opacity-50"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (formaPagamento === 'pix' && !etapaPixAberta) {
+      if (!clienteNome.trim() || !clienteFone.trim()) return
+      if (tipoEntrega === 'entrega' && !endereco.trim()) return
+      setEtapaPixAberta(true)
+      return
+    }
+    await enviarPedido()
+  }
 
-        <div className="mb-5 rounded-xl bg-zinc-950 p-3 text-sm">
-          <div className="flex justify-between text-zinc-400">
-            <span>{totalItens} {totalItens === 1 ? 'item' : 'itens'}</span>
-            <span className="font-bold text-zinc-100">{formatarBRL(totalReais)}</span>
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+        onClick={onFechar}
+      >
+        <div
+          className="w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-zinc-800 bg-zinc-900 p-6 max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-5 flex items-center justify-between">
+            <h3 className="text-lg font-bold">Finalizar pedido</h3>
+            <button
+              onClick={onFechar}
+              disabled={enviando}
+              className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 disabled:opacity-50"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mb-5 rounded-xl bg-zinc-950 p-3 text-sm">
+            <div className="flex justify-between text-zinc-400">
+              <span>{totalItens} {totalItens === 1 ? 'item' : 'itens'}</span>
+              <span className="font-bold text-zinc-100">{formatarBRL(totalReais)}</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <label className="mb-4 block">
+              <span className="mb-2 block text-sm font-medium text-zinc-300">Seu nome</span>
+              <div className="relative">
+                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={100}
+                  value={clienteNome}
+                  onChange={(e) => setClienteNome(e.target.value)}
+                  placeholder="João Silva"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                />
+              </div>
+            </label>
+
+            <label className="mb-4 block">
+              <span className="mb-2 block text-sm font-medium text-zinc-300">Telefone (WhatsApp)</span>
+              <div className="relative">
+                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="tel"
+                  required
+                  minLength={8}
+                  maxLength={20}
+                  value={clienteFone}
+                  onChange={(e) => setClienteFone(e.target.value)}
+                  placeholder="85 99999-9999"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                />
+              </div>
+            </label>
+
+            <div className="flex gap-2 mb-4">
+              {(['entrega', 'retirada'] as TipoEntrega[]).map((tipo) => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => setTipoEntrega(tipo)}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${
+                    tipoEntrega === tipo
+                      ? 'bg-orange-500 text-white'
+                      : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  }`}
+                >
+                  {tipo === 'entrega' ? '🛵 Entrega' : '🏪 Retirada'}
+                </button>
+              ))}
+            </div>
+
+            {tipoEntrega === 'entrega' && (
+              <label className="mb-4 block">
+                <span className="mb-2 block text-sm font-medium text-zinc-300">
+                  Endereço de entrega
+                </span>
+                <div className="relative">
+                  <MapPin className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-zinc-500" />
+                  <textarea
+                    required
+                    maxLength={500}
+                    rows={2}
+                    value={endereco}
+                    onChange={(e) => setEndereco(e.target.value)}
+                    placeholder="Rua, número, bairro"
+                    className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                  />
+                </div>
+              </label>
+            )}
+
+            <div className="mb-4">
+              <p className="mb-2 text-sm font-medium text-zinc-300">Forma de pagamento</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { valor: 'pix',            label: 'PIX' },
+                  { valor: 'dinheiro',       label: 'Dinheiro' },
+                  { valor: 'cartao_credito', label: 'Crédito' },
+                  { valor: 'cartao_debito',  label: 'Débito' },
+                ] as { valor: FormaPagamento; label: string }[]).map(({ valor, label }) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    onClick={() => setFormaPagamento(valor)}
+                    className={`rounded-xl py-2.5 text-sm font-semibold transition ${
+                      formaPagamento === valor
+                        ? 'bg-orange-500 text-white'
+                        : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {erro && (
+              <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+                {erro}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={enviando || !clienteNome.trim() || !clienteFone.trim()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+            >
+              {enviando ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : formaPagamento === 'pix' ? (
+                `Ver chave PIX · ${formatarBRL(totalReais)}`
+              ) : (
+                `Enviar pedido · ${formatarBRL(totalReais)}`
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {etapaPixAberta && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
+            <p className="mb-1 text-lg font-bold">Pague via PIX</p>
+            <p className="mb-4 text-sm text-zinc-400">Copie a chave abaixo e pague no seu banco</p>
+
+            {chavePix ? (
+              <div className="mb-4 rounded-xl bg-zinc-950 px-4 py-3">
+                <p className="mb-1 text-xs text-zinc-500">Chave PIX</p>
+                <p className="break-all font-mono text-sm font-semibold text-orange-400">
+                  {chavePix}
+                </p>
+              </div>
+            ) : (
+              <p className="mb-4 text-sm text-zinc-500">
+                Entre em contato com o estabelecimento para obter a chave PIX.
+              </p>
+            )}
+
+            <p className="mb-6 text-sm text-zinc-400">
+              Total: <span className="font-bold text-white">{formatarBRL(totalReais)}</span>
+            </p>
+
+            {chavePix && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(chavePix)
+                }}
+                className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
+              >
+                Copiar chave PIX
+              </button>
+            )}
+
+            <button
+              onClick={async () => { await enviarPedido() }}
+              disabled={enviando}
+              className="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+            >
+              {enviando ? 'Enviando...' : 'Já paguei — Confirmar pedido'}
+            </button>
+            <button
+              onClick={() => setEtapaPixAberta(false)}
+              className="mt-2 w-full rounded-xl py-2.5 text-sm text-zinc-500 hover:text-zinc-300"
+            >
+              Voltar
+            </button>
           </div>
         </div>
-
-        <form onSubmit={handleSubmit}>
-          <label className="mb-4 block">
-            <span className="mb-2 block text-sm font-medium text-zinc-300">Seu nome</span>
-            <div className="relative">
-              <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <input
-                type="text"
-                required
-                minLength={2}
-                maxLength={100}
-                value={clienteNome}
-                onChange={(e) => setClienteNome(e.target.value)}
-                placeholder="João Silva"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-              />
-            </div>
-          </label>
-
-          <label className="mb-4 block">
-            <span className="mb-2 block text-sm font-medium text-zinc-300">Telefone (WhatsApp)</span>
-            <div className="relative">
-              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <input
-                type="tel"
-                required
-                minLength={8}
-                maxLength={20}
-                value={clienteFone}
-                onChange={(e) => setClienteFone(e.target.value)}
-                placeholder="85 99999-9999"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-              />
-            </div>
-          </label>
-
-          <label className="mb-5 block">
-            <span className="mb-2 block text-sm font-medium text-zinc-300">
-              Endereço de entrega <span className="text-zinc-500">(opcional)</span>
-            </span>
-            <div className="relative">
-              <MapPin className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-              <textarea
-                maxLength={500}
-                rows={2}
-                value={endereco}
-                onChange={(e) => setEndereco(e.target.value)}
-                placeholder="Rua exemplo, 123, Bairro"
-                className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-              />
-            </div>
-          </label>
-
-          {erro && (
-            <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
-              {erro}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={enviando || !clienteNome.trim() || !clienteFone.trim()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
-          >
-            {enviando ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Enviando...
-              </>
-            ) : (
-              `Enviar pedido · ${formatarBRL(totalReais)}`
-            )}
-          </button>
-        </form>
-      </div>
-    </div>
+      )}
+    </>
   )
 }
 
