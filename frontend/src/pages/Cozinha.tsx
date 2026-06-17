@@ -98,6 +98,8 @@ export default function Cozinha() {
   const [selecionados, setSelecionados]         = useState<Record<string, { quantidade: number; observacao: string }>>({})
   const [enviandoManual, setEnviandoManual]     = useState(false)
   const [erroModal, setErroModal]               = useState<string | null>(null)
+  const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
+  const [tipoEntregaModal, setTipoEntregaModal]       = useState<'entrega' | 'retirada'>('retirada')
 
   useEffect(() => {
     if (!token) return
@@ -117,7 +119,7 @@ export default function Cozinha() {
     if (!socket) return
 
     const onNovo = (pedido: Pedido) => {
-      setPedidos((prev) => [pedido, ...prev])
+      setPedidos((prev) => prev.some((p) => p.id === pedido.id) ? prev : [pedido, ...prev])
     }
 
     const onAtualizado = (pedido: Pedido) => {
@@ -208,6 +210,8 @@ export default function Cozinha() {
     setClienteFoneModal('')
     setSelecionados({})
     setErroModal(null)
+    setFormaPagamentoModal('dinheiro')
+    setTipoEntregaModal('retirada')
     setModalAberto(true)
     if (cardapio.length > 0) return
     setCarregandoMenu(true)
@@ -265,7 +269,7 @@ export default function Cozinha() {
       const resp = await fetch(`${API_URL}/pedidos/manual`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ clienteNome: clienteNomeModal, clienteFone: clienteFoneModal, itens }),
+        body:    JSON.stringify({ clienteNome: clienteNomeModal, clienteFone: clienteFoneModal, itens, formaPagamento: formaPagamentoModal, tipoEntrega: tipoEntregaModal }),
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroModal(dados.erro ?? 'Erro ao criar pedido'); return }
@@ -455,6 +459,50 @@ export default function Cozinha() {
                     />
                   </label>
                 </div>
+                {/* Tipo de entrega */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(['retirada', 'entrega'] as const).map((tipo) => (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => setTipoEntregaModal(tipo)}
+                      className={`rounded-xl py-2 text-sm font-semibold transition ${
+                        tipoEntregaModal === tipo
+                          ? 'bg-orange-500 text-white'
+                          : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {tipo === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Forma de pagamento */}
+                <div>
+                  <p className="mb-2 text-xs font-medium text-zinc-400">Pagamento</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { valor: 'dinheiro',       label: 'Dinheiro' },
+                      { valor: 'cartao_debito',  label: 'Débito' },
+                      { valor: 'cartao_credito', label: 'Crédito' },
+                      { valor: 'pix',            label: 'PIX' },
+                    ] as const).map(({ valor, label }) => (
+                      <button
+                        key={valor}
+                        type="button"
+                        onClick={() => setFormaPagamentoModal(valor)}
+                        className={`rounded-xl py-2 text-sm font-semibold transition ${
+                          formaPagamentoModal === valor
+                            ? 'bg-orange-500 text-white'
+                            : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <p className="mb-3 text-xs font-medium text-zinc-400">Itens</p>
                   {carregandoMenu ? (
