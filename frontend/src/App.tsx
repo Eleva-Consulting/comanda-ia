@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Cadastro from './pages/Cadastro'
 import AguardandoAprovacao from './pages/AguardandoAprovacao'
@@ -30,7 +31,7 @@ function App() {
       <Route path="/redefinir-senha"       element={<RedefinirSenha />} />
 
       {/* Painel do estabelecimento (DONO / OPERADOR) */}
-      <Route path="/"          element={<Navigate to="/dashboard" replace />} />
+      <Route path="/"          element={<Landing />} />
       <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
       <Route path="/cozinha"   element={<RotaProtegida><Cozinha /></RotaProtegida>} />
       <Route path="/cardapio"  element={<RotaDono><Cardapio /></RotaDono>} />
