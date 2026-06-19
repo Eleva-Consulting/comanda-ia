@@ -6,6 +6,7 @@ function obterTransporte(): nodemailer.Transporter | null {
     host:   process.env.SMTP_HOST,
     port:   parseInt(process.env.SMTP_PORT ?? '587', 10),
     secure: process.env.SMTP_PORT === '465',
+    family: 4, // Railway não suporta IPv6 de saída
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
