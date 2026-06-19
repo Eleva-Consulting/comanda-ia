@@ -157,7 +157,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       data: { resetToken: token, resetTokenExpiracao: expiracao },
     });
 
-    const urlFrontend = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    const urlFrontend = (process.env.FRONTEND_URL?.split(',')[0]?.trim()) ?? 'http://localhost:5173';
     const urlRedefinicao = `${urlFrontend}/redefinir-senha?token=${token}`;
 
     enviarEmail({

@@ -149,7 +149,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         select: { email: true, nome: true },
       }).then((dono) => {
         if (!dono) return;
-        const urlFrontend = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+        const urlFrontend = (process.env.FRONTEND_URL?.split(',')[0]?.trim()) ?? 'http://localhost:5173';
         return enviarEmail({
           to:      dono.email,
           subject: `${atualizado.nome} foi aprovado na Comanda IA!`,
