@@ -29,16 +29,83 @@ export async function enviarEmail(opts: {
 export const templates = {
   cadastroPendente(nome: string, nomeEstabelecimento: string): string {
     return `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
-        <h2 style="color:#f97316">Cadastro recebido! 🎉</h2>
-        <p>Olá, <strong>${nome}</strong>!</p>
-        <p>
-          O estabelecimento <strong>${nomeEstabelecimento}</strong> foi cadastrado com sucesso
-          e está <strong>aguardando aprovação</strong> da plataforma.
-        </p>
-        <p>Você receberá um email assim que o acesso for liberado.</p>
-        <p style="color:#a1a1aa;font-size:12px;margin-top:32px">Comanda IA — Plataforma de pedidos para food service</p>
-      </div>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+
+        <!-- Header laranja -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#f97316 0%,#ea580c 100%);padding:36px 40px;text-align:center">
+            <div style="display:inline-flex;align-items:center;gap:10px">
+              <span style="font-size:28px">🍽️</span>
+              <span style="color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px">Comanda IA</span>
+            </div>
+            <p style="color:rgba(255,255,255,.85);margin:8px 0 0;font-size:13px">Plataforma de pedidos para food service</p>
+          </td>
+        </tr>
+
+        <!-- Corpo -->
+        <tr>
+          <td style="padding:40px 40px 32px">
+            <h1 style="margin:0 0 8px;font-size:22px;color:#18181b">Bem-vindo(a), ${nome}! 🎉</h1>
+            <p style="margin:0 0 24px;color:#52525b;font-size:15px;line-height:1.6">
+              O cadastro do <strong style="color:#18181b">${nomeEstabelecimento}</strong> foi recebido com sucesso.
+              Nossa equipe irá revisar e aprovar o seu acesso em breve.
+            </p>
+
+            <!-- Status box -->
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px 20px;margin-bottom:32px">
+              <p style="margin:0;font-size:14px;color:#9a3412">
+                ⏳ <strong>Cadastro em análise</strong> — Você receberá um email assim que o acesso for liberado.
+              </p>
+            </div>
+
+            <!-- O que você vai poder fazer -->
+            <p style="margin:0 0 16px;font-size:15px;font-weight:700;color:#18181b">Com a Comanda IA você vai:</p>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding:10px 0;border-bottom:1px solid #f4f4f5;vertical-align:top;width:36px;font-size:18px">📋</td>
+                <td style="padding:10px 0 10px 12px;border-bottom:1px solid #f4f4f5;vertical-align:top">
+                  <span style="font-size:14px;font-weight:600;color:#18181b;display:block">Montar seu cardápio digital</span>
+                  <span style="font-size:13px;color:#71717a">Cadastre pratos, preços e fotos em minutos</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;border-bottom:1px solid #f4f4f5;vertical-align:top;font-size:18px">📲</td>
+                <td style="padding:10px 0 10px 12px;border-bottom:1px solid #f4f4f5;vertical-align:top">
+                  <span style="font-size:14px;font-weight:600;color:#18181b;display:block">Compartilhar o link por WhatsApp</span>
+                  <span style="font-size:13px;color:#71717a">Seus clientes pedem direto pelo celular, sem app</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;vertical-align:top;font-size:18px">👨‍🍳</td>
+                <td style="padding:10px 0 10px 12px;vertical-align:top">
+                  <span style="font-size:14px;font-weight:600;color:#18181b;display:block">Gerenciar pedidos em tempo real</span>
+                  <span style="font-size:13px;color:#71717a">A cozinha recebe tudo na hora, sem confusão</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #f4f4f5;text-align:center">
+            <p style="margin:0;font-size:12px;color:#a1a1aa">
+              Comanda IA · <a href="https://comanda.cloud" style="color:#f97316;text-decoration:none">comanda.cloud</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
     `;
   },
 
