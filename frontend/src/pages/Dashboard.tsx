@@ -1,7 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, type LucideIcon } from 'lucide-react'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
+
+interface VendaDia {
+  data: string
+  pedidos: number
+  faturamento: number
+}
 
 interface DashboardData {
   estabelecimento: {
@@ -28,6 +43,7 @@ interface DashboardData {
     faturamentoTotal: number
     ticketMedio: number
     porStatus: Array<{ status: string; quantidade: number }>
+    vendasPorDia: VendaDia[]
   }
 }
 
@@ -60,6 +76,11 @@ function formatarData(data: string): string {
   })
 }
 
+function formatarDia(iso: string): string {
+  const [, mes, dia] = iso.split('-')
+  return `${dia}/${mes}`
+}
+
 export default function Dashboard() {
   const token = localStorage.getItem('token')
   const [dados, setDados] = useState<DashboardData | null>(null)
@@ -73,7 +94,7 @@ export default function Dashboard() {
     })
       .then((r) => r.json())
       .then((d: DashboardData) => setDados(d))
-      .catch((e) => console.error('Erro ao buscar dashboard:', e))
+      .catch(() => null)
       .finally(() => setCarregando(false))
   }, [token])
 
@@ -98,6 +119,11 @@ export default function Dashboard() {
   const emAndamento = dados.estatisticas.porStatus
     .filter((p) => ['recebido', 'em_preparo', 'pronto'].includes(p.status))
     .reduce((s, p) => s + p.quantidade, 0)
+
+  const graficoData = dados.estatisticas.vendasPorDia.map((d) => ({
+    ...d,
+    label: formatarDia(d.data),
+  }))
 
   return (
     <Layout>
@@ -132,6 +158,37 @@ export default function Dashboard() {
           cor="purple"
         />
       </div>
+
+      {graficoData.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <h3 className="mb-6 text-lg font-bold">Faturamento — últimos 30 dias</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={graficoData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: '#71717a', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tickFormatter={(v: number) => `R$${v}`}
+                tick={{ fill: '#71717a', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={56}
+              />
+              <Tooltip
+                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, color: '#f4f4f5' }}
+                formatter={(value) => [formatarBRL(Number(value)), 'Faturamento']}
+                labelFormatter={(l) => `Dia ${l}`}
+              />
+              <Bar dataKey="faturamento" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <h3 className="mb-4 text-lg font-bold">Pedidos recentes</h3>

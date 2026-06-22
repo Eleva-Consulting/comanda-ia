@@ -18,6 +18,7 @@ interface ItemCardapio {
   foto: string | null
   categoriaId: string | null
   categoria: { id: string; nome: string; ordem: number } | null
+  estoque: number | null
 }
 
 function formatarBRL(valor: number): string {
@@ -39,6 +40,7 @@ export default function Cardapio() {
   const [preco, setPreco] = useState('')
   const [disponivel, setDisponivel] = useState(true)
   const [categoriaId, setCategoriaId] = useState<string>('')
+  const [estoque, setEstoque] = useState<string>('')
 
   const [modalCategoriaAberto, setModalCategoriaAberto] = useState(false)
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null)
@@ -100,6 +102,7 @@ export default function Cardapio() {
     setPreco('')
     setDisponivel(true)
     setCategoriaId('')
+    setEstoque('')
     setModalAberto(true)
   }
 
@@ -110,6 +113,7 @@ export default function Cardapio() {
     setPreco(String(item.preco))
     setDisponivel(item.disponivel)
     setCategoriaId(item.categoriaId ?? '')
+    setEstoque(item.estoque != null ? String(item.estoque) : '')
     setModalAberto(true)
   }
 
@@ -120,6 +124,7 @@ export default function Cardapio() {
       const body: Record<string, unknown> = { nome, preco: Number(preco), disponivel }
       if (descricao.trim()) body.descricao = descricao.trim()
       body.categoriaId = categoriaId || null
+      body.estoque = estoque.trim() !== '' ? parseInt(estoque, 10) : null
 
       const url    = editando ? `${API_URL}/cardapio/${editando.id}` : `${API_URL}/cardapio`
       const method = editando ? 'PATCH' : 'POST'
@@ -450,7 +455,14 @@ export default function Cardapio() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between border-t border-zinc-800 pt-4">
-                          <span className="text-xl font-extrabold">{formatarBRL(Number(item.preco))}</span>
+                          <div>
+                            <span className="text-xl font-extrabold">{formatarBRL(Number(item.preco))}</span>
+                            {item.estoque != null && (
+                              <p className={`mt-0.5 text-xs ${item.estoque === 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+                                {item.estoque === 0 ? 'Sem estoque' : `${item.estoque} em estoque`}
+                              </p>
+                            )}
+                          </div>
                           <Toggle ativo={item.disponivel} carregando={ocupado} onChange={() => handleToggleDisponivel(item)} />
                         </div>
                       </div>
@@ -473,12 +485,14 @@ export default function Cardapio() {
           preco={preco}
           disponivel={disponivel}
           categoriaId={categoriaId}
+          estoque={estoque}
           salvando={salvando}
           onChangeNome={setNome}
           onChangeDescricao={setDescricao}
           onChangePreco={setPreco}
           onChangeDisponivel={setDisponivel}
           onChangeCategoriaId={setCategoriaId}
+          onChangeEstoque={setEstoque}
           onFechar={() => { if (!salvando) setModalAberto(false) }}
           onSalvar={handleSalvar}
         />
@@ -515,8 +529,8 @@ function Toggle({
 }
 
 function ModalForm({
-  editando, categorias, nome, descricao, preco, disponivel, categoriaId, salvando,
-  onChangeNome, onChangeDescricao, onChangePreco, onChangeDisponivel, onChangeCategoriaId,
+  editando, categorias, nome, descricao, preco, disponivel, categoriaId, estoque, salvando,
+  onChangeNome, onChangeDescricao, onChangePreco, onChangeDisponivel, onChangeCategoriaId, onChangeEstoque,
   onFechar, onSalvar,
 }: {
   editando: ItemCardapio | null
@@ -526,12 +540,14 @@ function ModalForm({
   preco: string
   disponivel: boolean
   categoriaId: string
+  estoque: string
   salvando: boolean
   onChangeNome: (v: string) => void
   onChangeDescricao: (v: string) => void
   onChangePreco: (v: string) => void
   onChangeDisponivel: (v: boolean) => void
   onChangeCategoriaId: (v: string) => void
+  onChangeEstoque: (v: string) => void
   onFechar: () => void
   onSalvar: (e: FormEvent) => void
 }) {
@@ -590,6 +606,17 @@ function ModalForm({
               </select>
             </label>
           )}
+
+          <label className="mb-4 block">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">
+              Estoque <span className="text-zinc-500">(opcional — deixe em branco para ilimitado)</span>
+            </span>
+            <input
+              type="number" min={0} step="1" value={estoque}
+              onChange={(e) => onChangeEstoque(e.target.value)} placeholder="ex: 10"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
 
           <label className="mb-6 flex items-center gap-3">
             <Toggle ativo={disponivel} carregando={false} onChange={() => onChangeDisponivel(!disponivel)} />

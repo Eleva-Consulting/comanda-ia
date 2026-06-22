@@ -22,6 +22,7 @@ const CriarItemSchema = Type.Object({
   preco:       Type.Number({ minimum: 0 }),
   disponivel:  Type.Optional(Type.Boolean()),
   categoriaId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  estoque:     Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
 });
 
 const AtualizarItemSchema = Type.Object({
@@ -30,6 +31,7 @@ const AtualizarItemSchema = Type.Object({
   preco:       Type.Optional(Type.Number({ minimum: 0 })),
   disponivel:  Type.Optional(Type.Boolean()),
   categoriaId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  estoque:     Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
 });
 
 const categoriaSelect = { select: { id: true, nome: true, ordem: true } } as const;

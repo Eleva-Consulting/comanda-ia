@@ -8,6 +8,9 @@ const AtualizarEstabelecimentoSchema = Type.Object({
   nome:             Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
   telefone:         Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   chavePix:         Type.Optional(Type.Union([Type.String({ maxLength: 100 }), Type.Null()])),
+  taxaEntrega:      Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
+  evolutionUrl:     Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+  evolutionToken:   Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()])),
 });
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
@@ -80,6 +83,36 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       _avg: { total: true },
     });
 
+    // Vendas dos últimos 30 dias, agrupadas por data
+    const inicio30Dias = new Date();
+    inicio30Dias.setDate(inicio30Dias.getDate() - 29);
+    inicio30Dias.setHours(0, 0, 0, 0);
+
+    const pedidos30Dias = await prisma.pedido.findMany({
+      where: {
+        estabelecimentoId: estabelecimentoId!,
+        status: { not: 'cancelado' },
+        criadoEm: { gte: inicio30Dias },
+      },
+      select: { criadoEm: true, total: true },
+    });
+
+    const vendasPorDia = pedidos30Dias.reduce<Record<string, { data: string; pedidos: number; faturamento: number }>>(
+      (acc, p) => {
+        const dia = p.criadoEm.toISOString().slice(0, 10);
+        const anterior = acc[dia] ?? { data: dia, pedidos: 0, faturamento: 0 };
+        return {
+          ...acc,
+          [dia]: {
+            ...anterior,
+            pedidos:     anterior.pedidos + 1,
+            faturamento: anterior.faturamento + Number(p.total),
+          },
+        };
+      },
+      {},
+    );
+
     return {
       estabelecimento: {
         id:       estabelecimento.id,
@@ -97,6 +130,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
           status:     item.status,
           quantidade: item._count.id,
         })),
+        vendasPorDia: Object.values(vendasPorDia).sort((a, b) => a.data.localeCompare(b.data)),
       },
     };
   });

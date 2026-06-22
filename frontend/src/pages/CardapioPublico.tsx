@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
-import { ChefHat, Plus, Minus, ShoppingBag, X, Loader2, CheckCircle2, Phone, User, MapPin } from 'lucide-react'
+import { ChefHat, Plus, Minus, ShoppingBag, X, Loader2, CheckCircle2, Phone, User, MapPin, Star } from 'lucide-react'
 import { API_URL } from '../lib/api'
 
 interface ItemPublico {
@@ -13,7 +13,13 @@ interface ItemPublico {
 }
 
 interface CardapioData {
-  estabelecimento: { nome: string; slug: string; aceitandoPedidos: boolean; chavePix: string | null }
+  estabelecimento: {
+    nome: string
+    slug: string
+    aceitandoPedidos: boolean
+    chavePix: string | null
+    taxaEntrega: number | null
+  }
   cardapio: ItemPublico[]
 }
 
@@ -39,6 +45,7 @@ export default function CardapioPublico() {
   const [carrinho, setCarrinho] = useState<Record<string, number>>({})
   const [checkoutAberto, setCheckoutAberto] = useState(false)
   const [pedidoConfirmado, setPedidoConfirmado] = useState<PedidoConfirmado | null>(null)
+  const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
 
   useEffect(() => {
     if (!slug) return
@@ -67,7 +74,7 @@ export default function CardapioPublico() {
   }
 
   const totalItens = Object.values(carrinho).reduce((s, q) => s + q, 0)
-  const totalReais = dados
+  const subtotalReais = dados
     ? Object.entries(carrinho).reduce((soma, [id, qtd]) => {
         const item = dados.cardapio.find((i) => i.id === id)
         return soma + (item ? item.preco * qtd : 0)
@@ -96,8 +103,19 @@ export default function CardapioPublico() {
     )
   }
 
-  if (pedidoConfirmado) {
-    return <TelaConfirmacao pedido={pedidoConfirmado} nomeEstabelecimento={dados.estabelecimento.nome} />
+  if (pedidoConfirmado && !avaliacaoFeita) {
+    return (
+      <TelaConfirmacao
+        pedido={pedidoConfirmado}
+        slug={slug!}
+        nomeEstabelecimento={dados.estabelecimento.nome}
+        onAvaliacaoFeita={() => setAvaliacaoFeita(true)}
+      />
+    )
+  }
+
+  if (pedidoConfirmado && avaliacaoFeita) {
+    return <TelaObrigado nomeEstabelecimento={dados.estabelecimento.nome} pedido={pedidoConfirmado} />
   }
 
   return (
@@ -138,7 +156,8 @@ export default function CardapioPublico() {
       {totalItens > 0 && (
         <BarraCarrinho
           totalItens={totalItens}
-          totalReais={totalReais}
+          subtotal={subtotalReais}
+          taxaEntrega={dados.estabelecimento.taxaEntrega}
           aceitandoPedidos={dados.estabelecimento.aceitandoPedidos}
           onFinalizar={() => setCheckoutAberto(true)}
         />
@@ -148,9 +167,10 @@ export default function CardapioPublico() {
         <ModalCheckout
           slug={slug!}
           carrinho={carrinho}
-          totalReais={totalReais}
+          subtotal={subtotalReais}
           totalItens={totalItens}
           chavePix={dados.estabelecimento.chavePix}
+          taxaEntrega={dados.estabelecimento.taxaEntrega}
           onFechar={() => setCheckoutAberto(false)}
           onSucesso={(pedido) => {
             setPedidoConfirmado(pedido)
@@ -171,7 +191,6 @@ function GruposCardapio({
   onAdicionar: (id: string) => void
   onRemover: (id: string) => void
 }) {
-  // Agrupa por categoria, mantendo a ordem definida pelo dono
   const grupos = (() => {
     const mapa = new Map<string, { nome: string; ordem: number; itens: ItemPublico[] }>()
 
@@ -221,10 +240,7 @@ function GruposCardapio({
 }
 
 function ItemCard({
-  item,
-  quantidade,
-  onAdicionar,
-  onRemover,
+  item, quantidade, onAdicionar, onRemover,
 }: {
   item: ItemPublico
   quantidade: number
@@ -283,19 +299,23 @@ function ItemCard({
 }
 
 function BarraCarrinho({
-  totalItens,
-  totalReais,
-  aceitandoPedidos,
-  onFinalizar,
+  totalItens, subtotal, taxaEntrega, aceitandoPedidos, onFinalizar,
 }: {
   totalItens: number
-  totalReais: number
+  subtotal: number
+  taxaEntrega: number | null
   aceitandoPedidos: boolean
   onFinalizar: () => void
 }) {
+  const total = subtotal + (taxaEntrega ?? 0)
   return (
     <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur">
       <div className="mx-auto max-w-2xl p-4">
+        {taxaEntrega != null && taxaEntrega > 0 && (
+          <p className="mb-2 text-center text-xs text-zinc-500">
+            + {formatarBRL(taxaEntrega)} taxa de entrega
+          </p>
+        )}
         <button
           onClick={onFinalizar}
           disabled={!aceitandoPedidos}
@@ -307,7 +327,7 @@ function BarraCarrinho({
               {totalItens} {totalItens === 1 ? 'item' : 'itens'}
             </span>
           </span>
-          <span>Finalizar · {formatarBRL(totalReais)}</span>
+          <span>Finalizar · {formatarBRL(total)}</span>
         </button>
       </div>
     </div>
@@ -315,19 +335,14 @@ function BarraCarrinho({
 }
 
 function ModalCheckout({
-  slug,
-  carrinho,
-  totalReais,
-  totalItens,
-  chavePix,
-  onFechar,
-  onSucesso,
+  slug, carrinho, subtotal, totalItens, chavePix, taxaEntrega, onFechar, onSucesso,
 }: {
   slug: string
   carrinho: Record<string, number>
-  totalReais: number
+  subtotal: number
   totalItens: number
   chavePix: string | null
+  taxaEntrega: number | null
   onFechar: () => void
   onSucesso: (pedido: PedidoConfirmado) => void
 }) {
@@ -339,6 +354,9 @@ function ModalCheckout({
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('entrega')
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('pix')
   const [etapaPixAberta, setEtapaPixAberta] = useState(false)
+
+  const taxa = tipoEntrega === 'entrega' ? (taxaEntrega ?? 0) : 0
+  const totalReais = subtotal + taxa
 
   async function enviarPedido() {
     setErro(null)
@@ -410,10 +428,20 @@ function ModalCheckout({
             </button>
           </div>
 
-          <div className="mb-5 rounded-xl bg-zinc-950 p-3 text-sm">
+          <div className="mb-5 rounded-xl bg-zinc-950 p-3 text-sm space-y-1">
             <div className="flex justify-between text-zinc-400">
               <span>{totalItens} {totalItens === 1 ? 'item' : 'itens'}</span>
-              <span className="font-bold text-zinc-100">{formatarBRL(totalReais)}</span>
+              <span>{formatarBRL(subtotal)}</span>
+            </div>
+            {tipoEntrega === 'entrega' && taxa > 0 && (
+              <div className="flex justify-between text-zinc-400">
+                <span>Taxa de entrega</span>
+                <span>{formatarBRL(taxa)}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t border-zinc-800 pt-1 font-bold text-zinc-100">
+              <span>Total</span>
+              <span>{formatarBRL(totalReais)}</span>
             </div>
           </div>
 
@@ -565,9 +593,7 @@ function ModalCheckout({
 
             {chavePix && (
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(chavePix)
-                }}
+                onClick={() => { navigator.clipboard.writeText(chavePix) }}
                 className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
               >
                 Copiar chave PIX
@@ -595,12 +621,41 @@ function ModalCheckout({
 }
 
 function TelaConfirmacao({
-  pedido,
-  nomeEstabelecimento,
+  pedido, slug, nomeEstabelecimento, onAvaliacaoFeita,
 }: {
   pedido: PedidoConfirmado
+  slug: string
   nomeEstabelecimento: string
+  onAvaliacaoFeita: () => void
 }) {
+  const [nota, setNota] = useState(0)
+  const [hover, setHover] = useState(0)
+  const [comentario, setComentario] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  async function avaliar() {
+    if (!nota) return
+    setEnviando(true)
+    setErro(null)
+    try {
+      const r = await fetch(`${API_URL}/publico/${slug}/pedidos/${pedido.id}/avaliar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avaliacao: nota, comentarioAvaliacao: comentario.trim() || undefined }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        throw new Error(err.erro ?? 'Erro ao avaliar')
+      }
+      onAvaliacaoFeita()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao avaliar')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 font-sans text-zinc-100">
       <div className="w-full max-w-md text-center">
@@ -620,6 +675,86 @@ function TelaConfirmacao({
           <p className="mt-3 font-mono text-xs text-zinc-500">#{pedido.id.slice(0, 8)}</p>
         </div>
 
+        {/* Avaliação */}
+        <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+          <p className="mb-3 font-semibold">Como foi sua experiência?</p>
+          <div className="mb-4 flex justify-center gap-2">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setNota(n)}
+                onMouseEnter={() => setHover(n)}
+                onMouseLeave={() => setHover(0)}
+                className="transition"
+                aria-label={`${n} estrela${n > 1 ? 's' : ''}`}
+              >
+                <Star
+                  className={`h-8 w-8 transition ${
+                    n <= (hover || nota) ? 'fill-orange-400 text-orange-400' : 'text-zinc-600'
+                  }`}
+                />
+              </button>
+            ))}
+          </div>
+
+          {nota > 0 && (
+            <textarea
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              placeholder="Comentário opcional..."
+              maxLength={500}
+              rows={2}
+              className="mb-3 w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+            />
+          )}
+
+          {erro && (
+            <p className="mb-3 text-sm text-red-400">{erro}</p>
+          )}
+
+          <button
+            onClick={avaliar}
+            disabled={!nota || enviando}
+            className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {enviando ? 'Enviando...' : 'Enviar avaliação'}
+          </button>
+          <button
+            onClick={onAvaliacaoFeita}
+            className="mt-2 w-full rounded-xl py-2 text-sm text-zinc-500 hover:text-zinc-300"
+          >
+            Pular
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TelaObrigado({
+  nomeEstabelecimento, pedido,
+}: {
+  nomeEstabelecimento: string
+  pedido: PedidoConfirmado
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 font-sans text-zinc-100">
+      <div className="w-full max-w-md text-center">
+        <div className="mb-5 flex justify-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15">
+            <CheckCircle2 className="h-12 w-12 text-emerald-400" />
+          </div>
+        </div>
+        <h1 className="text-2xl font-extrabold">Obrigado! 🙏</h1>
+        <p className="mt-2 text-zinc-400">
+          A cozinha do <span className="font-semibold text-zinc-200">{nomeEstabelecimento}</span> já foi avisada.
+        </p>
+        <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+          <p className="text-sm text-zinc-400">Total do pedido</p>
+          <p className="mt-1 text-3xl font-extrabold text-orange-400">{formatarBRL(pedido.total)}</p>
+          <p className="mt-3 font-mono text-xs text-zinc-500">#{pedido.id.slice(0, 8)}</p>
+        </div>
         <p className="mt-6 text-sm text-zinc-500">
           Você pode fechar esta tela. O restaurante vai entrar em contato pelo WhatsApp em instantes.
         </p>

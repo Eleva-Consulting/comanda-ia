@@ -12,21 +12,27 @@ interface Estabelecimento {
   status:           string
   aceitandoPedidos: boolean
   chavePix:         string | null
+  taxaEntrega:      number | null
+  evolutionUrl:     string | null
+  evolutionToken:   string | null
 }
 
 export default function Configuracoes() {
   const token = localStorage.getItem('token')
 
-  const [dados, setDados]       = useState<Estabelecimento | null>(null)
+  const [dados, setDados]           = useState<Estabelecimento | null>(null)
   const [carregando, setCarregando] = useState(true)
-  const [salvando, setSalvando] = useState(false)
-  const [sucesso, setSucesso]   = useState(false)
-  const [erro, setErro]         = useState<string | null>(null)
-  const [copiado, setCopiado]   = useState(false)
+  const [salvando, setSalvando]     = useState(false)
+  const [sucesso, setSucesso]       = useState(false)
+  const [erro, setErro]             = useState<string | null>(null)
+  const [copiado, setCopiado]       = useState(false)
 
-  const [nome, setNome]         = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [chavePix, setChavePix] = useState('')
+  const [nome, setNome]               = useState('')
+  const [telefone, setTelefone]       = useState('')
+  const [chavePix, setChavePix]       = useState('')
+  const [taxaEntrega, setTaxaEntrega] = useState('')
+  const [evolutionUrl, setEvolutionUrl]     = useState('')
+  const [evolutionToken, setEvolutionToken] = useState('')
 
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, {
@@ -38,8 +44,11 @@ export default function Configuracoes() {
         setNome(est.nome)
         setTelefone(est.telefone)
         setChavePix(est.chavePix ?? '')
+        setTaxaEntrega(est.taxaEntrega != null ? String(est.taxaEntrega) : '')
+        setEvolutionUrl(est.evolutionUrl ?? '')
+        setEvolutionToken(est.evolutionToken ?? '')
       })
-      .catch(console.error)
+      .catch(() => null)
       .finally(() => setCarregando(false))
   }, [token])
 
@@ -49,10 +58,23 @@ export default function Configuracoes() {
     setSucesso(false)
     setSalvando(true)
     try {
+      const taxaNum = taxaEntrega.trim() ? parseFloat(taxaEntrega.replace(',', '.')) : null
+      if (taxaEntrega.trim() && (isNaN(taxaNum!) || taxaNum! < 0)) {
+        setErro('Taxa de entrega inválida')
+        return
+      }
+
       const resp = await fetch(`${API_URL}/meu-estabelecimento`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ nome, telefone, chavePix: chavePix.trim() || null }),
+        body:    JSON.stringify({
+          nome,
+          telefone,
+          chavePix:       chavePix.trim() || null,
+          taxaEntrega:    taxaNum,
+          evolutionUrl:   evolutionUrl.trim() || null,
+          evolutionToken: evolutionToken.trim() || null,
+        }),
       })
       const atualizado = await resp.json()
       if (!resp.ok) { setErro(atualizado.erro ?? 'Erro ao salvar'); return }
@@ -115,7 +137,7 @@ export default function Configuracoes() {
           </div>
         )}
 
-        {/* Formulário */}
+        {/* Dados do estabelecimento */}
         <form onSubmit={salvar} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
           <h2 className="font-semibold text-zinc-200">Dados do estabelecimento</h2>
 
@@ -158,6 +180,19 @@ export default function Configuracoes() {
             <p className="mt-1 text-xs text-zinc-600">Exibida para o cliente ao escolher PIX como pagamento</p>
           </label>
 
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-zinc-400">Taxa de entrega (R$)</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={taxaEntrega}
+              onChange={(e) => setTaxaEntrega(e.target.value)}
+              placeholder="Ex: 5,00 — deixe em branco para grátis"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+            <p className="mt-1 text-xs text-zinc-600">Adicionada automaticamente ao total quando o cliente escolher entrega</p>
+          </label>
+
           {erro && (
             <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
               {erro}
@@ -181,6 +216,51 @@ export default function Configuracoes() {
             </button>
           </div>
         </form>
+
+        {/* Evolution API (WhatsApp) */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
+          <div>
+            <h2 className="font-semibold text-zinc-200">WhatsApp — Evolution API</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Configure para receber notificações de novos pedidos via WhatsApp.
+              Requer uma instância Evolution API própria.
+            </p>
+          </div>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-zinc-400">URL da instância</span>
+            <input
+              type="url"
+              value={evolutionUrl}
+              onChange={(e) => setEvolutionUrl(e.target.value)}
+              placeholder="https://evolution.seudominio.com"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-zinc-400">API Key</span>
+            <input
+              type="password"
+              value={evolutionToken}
+              onChange={(e) => setEvolutionToken(e.target.value)}
+              placeholder="••••••••••••••••"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              disabled={salvando}
+              onClick={(e) => { salvar(e as unknown as FormEvent) }}
+              className="flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+            >
+              {salvando && <Loader2 className="h-4 w-4 animate-spin" />}
+              Salvar
+            </button>
+          </div>
+        </div>
 
         {/* Info somente leitura */}
         {dados && (

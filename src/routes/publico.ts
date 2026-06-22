@@ -4,10 +4,16 @@ import { prisma } from '../database.js';
 import { getIO } from '../socket.js';
 import { enviarEmail, templates } from '../mailer.js';
 import { enviarPush } from '../push.js';
+import { enviarMensagemWhatsApp } from '../evolution.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
   slug: Type.String({ minLength: 1, maxLength: 100 }),
+});
+
+const PedidoParamsSchema = Type.Object({
+  slug: Type.String({ minLength: 1, maxLength: 100 }),
+  id:   Type.String({ minLength: 1 }),
 });
 
 const FazerPedidoSchema = Type.Object({
@@ -30,6 +36,11 @@ const FazerPedidoSchema = Type.Object({
   ),
 });
 
+const AvaliarPedidoSchema = Type.Object({
+  avaliacao:           Type.Integer({ minimum: 1, maximum: 5 }),
+  comentarioAvaliacao: Type.Optional(Type.String({ maxLength: 500 })),
+});
+
 type ItemPedidoInput  = { itemCardapioId: string; quantidade: number };
 type CategoriaRow = { id: string; nome: string; ordem: number } | null;
 
@@ -39,12 +50,12 @@ type ItemCardapioRow  = {
   preco:      unknown;
   descricao:  string | null | undefined;
   foto:       string | null | undefined;
+  estoque:    number | null | undefined;
   categoria?: CategoriaRow;
 };
 
 export async function publicoRoutes(fastify: FastifyInstance) {
   // GET /publico/:slug — cardápio público (sem auth)
-  // Bloqueado para estabelecimentos não ativos.
   fastify.get('/publico/:slug', {
     schema: { params: SlugParamsSchema },
   }, async (request, reply) => {
@@ -71,15 +82,20 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         slug:             estabelecimento.slug,
         aceitandoPedidos: estabelecimento.aceitandoPedidos,
         chavePix:         estabelecimento.chavePix,
+        taxaEntrega:      estabelecimento.taxaEntrega !== null
+          ? Number(estabelecimento.taxaEntrega)
+          : null,
       },
-      cardapio: estabelecimento.itens.map((item: ItemCardapioRow) => ({
-        id:        item.id,
-        nome:      item.nome,
-        descricao: item.descricao ?? null,
-        preco:     Number(item.preco),
-        foto:      item.foto ?? null,
-        categoria: item.categoria ?? null,
-      })),
+      cardapio: estabelecimento.itens
+        .filter((item: ItemCardapioRow) => item.estoque == null || item.estoque > 0)
+        .map((item: ItemCardapioRow) => ({
+          id:        item.id,
+          nome:      item.nome,
+          descricao: item.descricao ?? null,
+          preco:     Number(item.preco),
+          foto:      item.foto ?? null,
+          categoria: item.categoria ?? null,
+        })),
     };
   });
 
@@ -101,13 +117,12 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ erro: 'Endereço de entrega é obrigatório' });
     }
 
-    // Carrega o estabelecimento e o email do DONO em uma única query
     const estabelecimento = await prisma.estabelecimento.findUnique({
       where: { slug },
       include: {
         usuarios: {
           where:  { role: 'DONO' },
-          select: { email: true, nome: true },
+          select: { email: true, nome: true, telefone: true },
           take:   1,
         },
       },
@@ -121,7 +136,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       return reply.status(503).send({ erro: 'Estabelecimento temporariamente fechado' });
     }
 
-    const itemIds      = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
+    const itemIds = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
     const itensCardapio: ItemCardapioRow[] = await prisma.itemCardapio.findMany({
       where: { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
     });
@@ -130,8 +145,16 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ erro: 'Algum item do pedido não está mais disponível' });
     }
 
+    // Verificar estoque suficiente
+    for (const pedidoItem of itens) {
+      const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
+      if (ic.estoque !== null && ic.estoque !== undefined && ic.estoque < pedidoItem.quantidade) {
+        return reply.status(400).send({ erro: `Estoque insuficiente para "${ic.nome}"` });
+      }
+    }
+
     const itensComSnapshot = itens.map((pedidoItem: ItemPedidoInput) => {
-      const ic = itensCardapio.find((ic: ItemCardapioRow) => ic.id === pedidoItem.itemCardapioId)!;
+      const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
       return {
         nomeItem:   ic.nome,
         quantidade: pedidoItem.quantidade,
@@ -139,11 +162,17 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       };
     });
 
-    const total = itensComSnapshot.reduce(
+    const subtotal = itensComSnapshot.reduce(
       (soma: number, item: { precoUnit: number; quantidade: number }) =>
         soma + item.precoUnit * item.quantidade,
       0,
     );
+
+    const taxa = tipoEntrega === 'entrega' && estabelecimento.taxaEntrega
+      ? Number(estabelecimento.taxaEntrega)
+      : 0;
+
+    const total = subtotal + taxa;
 
     const pedido = await prisma.pedido.create({
       data: {
@@ -154,9 +183,21 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       include: { itens: true },
     });
 
+    // Decrementar estoque — fire-and-forget
+    Promise.all(
+      itens.map((pedidoItem: ItemPedidoInput) => {
+        const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
+        if (ic.estoque === null || ic.estoque === undefined) return Promise.resolve();
+        return prisma.itemCardapio.update({
+          where: { id: pedidoItem.itemCardapioId },
+          data:  { estoque: { decrement: pedidoItem.quantidade } },
+        });
+      })
+    ).catch((err) => fastify.log.error({ err }, 'Falha ao decrementar estoque'));
+
     getIO().to(estabelecimento.id).emit('pedido:novo', pedido);
 
-    // Push notification para todos os usuários do estabelecimento — fire-and-forget
+    // Push notification — fire-and-forget
     prisma.pushSubscription.findMany({
       where: { usuario: { estabelecimentoId: estabelecimento.id } },
     }).then((subs) =>
@@ -169,10 +210,10 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       )
     ).catch((err) => fastify.log.error({ err }, 'Falha push notifications'));
 
-    // Notifica o DONO por email — fire-and-forget, nunca bloqueia o response
+    // Email para o DONO — fire-and-forget
     const dono = estabelecimento.usuarios[0];
     if (dono) {
-      const urlFrontend = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+      const urlFrontend = process.env.FRONTEND_URL?.split(',')[0].trim() ?? 'http://localhost:5173';
       enviarEmail({
         to:      dono.email,
         subject: `Novo pedido de ${clienteNome} — ${estabelecimento.nome}`,
@@ -186,10 +227,52 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de novo pedido'));
     }
 
+    // WhatsApp via Evolution API — fire-and-forget
+    if (estabelecimento.evolutionUrl && estabelecimento.evolutionToken && dono?.telefone) {
+      const itensTxt = itensComSnapshot
+        .map((i: { nomeItem: string; quantidade: number; precoUnit: number }) =>
+          `• ${i.quantidade}x ${i.nomeItem}`)
+        .join('\n');
+      const msg = `🍽️ Novo pedido — *${estabelecimento.nome}*\n\nCliente: *${clienteNome}*\nFone: ${clienteFone}\nTotal: *R$ ${total.toFixed(2)}*\n\nItens:\n${itensTxt}`;
+
+      enviarMensagemWhatsApp(
+        { url: estabelecimento.evolutionUrl, token: estabelecimento.evolutionToken },
+        dono.telefone,
+        msg,
+      ).catch((err) => fastify.log.error({ err }, 'Falha Evolution API WhatsApp'));
+    }
+
     return reply.status(201).send({
       id:       pedido.id,
       total:    Number(pedido.total),
       mensagem: 'Pedido recebido! A cozinha foi avisada.',
     });
+  });
+
+  // POST /publico/:slug/pedidos/:id/avaliar — cliente avalia pedido
+  fastify.post('/publico/:slug/pedidos/:id/avaliar', {
+    schema: { params: PedidoParamsSchema, body: AvaliarPedidoSchema },
+  }, async (request, reply) => {
+    const { slug, id } = request.params as { slug: string; id: string };
+    const { avaliacao, comentarioAvaliacao } = request.body as {
+      avaliacao: number;
+      comentarioAvaliacao?: string;
+    };
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { slug } });
+    if (!estabelecimento) {
+      return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
+    }
+
+    const resultado = await prisma.pedido.updateMany({
+      where: { id, estabelecimentoId: estabelecimento.id, avaliacao: null },
+      data:  { avaliacao, comentarioAvaliacao: comentarioAvaliacao ?? null },
+    });
+
+    if (resultado.count === 0) {
+      return reply.status(404).send({ erro: 'Pedido não encontrado ou já avaliado' });
+    }
+
+    return { mensagem: 'Avaliação registrada. Obrigado!' };
   });
 }
