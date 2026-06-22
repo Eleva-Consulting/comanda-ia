@@ -236,7 +236,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       const msg = `🍽️ Novo pedido — *${estabelecimento.nome}*\n\nCliente: *${clienteNome}*\nFone: ${clienteFone}\nTotal: *R$ ${total.toFixed(2)}*\n\nItens:\n${itensTxt}`;
 
       enviarMensagemWhatsApp(
-        { url: estabelecimento.evolutionUrl, token: estabelecimento.evolutionToken },
+        { url: estabelecimento.evolutionUrl, token: estabelecimento.evolutionToken, instancia: estabelecimento.slug },
         dono.telefone,
         msg,
       ).catch((err) => fastify.log.error({ err }, 'Falha Evolution API WhatsApp'));

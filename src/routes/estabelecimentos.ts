@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
-import { autenticar } from '../plugins/auth.js';
+import { autenticar, apenasDono } from '../plugins/auth.js';
+import { criarInstancia } from '../evolution.js';
 
 const AtualizarEstabelecimentoSchema = Type.Object({
   aceitandoPedidos: Type.Optional(Type.Boolean()),
@@ -170,5 +171,64 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
         })),
       },
     };
+  });
+
+  // ── POST /meu-estabelecimento/whatsapp/conectar ───────────────────────────
+  // Cria a instância no Evolution API e retorna o QR code base64
+  fastify.post('/meu-estabelecimento/whatsapp/conectar', {
+    onRequest: [autenticar, apenasDono],
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+
+    const est = await prisma.estabelecimento.findUnique({
+      where: { id: estabelecimentoId! },
+      select: { slug: true, evolutionUrl: true, evolutionToken: true },
+    });
+
+    if (!est?.evolutionUrl || !est.evolutionToken) {
+      return reply.status(400).send({ erro: 'Configure a URL e a API Key da Evolution antes de conectar.' });
+    }
+
+    // Cria (ou recria) a instância
+    await criarInstancia({ url: est.evolutionUrl, token: est.evolutionToken }, est.slug);
+
+    // Busca o QR code
+    const qrResp = await fetch(`${est.evolutionUrl}/instance/connect/${est.slug}`, {
+      headers: { apikey: est.evolutionToken },
+    });
+
+    if (!qrResp.ok) {
+      const body = await qrResp.text().catch(() => '');
+      return reply.status(502).send({ erro: `Evolution API: ${body}` });
+    }
+
+    const qrData = await qrResp.json() as { base64?: string; code?: string };
+    return { qrCode: qrData.base64 ?? null, code: qrData.code ?? null };
+  });
+
+  // ── GET /meu-estabelecimento/whatsapp/status ──────────────────────────────
+  fastify.get('/meu-estabelecimento/whatsapp/status', {
+    onRequest: [autenticar, apenasDono],
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+
+    const est = await prisma.estabelecimento.findUnique({
+      where: { id: estabelecimentoId! },
+      select: { slug: true, evolutionUrl: true, evolutionToken: true },
+    });
+
+    if (!est?.evolutionUrl || !est.evolutionToken) {
+      return { conectado: false, estado: null };
+    }
+
+    const resp = await fetch(`${est.evolutionUrl}/instance/connectionState/${est.slug}`, {
+      headers: { apikey: est.evolutionToken },
+    }).catch(() => null);
+
+    if (!resp?.ok) return { conectado: false, estado: null };
+
+    const data = await resp.json() as { instance?: { state?: string } };
+    const estado = data?.instance?.state ?? null;
+    return { conectado: estado === 'open', estado };
   });
 }
