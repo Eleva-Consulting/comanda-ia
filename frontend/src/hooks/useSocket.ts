@@ -22,6 +22,7 @@ export function useSocket(token: string | null): UseSocketReturn {
 
     const novoSocket = io(API_URL, {
       auth: { token },
+      transports: ['websocket'], // Railway bloqueia XHR long-polling
     })
 
     novoSocket.on('connect', () => {
