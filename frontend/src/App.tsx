@@ -14,6 +14,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminEstabelecimentos from './pages/admin/AdminEstabelecimentos'
 import EsqueciSenha from './pages/EsqueciSenha'
 import RedefinirSenha from './pages/RedefinirSenha'
+import DefinirSenha from './pages/DefinirSenha'
 import Operadores from './pages/Operadores'
 import Historico from './pages/Historico'
 import ImprimirComanda from './pages/ImprimirComanda'
@@ -29,6 +30,7 @@ function App() {
       <Route path="/aguardando-aprovacao"  element={<AguardandoAprovacao />} />
       <Route path="/esqueci-senha"         element={<EsqueciSenha />} />
       <Route path="/redefinir-senha"       element={<RedefinirSenha />} />
+      <Route path="/definir-senha"         element={<DefinirSenha />} />
 
       {/* Painel do estabelecimento (DONO / OPERADOR) */}
       <Route path="/"          element={<Landing />} />

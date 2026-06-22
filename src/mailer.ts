@@ -117,6 +117,28 @@ export const templates = {
     `;
   },
 
+  definirSenha(nome: string, nomeEstabelecimento: string, urlDefinicao: string): string {
+    return `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
+      <h2 style="color:#f97316">Bem-vindo(a) à Comanda IA! 🎉</h2>
+      <p>Olá, <strong>${nome}</strong>!</p>
+      <p>
+        O estabelecimento <strong>${nomeEstabelecimento}</strong> foi criado e já está ativo na plataforma.
+        Para acessar o painel, defina sua senha clicando no botão abaixo.
+      </p>
+      <p>O link expira em <strong>7 dias</strong>.</p>
+      <p>
+        <a href="${urlDefinicao}"
+           style="display:inline-block;background:#f97316;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px">
+          Definir minha senha →
+        </a>
+      </p>
+      <p style="color:#71717a;font-size:13px">Se você não esperava este email, ignore-o com segurança.</p>
+      <p style="color:#a1a1aa;font-size:12px;margin-top:32px">Comanda IA — Plataforma de pedidos para food service</p>
+    </div>
+  `;
+  },
+
   resetSenha(nome: string, urlRedefinicao: string): string {
     return `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">

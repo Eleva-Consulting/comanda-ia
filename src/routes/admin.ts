@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
+import { randomUUID, randomBytes } from 'crypto';
 import { prisma } from '../database.js';
 import { autenticar, apenasAdmin } from '../plugins/auth.js';
 import { enviarEmail, templates } from '../mailer.js';
@@ -23,7 +24,6 @@ const CriarEstabelecimentoSchema = Type.Object({
   telefone:            Type.String({ minLength: 8, maxLength: 20 }),
   nomeDono:            Type.String({ minLength: 2, maxLength: 100 }),
   emailDono:           Type.String({ format: 'email' }),
-  senhaDono:           Type.String({ minLength: 8, maxLength: 100 }),
 });
 
 type EstabelecimentoComCount = {
@@ -54,7 +54,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
       telefone: string;
       nomeDono: string;
       emailDono: string;
-      senhaDono: string;
     };
 
     const emailExistente = await prisma.usuario.findUnique({ where: { email: dados.emailDono } });
@@ -63,7 +62,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     const slug = await gerarSlugUnico(dados.nomeEstabelecimento);
-    const senhaHash = await bcrypt.hash(dados.senhaDono, 12);
+    // Senha inutilizável — o dono define a própria via link enviado por email
+    const senhaHash = await bcrypt.hash(randomBytes(32).toString('hex'), 12);
+    const setupToken = randomUUID();
+    const setupTokenExpiracao = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
     const resultado = await prisma.estabelecimento.create({
       data: {
@@ -73,10 +75,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
         status:   'ativo',
         usuarios: {
           create: {
-            nome:      dados.nomeDono,
-            email:     dados.emailDono,
+            nome:                dados.nomeDono,
+            email:               dados.emailDono,
             senhaHash,
-            role:      'DONO',
+            role:                'DONO',
+            resetToken:          setupToken,
+            resetTokenExpiracao: setupTokenExpiracao,
           },
         },
       },
@@ -85,13 +89,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
       },
     });
 
+    const urlFrontend = (process.env.FRONTEND_URL?.split(',')[0]?.trim()) ?? 'http://localhost:5173';
+    enviarEmail({
+      to:      dados.emailDono,
+      subject: `Bem-vindo(a) à Comanda IA — defina sua senha`,
+      html:    templates.definirSenha(dados.nomeDono, dados.nomeEstabelecimento, `${urlFrontend}/definir-senha?token=${setupToken}`),
+    }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de setup'));
+
     return reply.status(201).send({
-      id:           resultado.id,
-      nome:         resultado.nome,
-      slug:         resultado.slug,
-      telefone:     resultado.telefone,
-      status:       resultado.status,
-      criadoEm:     resultado.criadoEm,
+      id:            resultado.id,
+      nome:          resultado.nome,
+      slug:          resultado.slug,
+      telefone:      resultado.telefone,
+      status:        resultado.status,
+      criadoEm:      resultado.criadoEm,
       totalUsuarios: resultado._count.usuarios,
       totalPedidos:  resultado._count.pedidos,
       totalItens:    resultado._count.itens,

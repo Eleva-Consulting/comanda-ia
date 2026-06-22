@@ -55,7 +55,6 @@ export default function AdminEstabelecimentos() {
   const [telefone, setTelefone] = useState('')
   const [nomeDono, setNomeDono] = useState('')
   const [emailDono, setEmailDono] = useState('')
-  const [senhaDono, setSenhaDono] = useState('')
 
   useEffect(() => {
     fetch(`${API_URL}/admin/estabelecimentos`, {
@@ -113,7 +112,6 @@ export default function AdminEstabelecimentos() {
     setTelefone('')
     setNomeDono('')
     setEmailDono('')
-    setSenhaDono('')
     setErroModal(null)
     setNovoModalAberto(true)
   }
@@ -134,7 +132,6 @@ export default function AdminEstabelecimentos() {
           telefone,
           nomeDono,
           emailDono,
-          senhaDono,
         }),
       })
       const dados = await resp.json()
@@ -316,18 +313,9 @@ export default function AdminEstabelecimentos() {
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
                 />
               </label>
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Senha provisória</span>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={senhaDono}
-                  onChange={(e) => setSenhaDono(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
-                />
-              </label>
+              <p className="rounded-lg bg-zinc-800/60 px-3 py-2 text-xs text-zinc-400">
+                📧 Um link para definir a senha será enviado ao email do responsável.
+              </p>
               {erroModal && (
                 <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
                   {erroModal}
