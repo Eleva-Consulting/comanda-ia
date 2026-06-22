@@ -2,16 +2,17 @@ import nodemailer from 'nodemailer';
 
 function obterTransporte(): nodemailer.Transporter | null {
   if (!process.env.SMTP_HOST) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return nodemailer.createTransport({
     host:   process.env.SMTP_HOST,
     port:   parseInt(process.env.SMTP_PORT ?? '587', 10),
     secure: process.env.SMTP_PORT === '465',
-    family: 4, // Railway não suporta IPv6 de saída
+    family: 4, // Railway não roteia IPv6 de saída — não está nos @types mas é suportado
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-  });
+  } as any);
 }
 
 const remetente = () => process.env.SMTP_FROM ?? 'Comanda IA <noreply@comanda-ia.dev>';
