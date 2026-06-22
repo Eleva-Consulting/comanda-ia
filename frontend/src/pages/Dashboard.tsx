@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, type LucideIcon } from 'lucide-react'
+import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, Star, type LucideIcon } from 'lucide-react'
 import {
   BarChart,
   Bar,
@@ -16,6 +16,13 @@ interface VendaDia {
   data: string
   pedidos: number
   faturamento: number
+}
+
+interface AvaliacaoRecente {
+  clienteNome: string
+  avaliacao: number
+  comentarioAvaliacao: string | null
+  criadoEm: string
 }
 
 interface DashboardData {
@@ -44,6 +51,12 @@ interface DashboardData {
     ticketMedio: number
     porStatus: Array<{ status: string; quantidade: number }>
     vendasPorDia: VendaDia[]
+  }
+  avaliacoes: {
+    media: number | null
+    total: number
+    distribuicao: Array<{ nota: number; quantidade: number }>
+    recentes: AvaliacaoRecente[]
   }
 }
 
@@ -79,6 +92,20 @@ function formatarData(data: string): string {
 function formatarDia(iso: string): string {
   const [, mes, dia] = iso.split('-')
   return `${dia}/${mes}`
+}
+
+function Estrelas({ nota, tamanho = 'sm' }: { nota: number; tamanho?: 'sm' | 'lg' }) {
+  const cls = tamanho === 'lg' ? 'h-6 w-6' : 'h-3.5 w-3.5'
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`${cls} ${n <= nota ? 'fill-orange-400 text-orange-400' : 'text-zinc-700'}`}
+        />
+      ))}
+    </div>
+  )
 }
 
 export default function Dashboard() {
@@ -125,6 +152,9 @@ export default function Dashboard() {
     label: formatarDia(d.data),
   }))
 
+  const { avaliacoes } = dados
+  const maxDistribuicao = Math.max(...(avaliacoes.distribuicao.map((d) => d.quantidade)), 1)
+
   return (
     <Layout>
       <div className="mb-8">
@@ -132,6 +162,7 @@ export default function Dashboard() {
         <p className="mt-1 text-sm text-zinc-400">Visão geral do seu estabelecimento</p>
       </div>
 
+      {/* KPIs */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Faturamento total"
@@ -159,6 +190,7 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Gráfico de vendas */}
       {graficoData.length > 0 && (
         <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
           <h3 className="mb-6 text-lg font-bold">Faturamento — últimos 30 dias</h3>
@@ -190,6 +222,91 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Avaliações */}
+      {avaliacoes.total > 0 && (
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Resumo */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <h3 className="mb-5 text-lg font-bold">Avaliações dos clientes</h3>
+
+            <div className="mb-5 flex items-center gap-5">
+              <div className="text-center">
+                <p className="text-5xl font-extrabold text-orange-400">
+                  {avaliacoes.media?.toFixed(1) ?? '—'}
+                </p>
+                <div className="mt-2 flex justify-center">
+                  <Estrelas nota={Math.round(avaliacoes.media ?? 0)} tamanho="lg" />
+                </div>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {avaliacoes.total} {avaliacoes.total === 1 ? 'avaliação' : 'avaliações'}
+                </p>
+              </div>
+
+              <div className="flex-1 space-y-1.5">
+                {[5, 4, 3, 2, 1].map((n) => {
+                  const item = avaliacoes.distribuicao.find((d) => d.nota === n)
+                  const qtd = item?.quantidade ?? 0
+                  const pct = Math.round((qtd / maxDistribuicao) * 100)
+                  return (
+                    <div key={n} className="flex items-center gap-2 text-xs">
+                      <span className="w-3 text-right text-zinc-400">{n}</span>
+                      <Star className="h-3 w-3 fill-orange-400 text-orange-400 shrink-0" />
+                      <div className="flex-1 overflow-hidden rounded-full bg-zinc-800 h-2">
+                        <div
+                          className="h-full rounded-full bg-orange-400 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="w-4 text-zinc-500">{qtd}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Comentários recentes */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <h3 className="mb-5 text-lg font-bold">Comentários recentes</h3>
+            {avaliacoes.recentes.filter((a) => a.comentarioAvaliacao).length === 0 ? (
+              <p className="text-sm text-zinc-500">Nenhum comentário ainda.</p>
+            ) : (
+              <div className="space-y-4">
+                {avaliacoes.recentes
+                  .filter((a) => a.comentarioAvaliacao)
+                  .map((a, i) => (
+                    <div key={i} className="rounded-xl bg-zinc-950 p-4">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm text-zinc-100">{a.clienteNome}</span>
+                        <Estrelas nota={a.avaliacao} />
+                      </div>
+                      <p className="text-sm text-zinc-400 leading-relaxed">
+                        "{a.comentarioAvaliacao}"
+                      </p>
+                      <p className="mt-1.5 text-xs text-zinc-600">{formatarData(a.criadoEm)}</p>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Avaliações sem comentário */}
+            {avaliacoes.recentes.filter((a) => !a.comentarioAvaliacao).length > 0 && (
+              <div className="mt-4 space-y-2">
+                {avaliacoes.recentes
+                  .filter((a) => !a.comentarioAvaliacao)
+                  .map((a, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-2.5">
+                      <span className="text-sm text-zinc-400">{a.clienteNome}</span>
+                      <Estrelas nota={a.avaliacao} />
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pedidos recentes */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <h3 className="mb-4 text-lg font-bold">Pedidos recentes</h3>
         {dados.pedidosRecentes.length === 0 ? (

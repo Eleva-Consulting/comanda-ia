@@ -113,6 +113,27 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       {},
     );
 
+    // Avaliações
+    const avaliacoesAgregadas = await prisma.pedido.aggregate({
+      where: { estabelecimentoId: estabelecimentoId!, avaliacao: { not: null } },
+      _avg:   { avaliacao: true },
+      _count: { avaliacao: true },
+    });
+
+    const distribuicaoNotas = await prisma.pedido.groupBy({
+      by:    ['avaliacao'],
+      where: { estabelecimentoId: estabelecimentoId!, avaliacao: { not: null } },
+      _count: { id: true },
+      orderBy: { avaliacao: 'desc' },
+    });
+
+    const avaliacoesRecentes = await prisma.pedido.findMany({
+      where:   { estabelecimentoId: estabelecimentoId!, avaliacao: { not: null } },
+      orderBy: { criadoEm: 'desc' },
+      take:    5,
+      select:  { clienteNome: true, avaliacao: true, comentarioAvaliacao: true, criadoEm: true },
+    });
+
     return {
       estabelecimento: {
         id:       estabelecimento.id,
@@ -131,6 +152,22 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
           quantidade: item._count.id,
         })),
         vendasPorDia: Object.values(vendasPorDia).sort((a, b) => a.data.localeCompare(b.data)),
+      },
+      avaliacoes: {
+        media:        avaliacoesAgregadas._avg.avaliacao
+          ? Math.round(avaliacoesAgregadas._avg.avaliacao * 10) / 10
+          : null,
+        total:        avaliacoesAgregadas._count.avaliacao,
+        distribuicao: distribuicaoNotas.map((d) => ({
+          nota:       d.avaliacao as number,
+          quantidade: d._count.id,
+        })),
+        recentes: avaliacoesRecentes.map((a) => ({
+          clienteNome:         a.clienteNome,
+          avaliacao:           a.avaliacao as number,
+          comentarioAvaliacao: a.comentarioAvaliacao,
+          criadoEm:            a.criadoEm,
+        })),
       },
     };
   });
