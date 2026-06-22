@@ -5,7 +5,9 @@ let io: Server;
 
 function origensPermitidas(): string[] {
   const dev = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-  const prod = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
+  const prod = process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map((u) => u.trim()).filter(Boolean)
+    : [];
   return [...dev, ...prod];
 }
 
