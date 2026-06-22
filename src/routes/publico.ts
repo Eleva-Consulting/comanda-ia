@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { getIO } from '../socket.js';
 import { enviarEmail, templates } from '../mailer.js';
+import { enviarPush } from '../push.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
@@ -154,6 +155,19 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     });
 
     getIO().to(estabelecimento.id).emit('pedido:novo', pedido);
+
+    // Push notification para todos os usuários do estabelecimento — fire-and-forget
+    prisma.pushSubscription.findMany({
+      where: { usuario: { estabelecimentoId: estabelecimento.id } },
+    }).then((subs) =>
+      Promise.allSettled(
+        subs.map((s) => enviarPush(s, {
+          titulo: `Novo pedido — ${clienteNome}`,
+          corpo:  `R$ ${total.toFixed(2)} · ${itensComSnapshot.length} item(s)`,
+          url:    '/cozinha',
+        }))
+      )
+    ).catch((err) => fastify.log.error({ err }, 'Falha push notifications'));
 
     // Notifica o DONO por email — fire-and-forget, nunca bloqueia o response
     const dono = estabelecimento.usuarios[0];

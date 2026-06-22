@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { ChefHat, LogOut, Users, X } from 'lucide-react'
+import { Bell, BellOff, ChefHat, LogOut, Users, X } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
+import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
 
 interface Toast {
@@ -78,6 +79,7 @@ export default function Layout({ children, headerExtra }: Props) {
   }
 
   const isDono = role === 'DONO'
+  const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
 
   return (
     <div className="min-h-dvh bg-zinc-950 font-sans text-zinc-100">
@@ -111,6 +113,15 @@ export default function Layout({ children, headerExtra }: Props) {
 
           <div className="flex items-center gap-2">
             {headerExtra}
+            {pushSuportado && (
+              <button
+                onClick={pushAtivo ? desativarPush : ativarPush}
+                className={`rounded-lg p-2 transition hover:bg-zinc-800 ${pushAtivo ? 'text-orange-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
+              >
+                {pushAtivo ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
+              </button>
+            )}
             <button
               onClick={handleSair}
               className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
