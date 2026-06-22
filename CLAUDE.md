@@ -9,7 +9,7 @@ aparece na cozinha em tempo real via Socket.IO.
 ## Stack
 
 **Backend:** Node.js 22 + TypeScript + Fastify 5 + Prisma 7 + PostgreSQL
-**Frontend:** React 19 + Vite 7 + Tailwind v4 + React Router 7 + lucide-react
+**Frontend:** React 19 + Vite 7 + Tailwind v4 + React Router 7 + lucide-react + recharts
 **Deploy:** Railway (backend + postgres) + Vercel (frontend)
 **Repo:** github.com/viniciusalvestech/comanda-ia
 
@@ -19,16 +19,22 @@ aparece na cozinha em tempo real via Socket.IO.
 comanda-ia/
 ├── src/                    # Backend
 │   ├── routes/             # Fastify routes
-│   │   ├── auth.ts         # signup + login
+│   │   ├── auth.ts         # signup + login + redefinir-senha
 │   │   ├── admin.ts        # rotas exclusivas SUPER_ADMIN
-│   │   ├── cardapio.ts     # CRUD cardápio (autenticado)
+│   │   ├── cardapio.ts     # CRUD cardápio + categorias + fotos (R2)
 │   │   ├── pedidos.ts      # CRUD pedidos (autenticado)
-│   │   ├── publico.ts      # cardápio + pedido público (sem auth)
-│   │   └── estabelecimentos.ts  # dashboard + meu-estabelecimento
+│   │   ├── publico.ts      # cardápio + pedido + avaliar (sem auth)
+│   │   ├── estabelecimentos.ts  # dashboard + meu-estabelecimento
+│   │   ├── operadores.ts   # CRUD operadores + permissões
+│   │   └── push.ts         # Web Push: subscribe/unsubscribe/vapid-key
 │   ├── plugins/
 │   │   └── auth.ts         # middlewares: autenticar + apenasAdmin
+│   ├── mailer.ts           # Resend HTTP API (Railway bloqueia SMTP)
+│   ├── push.ts             # web-push / VAPID helper
+│   ├── evolution.ts        # Evolution API WhatsApp helper
+│   ├── r2.ts               # Cloudflare R2 upload/delete
 │   ├── database.ts         # Prisma client
-│   ├── socket.ts           # Socket.IO
+│   ├── socket.ts           # Socket.IO (transporte WebSocket apenas — Railway bloqueia XHR polling)
 │   └── server.ts           # buildServer()
 ├── prisma/
 │   ├── schema.prisma       # modelos e enums
@@ -40,21 +46,32 @@ comanda-ia/
 │       │   ├── Login.tsx
 │       │   ├── Cadastro.tsx
 │       │   ├── AguardandoAprovacao.tsx
-│       │   ├── Dashboard.tsx
+│       │   ├── Dashboard.tsx       # KPIs + BarChart vendas 30 dias (recharts)
 │       │   ├── Cozinha.tsx
-│       │   ├── Cardapio.tsx
-│       │   ├── CardapioPublico.tsx
+│       │   ├── Cardapio.tsx        # CRUD itens + categorias + fotos + estoque
+│       │   ├── CardapioPublico.tsx # cardápio público + checkout + avaliação
+│       │   ├── Configuracoes.tsx   # dados, chave PIX, taxa entrega, Evolution API
+│       │   ├── Operadores.tsx      # CRUD operadores + permissões por checkbox
+│       │   ├── Historico.tsx
+│       │   ├── DefinirSenha.tsx    # define senha via link do email (primeiro acesso)
+│       │   ├── EsqueciSenha.tsx
+│       │   ├── RedefinirSenha.tsx
 │       │   └── admin/
 │       │       ├── AdminDashboard.tsx
 │       │       └── AdminEstabelecimentos.tsx
 │       ├── components/
-│       │   ├── Layout.tsx          # painel do restaurante
+│       │   ├── Layout.tsx          # painel do restaurante (inclui botão push bell)
 │       │   ├── LayoutAdmin.tsx     # painel super admin
 │       │   ├── RotaProtegida.tsx   # guard: qualquer autenticado
-│       │   └── RotaAdmin.tsx       # guard: apenas SUPER_ADMIN
+│       │   ├── RotaAdmin.tsx       # guard: apenas SUPER_ADMIN
+│       │   └── RotaPermissao.tsx   # guard: DONO passa sempre, OPERADOR verifica permissão
+│       ├── hooks/
+│       │   ├── useSocket.ts        # Socket.IO (WebSocket only)
+│       │   └── usePush.ts          # Web Push: ativar/desativar notificações
 │       └── lib/
-│           ├── api.ts      # API_URL centralizado
-│           └── auth.ts     # decodifica JWT no frontend
+│           ├── api.ts              # API_URL centralizado
+│           ├── auth.ts             # decodifica JWT no frontend
+│           └── permissoes.ts       # lista de permissões + helpers getPermissoes/temPermissao
 └── CLAUDE.md               # este arquivo
 ```
 
@@ -62,16 +79,18 @@ comanda-ia/
 
 - Cada estabelecimento é um tenant com `id` único
 - `estabelecimentoId` está em todo registro do banco
-- JWT carrega `{ userId, estabelecimentoId, role }` — injetado em toda query
+- JWT carrega `{ userId, estabelecimentoId, role, permissoes }` — injetado em toda query
 - SUPER_ADMIN tem `estabelecimentoId: null` — não pertence a nenhum tenant
 
 ## Roles e acesso
 
 ```
 SUPER_ADMIN  → /admin/* — gerencia a plataforma inteira
-DONO         → /dashboard, /cozinha, /cardapio — gerencia seu restaurante
-OPERADOR     → (futuro) permissões restritas
+DONO         → /dashboard, /cozinha, /cardapio, /historico, /configuracoes, /operadores
+OPERADOR     → acesso restrito por permissões configuráveis no painel
 ```
+
+Permissões disponíveis para OPERADOR: `cozinha`, `cardapio`, `historico`, `pedido_manual`, `configuracoes`
 
 ## StatusEstabelecimento
 
@@ -81,7 +100,18 @@ ativo     → operando normalmente
 suspenso  → bloqueado
 ```
 
-Fluxo: signup → pendente → Super Admin aprova → ativo
+Fluxo novo estabelecimento via Admin: Super Admin cria → email com link para DONO definir senha → DONO acessa e cria senha → status ativo
+
+## Features implementadas
+
+- **Autenticação completa** — signup/login, reset de senha por email, definir senha (primeiro acesso via link)
+- **Cardápio** — CRUD itens + categorias + fotos (Cloudflare R2) + controle de estoque
+- **Pedidos** — cardápio público, checkout, taxa de entrega configurável, avaliação (1-5 estrelas) após confirmação
+- **Cozinha** — lista de pedidos em tempo real via Socket.IO, atualização de status
+- **Notificações** — toast em tela + beep ao receber pedido; Web Push (bell no header); email via Resend; WhatsApp via Evolution API (opcional)
+- **Analytics** — KPIs no dashboard + gráfico de barras (recharts) com faturamento dos últimos 30 dias
+- **Operadores** — CRUD com permissões granulares configuráveis por checkbox; guards de rota no frontend
+- **Super Admin** — painel para aprovar/suspender estabelecimentos, criar novos com email de convite
 
 ## Credenciais de teste
 
@@ -117,26 +147,26 @@ npm run dev
 - **min-h-dvh** em vez de `min-h-screen` para viewport mobile correto
 - **Non-null assertion** (`!`) em `estabelecimentoId` nas rotas de tenant — seguro pois SUPER_ADMIN nunca chega nessas rotas
 - **Commits descritivos** — `feat:`, `fix:`, `docs:` no padrão conventional commits
-
-## Próximas features planejadas
-
-1. Cadastro de estabelecimento pelo próprio Super Admin no painel
-2. Reset de senha por email
-3. Evolution API — WhatsApp real
-4. Mercado Pago — PIX no checkout
-5. Fotos nos produtos do cardápio
-6. Categorias no cardápio
-7. Role OPERADOR com permissões configuráveis
-8. Notificação push para o dono
+- **Fire-and-forget** para operações secundárias (email, push, WhatsApp) — nunca bloqueiam o response HTTP
+- **Socket.IO transports: ['websocket']** — Railway bloqueia XHR long-polling; nunca usar polling
+- **Resend** para emails — Railway bloqueia SMTP (portas 465 e 587); nunca usar nodemailer com SMTP
 
 ## Variáveis de ambiente
 
-**Backend (.env):**
+**Backend (.env / Railway):**
 ```
 DATABASE_URL=postgresql://...
 JWT_SECRET=...
-FRONTEND_URL=http://localhost:5173
-NODE_ENV=development
+FRONTEND_URL=https://comanda-ia.vercel.app,https://www.comanda-ia.com
+NODE_ENV=production
+RESEND_API_KEY=re_...              # emails (Resend)
+VAPID_PUBLIC_KEY=...               # Web Push
+VAPID_PRIVATE_KEY=...              # Web Push
+R2_ENDPOINT=...                    # Cloudflare R2 (fotos)
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=comanda-ia-fotos
+R2_PUBLIC_URL=...
 ```
 
 **Frontend (frontend/.env.local):**
@@ -148,3 +178,13 @@ VITE_API_URL=http://localhost:3000
 - Backend: Railway (DATABASE_URL gerado automaticamente pelo serviço Postgres do Railway)
 - Frontend: Vercel (VITE_API_URL aponta pro Railway)
 - Após cada migration nova: `npx prisma migrate deploy` no console do Railway
+- Deploy manual Railway: `railway up --detach` (auto-deploy às vezes falha)
+
+## Próximas features planejadas
+
+1. **Mercado Pago** — PIX real no checkout (substituir exibição de chave manual)
+2. **Painel de avaliações** — ver média de estrelas e comentários no Dashboard
+3. **Relatórios avançados** — exportar histórico em CSV, filtro por período
+4. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
+5. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
+6. **Comanda por mesa** — associar pedido a número de mesa
