@@ -24,8 +24,12 @@ export async function enviarEmail(opts: {
   html:    string;
 }): Promise<void> {
   const transporte = obterTransporte();
-  if (!transporte) return;
+  if (!transporte) {
+    console.warn('[mailer] SMTP_HOST não configurado — email NÃO enviado para', opts.to);
+    return;
+  }
   await transporte.sendMail({ from: remetente(), ...opts });
+  console.info('[mailer] Email enviado para', opts.to, '—', opts.subject);
 }
 
 export const templates = {
