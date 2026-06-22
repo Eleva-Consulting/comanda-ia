@@ -120,9 +120,10 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     const token = fastify.jwt.sign({
-      userId: usuario.id,
+      userId:            usuario.id,
       estabelecimentoId: usuario.estabelecimentoId,
-      role: usuario.role,
+      role:              usuario.role,
+      permissoes:        usuario.role === 'OPERADOR' ? usuario.permissoes : [],
     });
 
     return {

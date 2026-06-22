@@ -10,6 +10,7 @@ import CardapioPublico from './pages/CardapioPublico'
 import RotaProtegida from './components/RotaProtegida'
 import RotaAdmin from './components/RotaAdmin'
 import RotaDono from './components/RotaDono'
+import RotaPermissao from './components/RotaPermissao'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminEstabelecimentos from './pages/admin/AdminEstabelecimentos'
 import EsqueciSenha from './pages/EsqueciSenha'
@@ -35,11 +36,11 @@ function App() {
       {/* Painel do estabelecimento (DONO / OPERADOR) */}
       <Route path="/"          element={<Landing />} />
       <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
-      <Route path="/cozinha"   element={<RotaProtegida><Cozinha /></RotaProtegida>} />
-      <Route path="/cardapio"  element={<RotaDono><Cardapio /></RotaDono>} />
+      <Route path="/cozinha"   element={<RotaPermissao permissao="cozinha"><Cozinha /></RotaPermissao>} />
+      <Route path="/cardapio"  element={<RotaPermissao permissao="cardapio"><Cardapio /></RotaPermissao>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
-      <Route path="/historico"      element={<RotaDono><Historico /></RotaDono>} />
-      <Route path="/configuracoes"  element={<RotaDono><Configuracoes /></RotaDono>} />
+      <Route path="/historico"      element={<RotaPermissao permissao="historico"><Historico /></RotaPermissao>} />
+      <Route path="/configuracoes"  element={<RotaPermissao permissao="configuracoes"><Configuracoes /></RotaPermissao>} />
       <Route path="/imprimir/:pedidoId" element={<RotaProtegida><ImprimirComanda /></RotaProtegida>} />
 
       {/* Painel da plataforma (SUPER_ADMIN) */}

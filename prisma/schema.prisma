@@ -63,14 +63,17 @@ enum TipoEntrega {
 // ============================================================================
 
 model Estabelecimento {
-  id        String                 @id @default(uuid())
-  nome      String
-  telefone  String
-  slug      String                 @unique
-  status            StatusEstabelecimento  @default(pendente)
-  aceitandoPedidos  Boolean                @default(true)
-  chavePix          String?
-  criadoEm          DateTime               @default(now())
+  id               String                @id @default(uuid())
+  nome             String
+  telefone         String
+  slug             String                @unique
+  status           StatusEstabelecimento @default(pendente)
+  aceitandoPedidos Boolean               @default(true)
+  chavePix         String?
+  taxaEntrega      Decimal?              @db.Decimal(10, 2)
+  evolutionUrl     String?
+  evolutionToken   String?
+  criadoEm         DateTime              @default(now())
 
   usuarios   Usuario[]
   itens      ItemCardapio[]
@@ -89,14 +92,29 @@ model Usuario {
   role      Role     @default(DONO)
   criadoEm  DateTime @default(now())
 
+  permissoes           String[]  @default([])
   resetToken           String?   @unique
   resetTokenExpiracao  DateTime?
 
   // Opcional: SUPER_ADMIN não pertence a nenhum estabelecimento
   estabelecimentoId String?
-  estabelecimento   Estabelecimento? @relation(fields: [estabelecimentoId], references: [id])
+  estabelecimento   Estabelecimento?   @relation(fields: [estabelecimentoId], references: [id])
+  pushSubscriptions PushSubscription[]
 
   @@map("usuarios")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  criadoEm  DateTime @default(now())
+
+  usuarioId String
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
 }
 
 model Categoria {
@@ -111,12 +129,13 @@ model Categoria {
 }
 
 model ItemCardapio {
-  id         String  @id @default(uuid())
+  id         String   @id @default(uuid())
   nome       String
   descricao  String?
-  preco      Decimal @db.Decimal(10, 2)
-  disponivel Boolean @default(true)
+  preco      Decimal  @db.Decimal(10, 2)
+  disponivel Boolean  @default(true)
   foto       String?
+  estoque    Int?     // null = ilimitado
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
@@ -128,15 +147,17 @@ model ItemCardapio {
 }
 
 model Pedido {
-  id              String   @id @default(uuid())
-  clienteNome     String
-  clienteFone     String
-  enderecoEntrega String?
-  total           Decimal  @db.Decimal(10, 2)
-  status          StatusPedido   @default(recebido)
-  formaPagamento  FormaPagamento @default(pix)
-  tipoEntrega     TipoEntrega    @default(entrega)
-  criadoEm        DateTime @default(now())
+  id                  String         @id @default(uuid())
+  clienteNome         String
+  clienteFone         String
+  enderecoEntrega     String?
+  total               Decimal        @db.Decimal(10, 2)
+  status              StatusPedido   @default(recebido)
+  formaPagamento      FormaPagamento @default(pix)
+  tipoEntrega         TipoEntrega    @default(entrega)
+  avaliacao           Int?
+  comentarioAvaliacao String?
+  criadoEm            DateTime       @default(now())
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])

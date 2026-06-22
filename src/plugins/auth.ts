@@ -10,11 +10,13 @@ declare module '@fastify/jwt' {
       userId: string;
       estabelecimentoId: string | null; // null para SUPER_ADMIN
       role: 'SUPER_ADMIN' | 'DONO' | 'OPERADOR';
+      permissoes: string[];
     };
     user: {
       userId: string;
       estabelecimentoId: string | null;
       role: 'SUPER_ADMIN' | 'DONO' | 'OPERADOR';
+      permissoes: string[];
     };
   }
 }
