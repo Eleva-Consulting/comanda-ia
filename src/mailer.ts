@@ -1,34 +1,36 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-function obterTransporte(): nodemailer.Transporter | null {
-  if (!process.env.SMTP_HOST) return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   parseInt(process.env.SMTP_PORT ?? '587', 10),
-    secure: process.env.SMTP_PORT === '465',
-    family: 4, // Railway não roteia IPv6 de saída — não está nos @types mas é suportado
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  } as any);
+const remetente = process.env.SMTP_FROM ?? 'Comanda IA <onboarding@resend.dev>';
+
+function obterCliente(): Resend | null {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[mailer] RESEND_API_KEY não configurado — emails desativados');
+    return null;
+  }
+  return new Resend(process.env.RESEND_API_KEY);
 }
 
-const remetente = () => process.env.SMTP_FROM ?? 'Comanda IA <noreply@comanda-ia.dev>';
-
-/** Fire-and-forget seguro: não lança exceção se SMTP não estiver configurado. */
+/** Fire-and-forget seguro: não lança exceção se Resend não estiver configurado. */
 export async function enviarEmail(opts: {
   to:      string;
   subject: string;
   html:    string;
 }): Promise<void> {
-  const transporte = obterTransporte();
-  if (!transporte) {
-    console.warn('[mailer] SMTP_HOST não configurado — email NÃO enviado para', opts.to);
-    return;
+  const resend = obterCliente();
+  if (!resend) return;
+
+  const { error } = await resend.emails.send({
+    from:    remetente,
+    to:      opts.to,
+    subject: opts.subject,
+    html:    opts.html,
+  });
+
+  if (error) {
+    console.error('[mailer] Falha ao enviar email para', opts.to, '—', error);
+    throw error;
   }
-  await transporte.sendMail({ from: remetente(), ...opts });
+
   console.info('[mailer] Email enviado para', opts.to, '—', opts.subject);
 }
 
