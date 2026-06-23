@@ -192,6 +192,15 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     return { qrCode, conectado: false };
   });
 
+  // ── DELETE /meu-estabelecimento/whatsapp/desconectar ─────────────────────
+  fastify.delete('/meu-estabelecimento/whatsapp/desconectar', {
+    onRequest: [autenticar, apenasDono],
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+    await whatsApp.desconectar(estabelecimentoId!);
+    return reply.status(204).send();
+  });
+
   // ── GET /meu-estabelecimento/whatsapp/status ──────────────────────────────
   fastify.get('/meu-estabelecimento/whatsapp/status', {
     onRequest: [autenticar, apenasDono],

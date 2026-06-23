@@ -435,6 +435,17 @@ class WhatsAppManager {
     this.log.info({ jid }, 'WhatsApp: mensagem enviada com sucesso')
   }
 
+  async desconectar(estabelecimentoId: string): Promise<void> {
+    const socket = this.sockets.get(estabelecimentoId)
+    if (socket) {
+      socket.end(undefined)
+      this.sockets.delete(estabelecimentoId)
+    }
+    this.statuses.set(estabelecimentoId, 'close')
+    await prisma.whatsAppSession.deleteMany({ where: { estabelecimentoId } })
+    this.log.info({ estabelecimentoId }, 'WhatsApp: desconectado e sessão removida')
+  }
+
   async inicializarSessoes(): Promise<void> {
     const sessoes = await prisma.whatsAppSession.findMany({
       select: { estabelecimentoId: true },

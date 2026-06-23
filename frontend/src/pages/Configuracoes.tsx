@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { FormEvent } from 'react'
-import { Copy, Check, Loader2, Settings, Smartphone, Wifi, WifiOff, RefreshCw } from 'lucide-react'
+import { Copy, Check, Loader2, Settings, Smartphone, Wifi, WifiOff, RefreshCw, PhoneOff } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -36,8 +36,9 @@ export default function Configuracoes() {
   const [taxaEntrega, setTaxaEntrega] = useState('')
   const [wpStatus, setWpStatus]     = useState<WhatsAppStatus | null>(null)
   const [qrCode, setQrCode]         = useState<string | null>(null)
-  const [conectando, setConectando] = useState(false)
-  const [erroWp, setErroWp]         = useState<string | null>(null)
+  const [conectando, setConectando]       = useState(false)
+  const [desconectando, setDesconectando] = useState(false)
+  const [erroWp, setErroWp]              = useState<string | null>(null)
   const [verificandoStatus, setVerificandoStatus] = useState(false)
 
   const verificarStatus = useCallback(async () => {
@@ -147,6 +148,24 @@ export default function Configuracoes() {
       setErroWp('Falha ao conectar')
     } finally {
       setConectando(false)
+    }
+  }
+
+  async function desconectarWhatsApp() {
+    if (!window.confirm('Desconectar o WhatsApp? O bot vai parar de funcionar até você reconectar.')) return
+    setErroWp(null)
+    setDesconectando(true)
+    try {
+      await fetch(`${API_URL}/meu-estabelecimento/whatsapp/desconectar`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setWpStatus({ conectado: false, estado: 'close' })
+      setQrCode(null)
+    } catch {
+      setErroWp('Falha ao desconectar')
+    } finally {
+      setDesconectando(false)
     }
   }
 
@@ -334,10 +353,24 @@ export default function Configuracoes() {
                 Verificar
               </button>
             )}
+            {wpStatus?.conectado && (
+              <button
+                type="button"
+                onClick={desconectarWhatsApp}
+                disabled={desconectando || conectando}
+                className="flex items-center gap-1.5 rounded-xl border border-red-800 bg-red-950 px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-900 disabled:opacity-50"
+              >
+                {desconectando
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <PhoneOff className="h-4 w-4" />
+                }
+                Desconectar
+              </button>
+            )}
             <button
               type="button"
               onClick={conectarWhatsApp}
-              disabled={conectando}
+              disabled={conectando || desconectando}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {conectando
