@@ -262,8 +262,9 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     };
     const textoWp = mensagensStatus[status];
     if (textoWp) {
+      fastify.log.info({ clienteFone: pedidoAtualizado.clienteFone, status }, 'WhatsApp: disparando notificação de status')
       whatsApp.enviarMensagem(estabelecimentoId!, pedidoAtualizado.clienteFone, textoWp)
-        .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp status pedido'));
+        .catch((err) => fastify.log.error({ err, clienteFone: pedidoAtualizado.clienteFone, status }, 'Falha WhatsApp status pedido'));
     }
 
     return pedidoAtualizado;

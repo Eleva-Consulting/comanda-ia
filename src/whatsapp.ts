@@ -146,6 +146,7 @@ class WhatsAppManager {
   private sockets  = new Map<string, ReturnType<typeof makeWASocket>>()
   private statuses = new Map<string, ConnectionStatus>()
   private logger   = pino({ level: 'silent' })
+  private log      = pino({ level: 'info', base: { pid: process.pid } })
 
   private criarSocket(
     estabelecimentoId: string,
@@ -346,11 +347,13 @@ class WhatsAppManager {
     socket.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
       if (connection === 'open') {
         this.statuses.set(estabelecimentoId, 'open')
+        this.log.info({ estabelecimentoId }, 'WhatsApp conectado (open)')
       }
       if (connection === 'close') {
         this.statuses.set(estabelecimentoId, 'close')
         this.sockets.delete(estabelecimentoId)
         const codigo = (lastDisconnect?.error as Boom)?.output?.statusCode
+        this.log.warn({ estabelecimentoId, codigo }, 'WhatsApp desconectado')
         if (codigo !== DisconnectReason.loggedOut) {
           setTimeout(() => this.reconectar(estabelecimentoId), 5000)
         } else {
@@ -419,22 +422,28 @@ class WhatsAppManager {
   }
 
   async enviarMensagem(estabelecimentoId: string, telefone: string, texto: string): Promise<void> {
+    const status = this.statuses.get(estabelecimentoId)
     const socket = this.sockets.get(estabelecimentoId)
-    if (!socket || this.statuses.get(estabelecimentoId) !== 'open') {
+    if (!socket || status !== 'open') {
+      this.log.error({ estabelecimentoId, status: status ?? 'undefined' }, 'WhatsApp: tentativa de envio com socket desconectado')
       throw new Error('WhatsApp não conectado')
     }
     const fone = telefone.replace(/\D/g, '')
     const jid  = fone.startsWith('55') ? `${fone}@s.whatsapp.net` : `55${fone}@s.whatsapp.net`
+    this.log.info({ estabelecimentoId, foneOriginal: telefone, jid }, 'WhatsApp: enviando mensagem')
     await socket.sendMessage(jid, { text: texto })
+    this.log.info({ jid }, 'WhatsApp: mensagem enviada com sucesso')
   }
 
   async inicializarSessoes(): Promise<void> {
     const sessoes = await prisma.whatsAppSession.findMany({
-      where:  { creds: { not: undefined } },
       select: { estabelecimentoId: true },
     })
+    this.log.info({ total: sessoes.length }, 'WhatsApp: inicializando sessões')
     for (const { estabelecimentoId } of sessoes) {
-      this.reconectar(estabelecimentoId).catch(() => {})
+      this.reconectar(estabelecimentoId).catch((err) => {
+        this.log.error({ err, estabelecimentoId }, 'WhatsApp: falha ao reconectar sessão')
+      })
     }
   }
 }
