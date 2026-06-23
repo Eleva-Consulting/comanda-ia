@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle } from 'lucide-react'
+import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle, Banknote } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
-type Status = 'recebido' | 'em_preparo' | 'pronto' | 'a_caminho' | 'entregue' | 'cancelado'
+type Status = 'recebido' | 'pagamento_confirmado' | 'em_preparo' | 'pronto' | 'a_caminho' | 'entregue' | 'cancelado'
 
 interface PedidosResponse {
   dados: Pedido[]
@@ -52,22 +52,24 @@ interface ItemCardapio {
 }
 
 const statusConfig: Record<Status, { label: string; badge: string }> = {
-  recebido:   { label: 'Novo',       badge: 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' },
-  em_preparo: { label: 'Em preparo', badge: 'bg-yellow-500/10 text-yellow-400 ring-1 ring-yellow-500/30' },
-  pronto:     { label: 'Pronto',     badge: 'bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/30' },
-  a_caminho:  { label: 'A caminho',  badge: 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/30' },
-  entregue:   { label: 'Entregue',   badge: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30' },
-  cancelado:  { label: 'Cancelado',  badge: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/30' },
+  recebido:              { label: 'Aguard. pgto',     badge: 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' },
+  pagamento_confirmado:  { label: 'Pgto. confirmado', badge: 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' },
+  em_preparo:            { label: 'Em preparo',        badge: 'bg-yellow-500/10 text-yellow-400 ring-1 ring-yellow-500/30' },
+  pronto:                { label: 'Pronto',            badge: 'bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/30' },
+  a_caminho:             { label: 'A caminho',         badge: 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/30' },
+  entregue:              { label: 'Entregue',          badge: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30' },
+  cancelado:             { label: 'Cancelado',         badge: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/30' },
 }
 
-const proximaAcao: Partial<Record<Status, { proximoStatus: Status; label: string; Icone: typeof Flame }>> = {
-  recebido:   { proximoStatus: 'em_preparo', label: 'Iniciar preparo',   Icone: Flame },
-  em_preparo: { proximoStatus: 'pronto',     label: 'Marcar pronto',     Icone: Check },
-  pronto:     { proximoStatus: 'a_caminho',  label: 'Saiu para entrega', Icone: Truck },
-  a_caminho:  { proximoStatus: 'entregue',   label: 'Marcar entregue',   Icone: PackageCheck },
+const proximaAcao: Partial<Record<Status, { proximoStatus: Status; label: string; Icone: typeof Flame; cor?: string }>> = {
+  recebido:             { proximoStatus: 'pagamento_confirmado', label: 'Confirmar pagamento', Icone: Banknote,     cor: 'bg-emerald-600 hover:bg-emerald-700' },
+  pagamento_confirmado: { proximoStatus: 'em_preparo',          label: 'Iniciar preparo',      Icone: Flame,        cor: 'bg-orange-500 hover:bg-orange-600' },
+  em_preparo:           { proximoStatus: 'pronto',              label: 'Marcar pronto',        Icone: Check,        cor: 'bg-orange-500 hover:bg-orange-600' },
+  pronto:               { proximoStatus: 'a_caminho',           label: 'Saiu para entrega',    Icone: Truck,        cor: 'bg-orange-500 hover:bg-orange-600' },
+  a_caminho:            { proximoStatus: 'entregue',            label: 'Marcar entregue',      Icone: PackageCheck, cor: 'bg-orange-500 hover:bg-orange-600' },
 }
 
-const statusAtivos: Status[] = ['recebido', 'em_preparo', 'pronto', 'a_caminho']
+const statusAtivos: Status[] = ['recebido', 'pagamento_confirmado', 'em_preparo', 'pronto', 'a_caminho']
 
 function formatarTempo(criadoEm: string): string {
   const diff = Date.now() - new Date(criadoEm).getTime()
@@ -104,7 +106,7 @@ export default function Cozinha() {
   useEffect(() => {
     if (!token) return
 
-    fetch(`${API_URL}/pedidos?status=recebido,em_preparo,pronto,a_caminho&limite=100`, {
+    fetch(`${API_URL}/pedidos?status=recebido,pagamento_confirmado,em_preparo,pronto,a_caminho&limite=100`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -401,7 +403,7 @@ export default function Cozinha() {
                       <button
                         onClick={() => atualizarStatus(pedido.id, acao.proximoStatus)}
                         disabled={atualizando || cancelando}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${acao.cor ?? 'bg-orange-500 hover:bg-orange-600'}`}
                       >
                         {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <acao.Icone className="h-4 w-4" />}
                         {acao.label}

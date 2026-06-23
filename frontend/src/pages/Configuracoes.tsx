@@ -13,8 +13,6 @@ interface Estabelecimento {
   aceitandoPedidos: boolean
   chavePix:         string | null
   taxaEntrega:      number | null
-  evolutionUrl:     string | null
-  evolutionToken:   string | null
 }
 
 interface WhatsAppStatus {
@@ -36,17 +34,13 @@ export default function Configuracoes() {
   const [telefone, setTelefone]       = useState('')
   const [chavePix, setChavePix]       = useState('')
   const [taxaEntrega, setTaxaEntrega] = useState('')
-  const [evolutionUrl, setEvolutionUrl]     = useState('')
-  const [evolutionToken, setEvolutionToken] = useState('')
-
   const [wpStatus, setWpStatus]     = useState<WhatsAppStatus | null>(null)
   const [qrCode, setQrCode]         = useState<string | null>(null)
   const [conectando, setConectando] = useState(false)
   const [erroWp, setErroWp]         = useState<string | null>(null)
   const [verificandoStatus, setVerificandoStatus] = useState(false)
 
-  const verificarStatus = useCallback(async (url: string, tk: string) => {
-    if (!url || !tk) return
+  const verificarStatus = useCallback(async () => {
     setVerificandoStatus(true)
     try {
       const r = await fetch(`${API_URL}/meu-estabelecimento/whatsapp/status`, {
@@ -71,11 +65,7 @@ export default function Configuracoes() {
         setTelefone(est.telefone)
         setChavePix(est.chavePix ?? '')
         setTaxaEntrega(est.taxaEntrega != null ? String(est.taxaEntrega) : '')
-        setEvolutionUrl(est.evolutionUrl ?? '')
-        setEvolutionToken(est.evolutionToken ?? '')
-        if (est.evolutionUrl && est.evolutionToken) {
-          verificarStatus(est.evolutionUrl, est.evolutionToken)
-        }
+        verificarStatus()
       })
       .catch(() => null)
       .finally(() => setCarregando(false))
@@ -117,10 +107,8 @@ export default function Configuracoes() {
         body:    JSON.stringify({
           nome,
           telefone,
-          chavePix:       chavePix.trim() || null,
-          taxaEntrega:    taxaNum,
-          evolutionUrl:   evolutionUrl.trim() || null,
-          evolutionToken: evolutionToken.trim() || null,
+          chavePix:    chavePix.trim() || null,
+          taxaEntrega: taxaNum,
         }),
       })
       const atualizado = await resp.json()
@@ -153,10 +141,10 @@ export default function Configuracoes() {
       if (data.qrCode) {
         setQrCode(data.qrCode)
       } else {
-        setErroWp('QR code não retornado. Verifique a URL e API Key.')
+        setErroWp('QR code não retornado. Tente novamente.')
       }
     } catch {
-      setErroWp('Falha de conexão com a Evolution API')
+      setErroWp('Falha ao conectar')
     } finally {
       setConectando(false)
     }
@@ -180,8 +168,6 @@ export default function Configuracoes() {
       </Layout>
     )
   }
-
-  const evolutionConfigurado = !!(evolutionUrl.trim() && evolutionToken.trim())
 
   return (
     <Layout>
@@ -285,10 +271,10 @@ export default function Configuracoes() {
             <div>
               <h2 className="font-semibold text-zinc-200 flex items-center gap-2">
                 <Smartphone className="h-4 w-4 text-emerald-400" />
-                WhatsApp — Evolution API
+                WhatsApp
               </h2>
               <p className="mt-0.5 text-xs text-zinc-500">
-                Receba notificações de novos pedidos no WhatsApp via Evolution API.
+                Receba notificações de novos pedidos no WhatsApp.
               </p>
             </div>
             {wpStatus && (
@@ -304,27 +290,6 @@ export default function Configuracoes() {
               </span>
             )}
           </div>
-
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-400">URL da instância</span>
-            <input
-              type="url" value={evolutionUrl} onChange={(e) => setEvolutionUrl(e.target.value)}
-              placeholder="https://evolution.seudominio.com"
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-400">API Key (Global Key)</span>
-            <input
-              type="password" value={evolutionToken} onChange={(e) => setEvolutionToken(e.target.value)}
-              placeholder="••••••••••••••••"
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              Instância criada automaticamente com o nome <code className="text-orange-400">{dados?.slug ?? 'slug'}</code>
-            </p>
-          </label>
 
           {erroWp && (
             <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
@@ -358,10 +323,10 @@ export default function Configuracoes() {
           )}
 
           <div className="flex gap-2">
-            {evolutionConfigurado && wpStatus && !wpStatus.conectado && (
+            {wpStatus && !wpStatus.conectado && (
               <button
                 type="button"
-                onClick={() => verificarStatus(evolutionUrl, evolutionToken)}
+                onClick={() => verificarStatus()}
                 disabled={verificandoStatus}
                 className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-700 disabled:opacity-50"
               >
@@ -372,7 +337,7 @@ export default function Configuracoes() {
             <button
               type="button"
               onClick={conectarWhatsApp}
-              disabled={!evolutionConfigurado || conectando}
+              disabled={conectando}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {conectando

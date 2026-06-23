@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
+import { whatsApp } from '../whatsapp.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -23,6 +24,7 @@ const CriarPedidoSchema = Type.Object({
 const AtualizarPedidoSchema = Type.Object({
   status: Type.Union([
     Type.Literal('recebido'),
+    Type.Literal('pagamento_confirmado'),
     Type.Literal('em_preparo'),
     Type.Literal('pronto'),
     Type.Literal('entregue'),
@@ -33,6 +35,7 @@ const AtualizarPedidoSchema = Type.Object({
 const AtualizarStatusSchema = Type.Object({
   status: Type.Union([
     Type.Literal('recebido'),
+    Type.Literal('pagamento_confirmado'),
     Type.Literal('em_preparo'),
     Type.Literal('pronto'),
     Type.Literal('a_caminho'),
@@ -67,12 +70,13 @@ const PedidoParamsSchema = Type.Object({
 
 // Transições de status permitidas
 const transicoesPermitidas: Record<StatusPedido, StatusPedido[]> = {
-  recebido:   ['em_preparo', 'cancelado'],
-  em_preparo: ['pronto', 'cancelado'],
-  pronto:     ['a_caminho', 'entregue', 'cancelado'],
-  a_caminho:  ['entregue', 'cancelado'],
-  entregue:   [],
-  cancelado:  [],
+  recebido:              ['pagamento_confirmado', 'cancelado'],
+  pagamento_confirmado:  ['em_preparo', 'cancelado'],
+  em_preparo:            ['pronto', 'cancelado'],
+  pronto:                ['a_caminho', 'entregue', 'cancelado'],
+  a_caminho:             ['entregue', 'cancelado'],
+  entregue:              [],
+  cancelado:             [],
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -80,7 +84,7 @@ const transicoesPermitidas: Record<StatusPedido, StatusPedido[]> = {
 /** Retorna lista de StatusPedido válidos a partir de string "a,b,c" */
 function parsearFiltroStatus(raw: string | undefined): StatusPedido[] | undefined {
   if (!raw) return undefined;
-  const validos: StatusPedido[] = ['recebido', 'em_preparo', 'pronto', 'a_caminho', 'entregue', 'cancelado'];
+  const validos: StatusPedido[] = ['recebido', 'pagamento_confirmado', 'em_preparo', 'pronto', 'a_caminho', 'entregue', 'cancelado'];
   const candidatos = raw.split(',').map((s) => s.trim()) as StatusPedido[];
   const filtrados = candidatos.filter((s) => validos.includes(s));
   return filtrados.length > 0 ? filtrados : undefined;
@@ -246,6 +250,22 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     }
 
     getIO().to(estabelecimentoId!).emit('pedido:atualizado', pedidoAtualizado);
+
+    // WhatsApp para o cliente — fire-and-forget
+    const mensagensStatus: Partial<Record<StatusPedido, string>> = {
+      pagamento_confirmado: '💰 *Pagamento confirmado!* Seu pedido foi aceito e logo entra em preparo.',
+      em_preparo:  '👨‍🍳 Seu pedido está sendo preparado!',
+      pronto:      '🎉 Seu pedido está pronto para retirada!',
+      a_caminho:   '🛵 Seu pedido saiu para entrega!',
+      entregue:    '✅ Pedido entregue! Obrigado pela preferência. 😊',
+      cancelado:   '❌ Seu pedido foi cancelado. Qualquer dúvida, entre em contato conosco.',
+    };
+    const textoWp = mensagensStatus[status];
+    if (textoWp) {
+      whatsApp.enviarMensagem(estabelecimentoId!, pedidoAtualizado.clienteFone, textoWp)
+        .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp status pedido'));
+    }
+
     return pedidoAtualizado;
   });
 

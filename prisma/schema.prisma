@@ -39,6 +39,7 @@ enum PapelMensagem {
 
 enum StatusPedido {
   recebido
+  pagamento_confirmado
   em_preparo
   pronto
   a_caminho
@@ -75,11 +76,12 @@ model Estabelecimento {
   evolutionToken   String?
   criadoEm         DateTime              @default(now())
 
-  usuarios   Usuario[]
-  itens      ItemCardapio[]
-  pedidos    Pedido[]
-  conversas  Conversa[]
-  categorias Categoria[]
+  usuarios         Usuario[]
+  itens            ItemCardapio[]
+  pedidos          Pedido[]
+  conversas        Conversa[]
+  categorias       Categoria[]
+  whatsappSession  WhatsAppSession?
 
   @@map("estabelecimentos")
 }
@@ -194,6 +196,18 @@ model Conversa {
   mensagens Mensagem[]
 
   @@map("conversas")
+}
+
+model WhatsAppSession {
+  id                String          @id @default(cuid())
+  estabelecimentoId String          @unique
+  creds             Json?
+  keys              Json            @default("{}")
+  criadoEm         DateTime        @default(now())
+  atualizadoEm     DateTime        @updatedAt
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_sessions")
 }
 
 model Mensagem {

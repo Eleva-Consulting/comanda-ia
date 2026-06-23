@@ -4,7 +4,7 @@ import { prisma } from '../database.js';
 import { getIO } from '../socket.js';
 import { enviarEmail, templates } from '../mailer.js';
 import { enviarPush } from '../push.js';
-import { enviarMensagemWhatsApp } from '../evolution.js';
+import { whatsApp } from '../whatsapp.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
@@ -122,7 +122,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       include: {
         usuarios: {
           where:  { role: 'DONO' },
-          select: { email: true, nome: true, telefone: true },
+          select: { email: true, nome: true },
           take:   1,
         },
       },
@@ -227,19 +227,22 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de novo pedido'));
     }
 
-    // WhatsApp via Evolution API — fire-and-forget
-    if (estabelecimento.evolutionUrl && estabelecimento.evolutionToken && dono?.telefone) {
+    // WhatsApp para o DONO — fire-and-forget
+    if (estabelecimento.telefone) {
       const itensTxt = itensComSnapshot
         .map((i: { nomeItem: string; quantidade: number; precoUnit: number }) =>
           `• ${i.quantidade}x ${i.nomeItem}`)
         .join('\n');
-      const msg = `🍽️ Novo pedido — *${estabelecimento.nome}*\n\nCliente: *${clienteNome}*\nFone: ${clienteFone}\nTotal: *R$ ${total.toFixed(2)}*\n\nItens:\n${itensTxt}`;
+      const msgDono = `🍽️ Novo pedido — *${estabelecimento.nome}*\n\nCliente: *${clienteNome}*\nFone: ${clienteFone}\nTotal: *R$ ${total.toFixed(2)}*\n\nItens:\n${itensTxt}`;
+      whatsApp.enviarMensagem(estabelecimento.id, estabelecimento.telefone, msgDono)
+        .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp dono'));
+    }
 
-      enviarMensagemWhatsApp(
-        { url: estabelecimento.evolutionUrl, token: estabelecimento.evolutionToken, instancia: estabelecimento.slug },
-        dono.telefone,
-        msg,
-      ).catch((err) => fastify.log.error({ err }, 'Falha Evolution API WhatsApp'));
+    // WhatsApp para o CLIENTE — confirmar recebimento do pedido (fire-and-forget)
+    if (formaPagamento === 'pix' && estabelecimento.chavePix) {
+      const msgCliente = `✅ *Pedido recebido, ${clienteNome}!*\n\nTotal: *R$ ${total.toFixed(2)}*\n\n💸 Faça o PIX para:\n*${estabelecimento.chavePix}*\n\nEm seguida, envie o comprovante aqui neste WhatsApp para confirmarmos seu pedido na hora! 😊`;
+      whatsApp.enviarMensagem(estabelecimento.id, clienteFone, msgCliente)
+        .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente'));
     }
 
     return reply.status(201).send({
