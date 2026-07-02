@@ -70,6 +70,7 @@ export default function ImprimirComanda() {
         .comanda {
           font-family: 'Courier New', Courier, monospace;
           font-size: 12px;
+          font-weight: bold;
           width: 72mm;
           margin: 0 auto;
           padding: 4mm;
