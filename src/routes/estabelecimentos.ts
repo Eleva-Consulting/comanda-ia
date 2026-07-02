@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
-import { autenticar, apenasDono } from '../plugins/auth.js';
+import { autenticar, temPermissao } from '../plugins/auth.js';
 import { whatsApp } from '../whatsapp.js';
 
 const AtualizarEstabelecimentoSchema = Type.Object({
@@ -31,7 +31,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
   });
 
   fastify.patch('/meu-estabelecimento', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('configuracoes')],
     schema: { body: AtualizarEstabelecimentoSchema },
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
@@ -45,6 +45,24 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     const atualizado = await prisma.estabelecimento.update({
       where: { id: estabelecimentoId! },
       data:  dados,
+    });
+
+    return atualizado;
+  });
+
+  // ── PATCH /meu-estabelecimento/aceitando-pedidos ──────────────────────────
+  // Botão "Pausar/Reabrir" da Cozinha — separado do PATCH geral para não exigir
+  // a permissão "configuracoes" de quem só precisa pausar/retomar pedidos.
+  fastify.patch('/meu-estabelecimento/aceitando-pedidos', {
+    onRequest: [autenticar, temPermissao('cozinha', 'configuracoes')],
+    schema: { body: Type.Object({ aceitandoPedidos: Type.Boolean() }) },
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+    const { aceitandoPedidos } = request.body as { aceitandoPedidos: boolean };
+
+    const atualizado = await prisma.estabelecimento.update({
+      where: { id: estabelecimentoId! },
+      data:  { aceitandoPedidos },
     });
 
     return atualizado;
@@ -176,7 +194,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
   // ── POST /meu-estabelecimento/whatsapp/conectar ───────────────────────────
   // Cria a instância no Evolution API e retorna o QR code base64
   fastify.post('/meu-estabelecimento/whatsapp/conectar', {
-    onRequest: [autenticar, apenasDono],
+    onRequest: [autenticar, temPermissao('configuracoes')],
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
 
@@ -194,7 +212,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
 
   // ── DELETE /meu-estabelecimento/whatsapp/desconectar ─────────────────────
   fastify.delete('/meu-estabelecimento/whatsapp/desconectar', {
-    onRequest: [autenticar, apenasDono],
+    onRequest: [autenticar, temPermissao('configuracoes')],
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
     await whatsApp.desconectar(estabelecimentoId!);
@@ -203,7 +221,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
 
   // ── GET /meu-estabelecimento/whatsapp/status ──────────────────────────────
   fastify.get('/meu-estabelecimento/whatsapp/status', {
-    onRequest: [autenticar, apenasDono],
+    onRequest: [autenticar, temPermissao('configuracoes')],
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
 

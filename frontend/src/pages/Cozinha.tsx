@@ -207,7 +207,7 @@ export default function Cozinha() {
   async function togglePausa() {
     setTogglingPausa(true)
     try {
-      const resp = await fetch(`${API_URL}/meu-estabelecimento`, {
+      const resp = await fetch(`${API_URL}/meu-estabelecimento/aceitando-pedidos`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ aceitandoPedidos: !aceitando }),

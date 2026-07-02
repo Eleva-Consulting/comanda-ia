@@ -67,3 +67,16 @@ export async function apenasDono(
     return reply.status(403).send({ erro: 'Acesso negado' });
   }
 }
+
+/**
+ * Garante que o usuário autenticado é DONO ou OPERADOR com a permissão informada.
+ * Deve ser usado APÓS o hook autenticar.
+ * Passar mais de uma permissão libera o acesso se o usuário tiver QUALQUER uma delas.
+ */
+export function temPermissao(...permissoes: string[]) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    if (request.user.role === 'DONO') return;
+    if (permissoes.some((p) => request.user.permissoes.includes(p))) return;
+    return reply.status(403).send({ erro: 'Você não tem permissão para acessar este recurso' });
+  };
+}

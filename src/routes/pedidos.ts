@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
-import { autenticar } from '../plugins/auth.js';
+import { autenticar, temPermissao } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { whatsApp } from '../whatsapp.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
@@ -101,7 +101,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   //   dataInicio — ISO date string (inclusivo)
   //   dataFim    — ISO date string (inclusivo, até 23:59:59)
   fastify.get('/pedidos', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('cozinha', 'historico')],
   }, async (request) => {
     const { estabelecimentoId } = request.user;
     const q = request.query as Record<string, string | undefined>;
@@ -139,7 +139,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
   // ── GET /pedidos/:id ────────────────────────────────────────────────────────
   fastify.get('/pedidos/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('cozinha', 'historico')],
     schema: { params: PedidoParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -160,7 +160,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // Total calculado no servidor — nunca confia no cliente.
   // Todos os itens devem pertencer ao estabelecimento e estar disponíveis.
   fastify.post('/pedidos', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('pedido_manual')],
     schema: { body: CriarPedidoSchema },
   }, async (request, reply) => {
     const { clienteNome, clienteFone, enderecoEntrega, itens } = request.body as {
@@ -219,7 +219,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // ── PATCH /pedidos/:id ──────────────────────────────────────────────────────
   // Transação garante que verificação de propriedade e update são atômicos.
   fastify.patch('/pedidos/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('cozinha')],
     schema: { params: PedidoParamsSchema, body: AtualizarStatusSchema },
   }, async (request, reply) => {
     const { id }     = request.params as { id: string };
@@ -272,7 +272,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
   // ── POST /pedidos/manual ────────────────────────────────────────────────────
   fastify.post('/pedidos/manual', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('pedido_manual')],
     schema: { body: ManualPedidoSchema },
   }, async (request, reply) => {
     const { clienteNome, clienteFone, tipoEntrega, formaPagamento, itens } = request.body as {
@@ -335,7 +335,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
   // ── DELETE /pedidos/:id ─────────────────────────────────────────────────────
   fastify.delete('/pedidos/:id', {
-    onRequest: [autenticar],
+    onRequest: [autenticar, temPermissao('cozinha')],
     schema: { params: PedidoParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
