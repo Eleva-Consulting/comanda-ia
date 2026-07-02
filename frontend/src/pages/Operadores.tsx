@@ -17,8 +17,9 @@ function gerarEmailFicticio(nomePessoa: string, slugEstabelecimento: string): st
   const primeiro = partes[0] ?? 'operador'
   const ultimo   = partes.length > 1 ? partes[partes.length - 1] : ''
   const usuario  = [primeiro, ultimo].filter(Boolean).join('.')
+  const dominio  = (slugEstabelecimento || 'equipe').replace(/-/g, '')
 
-  return `${usuario}@${slugEstabelecimento || 'equipe'}.com`
+  return `${usuario}@${dominio}.com`
 }
 
 interface Operador {
