@@ -5,6 +5,7 @@ import { getIO } from '../socket.js';
 import { enviarEmail, templates } from '../mailer.js';
 import { enviarPush } from '../push.js';
 import { whatsApp } from '../whatsapp.js';
+import { resolverTaxaEntrega } from '../utils/entrega.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
@@ -20,6 +21,7 @@ const FazerPedidoSchema = Type.Object({
   clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
   clienteFone:     Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
+  bairroId:        Type.Optional(Type.String()),
   tipoEntrega: Type.Union([Type.Literal('entrega'), Type.Literal('retirada')]),
   formaPagamento:  Type.Union([
     Type.Literal('pix'),
@@ -99,15 +101,31 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     };
   });
 
+  // GET /publico/:slug/bairros — lista de bairros com taxa (sem auth)
+  fastify.get('/publico/:slug/bairros', {
+    schema: { params: SlugParamsSchema },
+  }, async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { slug } });
+    if (!estabelecimento) return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
+
+    const bairros = await prisma.bairro.findMany({
+      where:   { estabelecimentoId: estabelecimento.id },
+      orderBy: { nome: 'asc' },
+    });
+    return bairros.map((b) => ({ id: b.id, nome: b.nome, taxaEntrega: b.taxaEntrega !== null ? Number(b.taxaEntrega) : null }));
+  });
+
   // POST /publico/:slug/pedido — cliente final cria pedido (sem auth)
   fastify.post('/publico/:slug/pedido', {
     schema: { params: SlugParamsSchema, body: FazerPedidoSchema },
   }, async (request, reply) => {
     const { slug } = request.params as { slug: string };
-    const { clienteNome, clienteFone, enderecoEntrega, tipoEntrega, formaPagamento, itens } = request.body as {
+    const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, itens } = request.body as {
       clienteNome:      string;
       clienteFone?:     string;
       enderecoEntrega?: string;
+      bairroId?:        string;
       tipoEntrega:      TipoEntrega;
       formaPagamento:   FormaPagamento;
       itens:            ItemPedidoInput[];
@@ -169,15 +187,23 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       0,
     );
 
-    const taxa = tipoEntrega === 'entrega' && estabelecimento.taxaEntrega
-      ? Number(estabelecimento.taxaEntrega)
-      : 0;
+    const resultadoTaxa = await resolverTaxaEntrega({
+      estabelecimentoId: estabelecimento.id,
+      tipoEntrega,
+      bairroId,
+      taxaEntregaGeral: estabelecimento.taxaEntrega,
+    });
+    if (resultadoTaxa.erro) {
+      return reply.status(400).send({ erro: resultadoTaxa.erro });
+    }
 
-    const total = subtotal + taxa;
+    const total = subtotal + resultadoTaxa.taxa;
 
     const pedido = await prisma.pedido.create({
       data: {
         clienteNome, clienteFone: clienteFoneNormalizado, enderecoEntrega, total, formaPagamento, tipoEntrega,
+        bairroNome:  resultadoTaxa.bairroNome,
+        taxaEntrega: resultadoTaxa.taxa,
         estabelecimentoId: estabelecimento.id,
         itens: { create: itensComSnapshot },
       },

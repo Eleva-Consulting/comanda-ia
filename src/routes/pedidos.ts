@@ -4,6 +4,7 @@ import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { whatsApp } from '../whatsapp.js';
+import { resolverTaxaEntrega } from '../utils/entrega.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -45,8 +46,10 @@ const AtualizarStatusSchema = Type.Object({
 });
 
 const ManualPedidoSchema = Type.Object({
-  clienteNome: Type.String({ minLength: 2, maxLength: 100 }),
-  clienteFone: Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
+  clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
+  clienteFone:     Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
+  enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
+  bairroId:        Type.Optional(Type.String()),
   tipoEntrega: Type.Optional(Type.Union([Type.Literal('entrega'), Type.Literal('retirada')])),
   formaPagamento: Type.Optional(Type.Union([
     Type.Literal('pix'),
@@ -297,14 +300,21 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar, temPermissao('pedido_manual')],
     schema: { body: ManualPedidoSchema },
   }, async (request, reply) => {
-    const { clienteNome, clienteFone, tipoEntrega, formaPagamento, itens } = request.body as {
-      clienteNome:     string;
-      clienteFone?:    string;
-      tipoEntrega?:    TipoEntrega;
-      formaPagamento?: FormaPagamento;
+    const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, itens } = request.body as {
+      clienteNome:      string;
+      clienteFone?:     string;
+      enderecoEntrega?: string;
+      bairroId?:        string;
+      tipoEntrega?:     TipoEntrega;
+      formaPagamento?:  FormaPagamento;
       itens: { itemCardapioId: string; quantidade: number; observacao?: string }[];
     };
     const { estabelecimentoId } = request.user;
+    const tipoEntregaFinal = tipoEntrega ?? 'retirada';
+
+    if (tipoEntregaFinal === 'entrega' && !enderecoEntrega?.trim()) {
+      return reply.status(400).send({ erro: 'Endereço de entrega é obrigatório' });
+    }
 
     const itemIds = itens.map((i) => i.itemCardapioId);
 
@@ -332,17 +342,33 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       };
     });
 
-    const total = itensComSnapshot.reduce(
+    const subtotal = itensComSnapshot.reduce(
       (soma, item) => soma + item.precoUnit * item.quantidade,
       0
     );
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+    const resultadoTaxa = await resolverTaxaEntrega({
+      estabelecimentoId: estabelecimentoId!,
+      tipoEntrega: tipoEntregaFinal,
+      bairroId,
+      taxaEntregaGeral: estabelecimento?.taxaEntrega,
+    });
+    if (resultadoTaxa.erro) {
+      return reply.status(400).send({ erro: resultadoTaxa.erro });
+    }
+
+    const total = subtotal + resultadoTaxa.taxa;
 
     const pedido = await prisma.pedido.create({
       data: {
         clienteNome,
         clienteFone: clienteFone?.trim() || null,
+        enderecoEntrega: enderecoEntrega?.trim() || null,
+        bairroNome:  resultadoTaxa.bairroNome,
+        taxaEntrega: resultadoTaxa.taxa,
         total,
-        tipoEntrega: tipoEntrega ?? 'retirada',
+        tipoEntrega: tipoEntregaFinal,
         formaPagamento: formaPagamento ?? 'dinheiro',
         estabelecimentoId: estabelecimentoId!,
         itens: { create: itensComSnapshot },

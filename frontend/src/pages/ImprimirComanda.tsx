@@ -11,13 +11,17 @@ interface ItemPedido {
 }
 
 interface Pedido {
-  id:          string
-  clienteNome: string
-  clienteFone: string | null
-  status:      string
-  total:       number
-  criadoEm:   string
-  itens:       ItemPedido[]
+  id:              string
+  clienteNome:     string
+  clienteFone:     string | null
+  enderecoEntrega: string | null
+  bairroNome:      string | null
+  taxaEntrega:     number | null
+  tipoEntrega:     'entrega' | 'retirada'
+  status:          string
+  total:           number
+  criadoEm:        string
+  itens:           ItemPedido[]
 }
 
 interface Estabelecimento {
@@ -94,6 +98,13 @@ export default function ImprimirComanda() {
       <div className="linha" />
       <p>Cliente: {pedido.clienteNome}</p>
       {pedido.clienteFone && <p>Fone:    {pedido.clienteFone}</p>}
+      <p className="bold">{pedido.tipoEntrega === 'entrega' ? '🛵 ENTREGA' : '🏪 RETIRADA'}</p>
+      {pedido.tipoEntrega === 'entrega' && pedido.enderecoEntrega && (
+        <>
+          {pedido.bairroNome && <p>Bairro: {pedido.bairroNome}</p>}
+          <p>Endereço: {pedido.enderecoEntrega}</p>
+        </>
+      )}
       <div className="linha" />
 
       {pedido.itens.map((item) => (
@@ -106,6 +117,12 @@ export default function ImprimirComanda() {
         </div>
       ))}
 
+      {pedido.tipoEntrega === 'entrega' && !!pedido.taxaEntrega && (
+        <div className="row">
+          <span>Taxa de entrega</span>
+          <span>R${Number(pedido.taxaEntrega).toFixed(2)}</span>
+        </div>
+      )}
       <div className="linha-dupla" />
       <div className="total-row">
         <span>TOTAL</span>

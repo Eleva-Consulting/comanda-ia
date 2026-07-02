@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { FormEvent } from 'react'
-import { Copy, Check, Loader2, Settings, Smartphone, Wifi, WifiOff, RefreshCw, PhoneOff } from 'lucide-react'
+import { Copy, Check, Loader2, Settings, Smartphone, Wifi, WifiOff, RefreshCw, PhoneOff, MapPin, Plus, Pencil, Trash2, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -13,6 +13,12 @@ interface Estabelecimento {
   aceitandoPedidos: boolean
   chavePix:         string | null
   taxaEntrega:      number | null
+}
+
+interface Bairro {
+  id:          string
+  nome:        string
+  taxaEntrega: number | null
 }
 
 interface WhatsAppStatus {
@@ -40,6 +46,17 @@ export default function Configuracoes() {
   const [desconectando, setDesconectando] = useState(false)
   const [erroWp, setErroWp]              = useState<string | null>(null)
   const [verificandoStatus, setVerificandoStatus] = useState(false)
+
+  // Bairros
+  const [bairros, setBairros]                   = useState<Bairro[]>([])
+  const [carregandoBairros, setCarregandoBairros] = useState(true)
+  const [novoNomeBairro, setNovoNomeBairro]       = useState('')
+  const [novaTaxaBairro, setNovaTaxaBairro]       = useState('')
+  const [salvandoBairro, setSalvandoBairro]       = useState(false)
+  const [erroBairro, setErroBairro]               = useState<string | null>(null)
+  const [editandoBairroId, setEditandoBairroId]   = useState<string | null>(null)
+  const [editNomeBairro, setEditNomeBairro]       = useState('')
+  const [editTaxaBairro, setEditTaxaBairro]       = useState('')
 
   const verificarStatus = useCallback(async () => {
     setVerificandoStatus(true)
@@ -71,6 +88,81 @@ export default function Configuracoes() {
       .catch(() => null)
       .finally(() => setCarregando(false))
   }, [token, verificarStatus])
+
+  useEffect(() => {
+    fetch(`${API_URL}/bairros`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then(setBairros)
+      .catch(() => null)
+      .finally(() => setCarregandoBairros(false))
+  }, [token])
+
+  function parseTaxa(valor: string): number | null {
+    return valor.trim() ? parseFloat(valor.replace(',', '.')) : null
+  }
+
+  async function criarBairro(e: FormEvent) {
+    e.preventDefault()
+    setErroBairro(null)
+    if (!novoNomeBairro.trim()) return
+    setSalvandoBairro(true)
+    try {
+      const resp = await fetch(`${API_URL}/bairros`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ nome: novoNomeBairro.trim(), taxaEntrega: parseTaxa(novaTaxaBairro) }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroBairro(dados.erro ?? 'Erro ao criar bairro'); return }
+      setBairros((prev) => [...prev, dados].sort((a, b) => a.nome.localeCompare(b.nome)))
+      setNovoNomeBairro('')
+      setNovaTaxaBairro('')
+    } catch {
+      setErroBairro('Falha de conexão')
+    } finally {
+      setSalvandoBairro(false)
+    }
+  }
+
+  function iniciarEdicaoBairro(bairro: Bairro) {
+    setEditandoBairroId(bairro.id)
+    setEditNomeBairro(bairro.nome)
+    setEditTaxaBairro(bairro.taxaEntrega != null ? String(bairro.taxaEntrega) : '')
+    setErroBairro(null)
+  }
+
+  async function salvarEdicaoBairro(id: string) {
+    setErroBairro(null)
+    setSalvandoBairro(true)
+    try {
+      const resp = await fetch(`${API_URL}/bairros/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ nome: editNomeBairro.trim(), taxaEntrega: parseTaxa(editTaxaBairro) }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroBairro(dados.erro ?? 'Erro ao salvar bairro'); return }
+      setBairros((prev) => prev.map((b) => (b.id === id ? dados : b)).sort((a, b) => a.nome.localeCompare(b.nome)))
+      setEditandoBairroId(null)
+    } catch {
+      setErroBairro('Falha de conexão')
+    } finally {
+      setSalvandoBairro(false)
+    }
+  }
+
+  async function removerBairro(id: string) {
+    if (!window.confirm('Remover este bairro?')) return
+    try {
+      const resp = await fetch(`${API_URL}/bairros/${id}`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (resp.ok) setBairros((prev) => prev.filter((b) => b.id !== id))
+    } catch {
+      setErroBairro('Falha ao remover bairro')
+    }
+  }
 
   // Polling do status enquanto QR code está visível (aguarda scan)
   useEffect(() => {
@@ -283,6 +375,106 @@ export default function Configuracoes() {
             </button>
           </div>
         </form>
+
+        {/* Bairros e taxa de entrega */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
+          <div>
+            <h2 className="flex items-center gap-2 font-semibold text-zinc-200">
+              <MapPin className="h-4 w-4 text-orange-400" />
+              Bairros e taxa de entrega
+            </h2>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Cadastre os bairros que você atende com a taxa de cada um (deixe em branco para entrega grátis).
+              Sem nenhum bairro cadastrado, vale a "Taxa de entrega" geral acima.
+            </p>
+          </div>
+
+          {carregandoBairros ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {bairros.map((bairro) => (
+                <div key={bairro.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  {editandoBairroId === bairro.id ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        value={editNomeBairro}
+                        onChange={(e) => setEditNomeBairro(e.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-orange-500"
+                      />
+                      <input
+                        value={editTaxaBairro}
+                        onChange={(e) => setEditTaxaBairro(e.target.value)}
+                        placeholder="Grátis"
+                        inputMode="decimal"
+                        className="w-24 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-orange-500"
+                      />
+                      <button type="button" onClick={() => salvarEdicaoBairro(bairro.id)} disabled={salvandoBairro}
+                        className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
+                        {salvandoBairro ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Salvar'}
+                      </button>
+                      <button type="button" onClick={() => setEditandoBairroId(null)}
+                        className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-200">{bairro.nome}</p>
+                        <p className="text-xs text-orange-400">
+                          {bairro.taxaEntrega != null ? `R$ ${bairro.taxaEntrega.toFixed(2)}` : 'Grátis'}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button type="button" onClick={() => iniciarEdicaoBairro(bairro)}
+                          className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" onClick={() => removerBairro(bairro.id)}
+                          className="rounded-lg p-1.5 text-red-500 hover:bg-red-500/10">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {bairros.length === 0 && (
+                <p className="py-2 text-center text-sm text-zinc-500">Nenhum bairro cadastrado ainda.</p>
+              )}
+            </div>
+          )}
+
+          <form onSubmit={criarBairro} className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4">
+            <input
+              value={novoNomeBairro}
+              onChange={(e) => setNovoNomeBairro(e.target.value)}
+              placeholder="Nome do bairro"
+              className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+            />
+            <input
+              value={novaTaxaBairro}
+              onChange={(e) => setNovaTaxaBairro(e.target.value)}
+              placeholder="Taxa (R$)"
+              inputMode="decimal"
+              className="w-28 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+            />
+            <button type="submit" disabled={salvandoBairro || !novoNomeBairro.trim()}
+              className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50">
+              <Plus className="h-4 w-4" />
+              Adicionar
+            </button>
+          </form>
+
+          {erroBairro && (
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+              {erroBairro}
+            </p>
+          )}
+        </div>
 
         {/* WhatsApp / Evolution API */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">

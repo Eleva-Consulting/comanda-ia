@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle, Banknote, Pencil } from 'lucide-react'
+import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle, Banknote, Pencil, MapPin } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
@@ -23,12 +23,21 @@ interface Pedido {
   id:              string
   clienteNome:     string
   clienteFone:     string | null
+  enderecoEntrega: string | null
+  bairroNome:      string | null
+  taxaEntrega:     number | string | null
   total:           number | string
   status:          Status
   criadoEm:        string
   itens:           ItemPedido[]
   formaPagamento:  'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
   tipoEntrega:     'entrega' | 'retirada'
+}
+
+interface Bairro {
+  id:          string
+  nome:        string
+  taxaEntrega: number | null
 }
 
 const formaPagamentoLabel: Record<string, string> = {
@@ -114,6 +123,9 @@ export default function Cozinha() {
   const [erroModal, setErroModal]               = useState<string | null>(null)
   const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
   const [tipoEntregaModal, setTipoEntregaModal]       = useState<'entrega' | 'retirada'>('retirada')
+  const [enderecoModal, setEnderecoModal]             = useState('')
+  const [bairroIdModal, setBairroIdModal]             = useState('')
+  const [bairros, setBairros]                         = useState<Bairro[]>([])
 
   // Modal editar itens de pedido existente
   const [edicaoItensPedido, setEdicaoItensPedido] = useState<Pedido | null>(null)
@@ -162,6 +174,13 @@ export default function Cozinha() {
     })
       .then((r) => r.json())
       .then((est) => setAceitando(est.aceitandoPedidos ?? true))
+      .catch(console.error)
+
+    fetch(`${API_URL}/bairros`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then(setBairros)
       .catch(console.error)
   }, [token])
 
@@ -248,6 +267,8 @@ export default function Cozinha() {
     setErroModal(null)
     setFormaPagamentoModal('dinheiro')
     setTipoEntregaModal('retirada')
+    setEnderecoModal('')
+    setBairroIdModal('')
     setModalAberto(true)
     await carregarCardapioSeNecessario()
   }
@@ -348,10 +369,13 @@ export default function Cozinha() {
     }))
   }
 
-  const totalManual = cardapio.reduce((soma, item) => {
+  const bairroSelecionadoModal = bairros.find((b) => b.id === bairroIdModal)
+  const taxaModal = tipoEntregaModal === 'entrega' ? (bairroSelecionadoModal?.taxaEntrega ?? 0) : 0
+  const subtotalManual = cardapio.reduce((soma, item) => {
     const sel = selecionados[item.id]
     return soma + (sel ? item.preco * sel.quantidade : 0)
   }, 0)
+  const totalManual = subtotalManual + taxaModal
 
   async function criarPedidoManual(e: FormEvent) {
     e.preventDefault()
@@ -365,12 +389,28 @@ export default function Cozinha() {
       setErroModal('Selecione pelo menos um item')
       return
     }
+    if (tipoEntregaModal === 'entrega' && !enderecoModal.trim()) {
+      setErroModal('Endereço de entrega é obrigatório')
+      return
+    }
+    if (tipoEntregaModal === 'entrega' && bairros.length > 0 && !bairroIdModal) {
+      setErroModal('Selecione o bairro de entrega')
+      return
+    }
     setEnviandoManual(true)
     try {
       const resp = await fetch(`${API_URL}/pedidos/manual`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ clienteNome: clienteNomeModal, clienteFone: clienteFoneModal.trim() || undefined, itens, formaPagamento: formaPagamentoModal, tipoEntrega: tipoEntregaModal }),
+        body:    JSON.stringify({
+          clienteNome: clienteNomeModal,
+          clienteFone: clienteFoneModal.trim() || undefined,
+          enderecoEntrega: tipoEntregaModal === 'entrega' ? enderecoModal.trim() || undefined : undefined,
+          bairroId: tipoEntregaModal === 'entrega' && bairros.length > 0 ? bairroIdModal : undefined,
+          itens,
+          formaPagamento: formaPagamentoModal,
+          tipoEntrega: tipoEntregaModal,
+        }),
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroModal(dados.erro ?? 'Erro ao criar pedido'); return }
@@ -469,6 +509,16 @@ export default function Cozinha() {
                     {formaPagamentoLabel[pedido.formaPagamento] ?? pedido.formaPagamento}
                   </span>
                 </div>
+
+                {pedido.tipoEntrega === 'entrega' && pedido.enderecoEntrega && (
+                  <div className="mb-4 flex items-start gap-1.5 text-xs text-zinc-400">
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                    <span>
+                      {pedido.bairroNome && <span className="font-medium text-zinc-300">{pedido.bairroNome} — </span>}
+                      {pedido.enderecoEntrega}
+                    </span>
+                  </div>
+                )}
 
                 <div className="mb-4 flex-1 space-y-2 border-t border-zinc-800 pt-4">
                   {pedido.itens.map((item) => (
@@ -587,6 +637,38 @@ export default function Cozinha() {
                   ))}
                 </div>
 
+                {tipoEntregaModal === 'entrega' && (
+                  <div className="space-y-3">
+                    {bairros.length > 0 && (
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium text-zinc-400">Bairro</span>
+                        <select
+                          value={bairroIdModal}
+                          onChange={(e) => setBairroIdModal(e.target.value)}
+                          className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-orange-500"
+                        >
+                          <option value="">Selecione o bairro</option>
+                          {bairros.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.nome} — {b.taxaEntrega != null ? `R$ ${b.taxaEntrega.toFixed(2)}` : 'grátis'}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-zinc-400">Endereço de entrega</span>
+                      <textarea
+                        rows={2}
+                        value={enderecoModal}
+                        onChange={(e) => setEnderecoModal(e.target.value)}
+                        placeholder="Rua, número, referência"
+                        className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                      />
+                    </label>
+                  </div>
+                )}
+
                 {/* Forma de pagamento */}
                 <div>
                   <p className="mb-2 text-xs font-medium text-zinc-400">Pagamento</p>
@@ -667,6 +749,12 @@ export default function Cozinha() {
                 )}
               </div>
               <div className="border-t border-zinc-800 p-5">
+                {taxaModal > 0 && (
+                  <div className="mb-2 flex items-center justify-between text-xs text-zinc-500">
+                    <span>Taxa de entrega{bairroSelecionadoModal ? ` (${bairroSelecionadoModal.nome})` : ''}</span>
+                    <span>R$ {taxaModal.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="mb-4 flex items-center justify-between">
                   <span className="text-sm text-zinc-400">Total</span>
                   <span className="text-xl font-extrabold text-orange-400">R$ {totalManual.toFixed(2)}</span>

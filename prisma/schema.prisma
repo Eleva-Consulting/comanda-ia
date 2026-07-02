@@ -81,9 +81,23 @@ model Estabelecimento {
   pedidos          Pedido[]
   conversas        Conversa[]
   categorias       Categoria[]
+  bairros          Bairro[]
   whatsappSession  WhatsAppSession?
 
   @@map("estabelecimentos")
+}
+
+model Bairro {
+  id                String   @id @default(uuid())
+  nome              String
+  taxaEntrega       Decimal? @db.Decimal(10, 2) // null = entrega grátis nesse bairro
+  criadoEm          DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  @@unique([estabelecimentoId, nome])
+  @@map("bairros")
 }
 
 model Usuario {
@@ -153,6 +167,8 @@ model Pedido {
   clienteNome         String
   clienteFone         String?
   enderecoEntrega     String?
+  bairroNome          String?
+  taxaEntrega         Decimal?       @db.Decimal(10, 2)
   total               Decimal        @db.Decimal(10, 2)
   status              StatusPedido   @default(recebido)
   formaPagamento      FormaPagamento @default(pix)

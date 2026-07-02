@@ -39,15 +39,17 @@ interface ItemPedido {
 }
 
 interface Pedido {
-  id:             string
-  clienteNome:    string
-  clienteFone:    string | null
-  status:         string
-  total:          number | string
-  criadoEm:       string
-  itens:          ItemPedido[]
-  formaPagamento: string
-  tipoEntrega:    string
+  id:              string
+  clienteNome:     string
+  clienteFone:     string | null
+  enderecoEntrega: string | null
+  bairroNome:      string | null
+  status:          string
+  total:           number | string
+  criadoEm:        string
+  itens:           ItemPedido[]
+  formaPagamento:  string
+  tipoEntrega:     string
 }
 
 interface Resultado {
@@ -187,6 +189,12 @@ export default function Historico() {
                 <div className="border-t border-zinc-800 p-4">
                   {pedido.clienteFone && (
                     <p className="mb-2 text-xs text-zinc-500">Fone: {pedido.clienteFone}</p>
+                  )}
+                  {pedido.tipoEntrega === 'entrega' && pedido.enderecoEntrega && (
+                    <p className="mb-2 text-xs text-zinc-500">
+                      {pedido.bairroNome && <span className="font-medium text-zinc-400">{pedido.bairroNome} — </span>}
+                      {pedido.enderecoEntrega}
+                    </p>
                   )}
                   <div className="mb-3 flex flex-wrap gap-2">
                     <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">

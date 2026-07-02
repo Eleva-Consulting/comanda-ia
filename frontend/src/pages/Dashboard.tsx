@@ -44,6 +44,7 @@ interface DashboardData {
     total: number | string
     status: string
     criadoEm: string
+    tipoEntrega: string
   }>
   estatisticas: {
     totalPedidos: number
@@ -322,7 +323,9 @@ export default function Dashboard() {
                   className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-3"
                 >
                   <div>
-                    <p className="font-medium">{p.clienteNome}</p>
+                    <p className="font-medium">
+                      {p.clienteNome} <span className="ml-1">{p.tipoEntrega === 'entrega' ? '🛵' : '🏪'}</span>
+                    </p>
                     <p className="text-xs text-zinc-500">{formatarData(p.criadoEm)}</p>
                   </div>
                   <div className="flex items-center gap-3">

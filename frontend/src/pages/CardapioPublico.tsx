@@ -23,6 +23,12 @@ interface CardapioData {
   cardapio: ItemPublico[]
 }
 
+interface Bairro {
+  id:          string
+  nome:        string
+  taxaEntrega: number | null
+}
+
 interface PedidoConfirmado {
   id: string
   total: number
@@ -46,6 +52,7 @@ export default function CardapioPublico() {
   const [checkoutAberto, setCheckoutAberto] = useState(false)
   const [pedidoConfirmado, setPedidoConfirmado] = useState<PedidoConfirmado | null>(null)
   const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
+  const [bairros, setBairros] = useState<Bairro[]>([])
 
   useEffect(() => {
     if (!slug) return
@@ -57,6 +64,11 @@ export default function CardapioPublico() {
       .then((d) => setDados(d))
       .catch(() => setErroCarga(true))
       .finally(() => setCarregando(false))
+
+    fetch(`${API_URL}/publico/${slug}/bairros`)
+      .then((r) => r.json())
+      .then(setBairros)
+      .catch(() => null)
   }, [slug])
 
   function adicionar(id: string) {
@@ -171,6 +183,7 @@ export default function CardapioPublico() {
           totalItens={totalItens}
           chavePix={dados.estabelecimento.chavePix}
           taxaEntrega={dados.estabelecimento.taxaEntrega}
+          bairros={bairros}
           onFechar={() => setCheckoutAberto(false)}
           onSucesso={(pedido) => {
             setPedidoConfirmado(pedido)
@@ -335,7 +348,7 @@ function BarraCarrinho({
 }
 
 function ModalCheckout({
-  slug, carrinho, subtotal, totalItens, chavePix, taxaEntrega, onFechar, onSucesso,
+  slug, carrinho, subtotal, totalItens, chavePix, taxaEntrega, bairros, onFechar, onSucesso,
 }: {
   slug: string
   carrinho: Record<string, number>
@@ -343,19 +356,27 @@ function ModalCheckout({
   totalItens: number
   chavePix: string | null
   taxaEntrega: number | null
+  bairros: Bairro[]
   onFechar: () => void
   onSucesso: (pedido: PedidoConfirmado) => void
 }) {
   const [clienteNome, setClienteNome] = useState('')
   const [clienteFone, setClienteFone] = useState('')
   const [endereco, setEndereco] = useState('')
+  const [bairroId, setBairroId] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('entrega')
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('pix')
   const [etapaPixAberta, setEtapaPixAberta] = useState(false)
 
-  const taxa = tipoEntrega === 'entrega' ? (taxaEntrega ?? 0) : 0
+  const usaBairros = bairros.length > 0
+  const bairroSelecionado = bairros.find((b) => b.id === bairroId)
+  const taxa = tipoEntrega !== 'entrega'
+    ? 0
+    : usaBairros
+      ? (bairroSelecionado?.taxaEntrega ?? 0)
+      : (taxaEntrega ?? 0)
   const totalReais = subtotal + taxa
 
   async function enviarPedido() {
@@ -367,6 +388,7 @@ function ModalCheckout({
         clienteNome: clienteNome.trim(),
         clienteFone: clienteFone.trim() || undefined,
         enderecoEntrega: tipoEntrega === 'entrega' ? endereco.trim() || undefined : undefined,
+        bairroId: tipoEntrega === 'entrega' && usaBairros ? bairroId : undefined,
         tipoEntrega,
         formaPagamento,
         itens: Object.entries(carrinho).map(([itemCardapioId, quantidade]) => ({
@@ -401,6 +423,7 @@ function ModalCheckout({
     if (formaPagamento === 'pix' && !etapaPixAberta) {
       if (!clienteNome.trim()) return
       if (tipoEntrega === 'entrega' && !endereco.trim()) return
+      if (tipoEntrega === 'entrega' && usaBairros && !bairroId) return
       setEtapaPixAberta(true)
       return
     }
@@ -435,7 +458,7 @@ function ModalCheckout({
             </div>
             {tipoEntrega === 'entrega' && taxa > 0 && (
               <div className="flex justify-between text-zinc-400">
-                <span>Taxa de entrega</span>
+                <span>Taxa de entrega{bairroSelecionado ? ` (${bairroSelecionado.nome})` : ''}</span>
                 <span>{formatarBRL(taxa)}</span>
               </div>
             )}
@@ -501,6 +524,25 @@ function ModalCheckout({
               ))}
             </div>
 
+            {tipoEntrega === 'entrega' && usaBairros && (
+              <label className="mb-4 block">
+                <span className="mb-2 block text-sm font-medium text-zinc-300">Bairro</span>
+                <select
+                  required
+                  value={bairroId}
+                  onChange={(e) => setBairroId(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none focus:border-orange-500"
+                >
+                  <option value="" disabled>Selecione o bairro</option>
+                  {bairros.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.nome} — {b.taxaEntrega != null ? formatarBRL(b.taxaEntrega) : 'grátis'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             {tipoEntrega === 'entrega' && (
               <label className="mb-4 block">
                 <span className="mb-2 block text-sm font-medium text-zinc-300">
@@ -554,7 +596,7 @@ function ModalCheckout({
 
             <button
               type="submit"
-              disabled={enviando || !clienteNome.trim()}
+              disabled={enviando || !clienteNome.trim() || (tipoEntrega === 'entrega' && usaBairros && !bairroId)}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
             >
               {enviando ? (
