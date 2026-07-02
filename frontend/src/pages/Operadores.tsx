@@ -5,17 +5,20 @@ import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { TODAS_PERMISSOES, type Permissao } from '../lib/permissoes'
 
-function gerarEmailFicticio(nome: string): string {
-  const base = nome
+function gerarEmailFicticio(nomePessoa: string, slugEstabelecimento: string): string {
+  const partes = nomePessoa
     .normalize('NFD')
     .toLowerCase()
     .replace(/[^a-z\s]/g, '')
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .join('.')
-  const sufixo = Math.random().toString(36).slice(2, 6)
-  return `${base || 'operador'}.${sufixo}@equipe.comanda-ia.app`
+
+  const primeiro = partes[0] ?? 'operador'
+  const ultimo   = partes.length > 1 ? partes[partes.length - 1] : ''
+  const usuario  = [primeiro, ultimo].filter(Boolean).join('.')
+
+  return `${usuario}@${slugEstabelecimento || 'equipe'}.com`
 }
 
 interface Operador {
@@ -43,6 +46,7 @@ export default function Operadores() {
   const [erro, setErro] = useState<string | null>(null)
   const [expandidoId, setExpandidoId] = useState<string | null>(null)
   const [salvandoPermissoes, setSalvandoPermissoes] = useState<string | null>(null)
+  const [slugEstabelecimento, setSlugEstabelecimento] = useState('')
 
   useEffect(() => {
     fetch(`${API_URL}/estabelecimentos/operadores`, {
@@ -52,6 +56,15 @@ export default function Operadores() {
       .then(setOperadores)
       .catch(console.error)
       .finally(() => setCarregando(false))
+  }, [token])
+
+  useEffect(() => {
+    fetch(`${API_URL}/meu-estabelecimento`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((est) => setSlugEstabelecimento(est.slug ?? ''))
+      .catch(console.error)
   }, [token])
 
   function abrirModal() {
@@ -245,7 +258,7 @@ export default function Operadores() {
                 <div className="flex gap-2">
                   <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="operador@email.com"
                     className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
-                  <button type="button" onClick={() => setEmail(gerarEmailFicticio(nome))} title="Gerar email fictício"
+                  <button type="button" onClick={() => setEmail(gerarEmailFicticio(nome, slugEstabelecimento))} title="Gerar email fictício"
                     className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs font-medium text-zinc-400 transition hover:border-orange-500 hover:text-orange-400">
                     <Wand2 className="h-3.5 w-3.5" />
                     Gerar
