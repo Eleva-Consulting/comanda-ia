@@ -170,6 +170,8 @@ model Pedido {
   bairroNome          String?
   taxaEntrega         Decimal?       @db.Decimal(10, 2)
   total               Decimal        @db.Decimal(10, 2)
+  precisaTroco        Boolean        @default(false)
+  trocoPara           Decimal?       @db.Decimal(10, 2)
   status              StatusPedido   @default(recebido)
   formaPagamento      FormaPagamento @default(pix)
   tipoEntrega         TipoEntrega    @default(entrega)

@@ -38,6 +38,13 @@ interface PedidoConfirmado {
 type FormaPagamento = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
 type TipoEntrega = 'entrega' | 'retirada'
 
+const formaPagamentoLabel: Record<FormaPagamento, string> = {
+  pix:            'PIX',
+  dinheiro:       'Dinheiro',
+  cartao_credito: 'Cartão de crédito',
+  cartao_debito:  'Cartão de débito',
+}
+
 function formatarBRL(valor: number): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -179,6 +186,7 @@ export default function CardapioPublico() {
         <ModalCheckout
           slug={slug!}
           carrinho={carrinho}
+          cardapio={dados.cardapio}
           subtotal={subtotalReais}
           totalItens={totalItens}
           chavePix={dados.estabelecimento.chavePix}
@@ -348,10 +356,11 @@ function BarraCarrinho({
 }
 
 function ModalCheckout({
-  slug, carrinho, subtotal, totalItens, chavePix, taxaEntrega, bairros, onFechar, onSucesso,
+  slug, carrinho, cardapio, subtotal, totalItens, chavePix, taxaEntrega, bairros, onFechar, onSucesso,
 }: {
   slug: string
   carrinho: Record<string, number>
+  cardapio: ItemPublico[]
   subtotal: number
   totalItens: number
   chavePix: string | null
@@ -368,7 +377,9 @@ function ModalCheckout({
   const [erro, setErro] = useState<string | null>(null)
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('entrega')
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('pix')
-  const [etapaPixAberta, setEtapaPixAberta] = useState(false)
+  const [precisaTroco, setPrecisaTroco] = useState(false)
+  const [trocoPara, setTrocoPara] = useState('')
+  const [etapaResumoAberta, setEtapaResumoAberta] = useState(false)
 
   const usaBairros = bairros.length > 0
   const bairroSelecionado = bairros.find((b) => b.id === bairroId)
@@ -391,6 +402,10 @@ function ModalCheckout({
         bairroId: tipoEntrega === 'entrega' && usaBairros ? bairroId : undefined,
         tipoEntrega,
         formaPagamento,
+        precisaTroco: formaPagamento === 'dinheiro' ? precisaTroco : undefined,
+        trocoPara: formaPagamento === 'dinheiro' && precisaTroco
+          ? parseFloat(trocoPara.replace(',', '.'))
+          : undefined,
         itens: Object.entries(carrinho).map(([itemCardapioId, quantidade]) => ({
           itemCardapioId,
           quantidade,
@@ -412,7 +427,7 @@ function ModalCheckout({
       onSucesso(pedido)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao enviar pedido')
-      setEtapaPixAberta(false)
+      setEtapaResumoAberta(false)
     } finally {
       setEnviando(false)
     }
@@ -420,11 +435,12 @@ function ModalCheckout({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (formaPagamento === 'pix' && !etapaPixAberta) {
+    if (!etapaResumoAberta) {
       if (!clienteNome.trim()) return
       if (tipoEntrega === 'entrega' && !endereco.trim()) return
       if (tipoEntrega === 'entrega' && usaBairros && !bairroId) return
-      setEtapaPixAberta(true)
+      if (formaPagamento === 'dinheiro' && precisaTroco && !trocoPara.trim()) return
+      setEtapaResumoAberta(true)
       return
     }
     await enviarPedido()
@@ -586,6 +602,28 @@ function ModalCheckout({
                   </button>
                 ))}
               </div>
+              {formaPagamento === 'dinheiro' && (
+                <div className="mt-3 space-y-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={precisaTroco}
+                      onChange={(e) => setPrecisaTroco(e.target.checked)}
+                      className="h-4 w-4 rounded border-zinc-600 accent-orange-500"
+                    />
+                    <span className="text-sm text-zinc-300">Precisa de troco?</span>
+                  </label>
+                  {precisaTroco && (
+                    <input
+                      value={trocoPara}
+                      onChange={(e) => setTrocoPara(e.target.value)}
+                      placeholder="Troco para quanto? (R$)"
+                      inputMode="decimal"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             {erro && (
@@ -596,7 +634,11 @@ function ModalCheckout({
 
             <button
               type="submit"
-              disabled={enviando || !clienteNome.trim() || (tipoEntrega === 'entrega' && usaBairros && !bairroId)}
+              disabled={
+                enviando || !clienteNome.trim() ||
+                (tipoEntrega === 'entrega' && usaBairros && !bairroId) ||
+                (formaPagamento === 'dinheiro' && precisaTroco && !trocoPara.trim())
+              }
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
             >
               {enviando ? (
@@ -604,46 +646,79 @@ function ModalCheckout({
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Enviando...
                 </>
-              ) : formaPagamento === 'pix' ? (
-                `Ver chave PIX · ${formatarBRL(totalReais)}`
               ) : (
-                `Enviar pedido · ${formatarBRL(totalReais)}`
+                `Revisar pedido · ${formatarBRL(totalReais)}`
               )}
             </button>
           </form>
         </div>
       </div>
 
-      {etapaPixAberta && (
+      {etapaResumoAberta && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
-            <p className="mb-1 text-lg font-bold">Pague via PIX</p>
-            <p className="mb-4 text-sm text-zinc-400">Copie a chave abaixo e pague no seu banco</p>
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 max-h-[90vh] overflow-y-auto">
+            <p className="mb-1 text-lg font-bold text-center">Confirme seu pedido</p>
+            <p className="mb-4 text-sm text-zinc-400 text-center">Revise antes de enviar pra cozinha</p>
 
-            {chavePix ? (
-              <div className="mb-4 rounded-xl bg-zinc-950 px-4 py-3">
-                <p className="mb-1 text-xs text-zinc-500">Chave PIX</p>
-                <p className="break-all font-mono text-sm font-semibold text-orange-400">
-                  {chavePix}
-                </p>
+            <div className="mb-4 space-y-1 rounded-xl bg-zinc-950 p-3 text-sm">
+              {Object.entries(carrinho).map(([itemId, quantidade]) => {
+                const item = cardapio.find((i) => i.id === itemId)
+                if (!item) return null
+                return (
+                  <div key={itemId} className="flex justify-between text-zinc-300">
+                    <span>{quantidade}x {item.nome}</span>
+                    <span>{formatarBRL(item.preco * quantidade)}</span>
+                  </div>
+                )
+              })}
+              {taxa > 0 && (
+                <div className="flex justify-between text-zinc-400">
+                  <span>Taxa de entrega{bairroSelecionado ? ` (${bairroSelecionado.nome})` : ''}</span>
+                  <span>{formatarBRL(taxa)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-zinc-800 pt-1 font-bold text-zinc-100">
+                <span>Total</span>
+                <span>{formatarBRL(totalReais)}</span>
               </div>
-            ) : (
-              <p className="mb-4 text-sm text-zinc-500">
-                Entre em contato com o estabelecimento para obter a chave PIX.
-              </p>
+            </div>
+
+            <div className="mb-4 space-y-1 text-sm text-zinc-400">
+              <p><span className="text-zinc-300">Cliente:</span> {clienteNome}</p>
+              <p><span className="text-zinc-300">Entrega:</span> {tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏪 Retirada no local'}</p>
+              {tipoEntrega === 'entrega' && (
+                <p><span className="text-zinc-300">Endereço:</span> {endereco}</p>
+              )}
+              <p><span className="text-zinc-300">Pagamento:</span> {formaPagamentoLabel[formaPagamento]}</p>
+              {formaPagamento === 'dinheiro' && precisaTroco && trocoPara && (
+                <p><span className="text-zinc-300">Troco para:</span> {formatarBRL(parseFloat(trocoPara.replace(',', '.')) || 0)}</p>
+              )}
+            </div>
+
+            {formaPagamento === 'pix' && (
+              chavePix ? (
+                <div className="mb-4 rounded-xl bg-zinc-950 px-4 py-3 text-center">
+                  <p className="mb-1 text-xs text-zinc-500">Chave PIX</p>
+                  <p className="break-all font-mono text-sm font-semibold text-orange-400">{chavePix}</p>
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(chavePix) }}
+                    className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
+                  >
+                    Copiar chave PIX
+                  </button>
+                </div>
+              ) : (
+                <p className="mb-4 text-center text-sm text-zinc-500">
+                  Entre em contato com o estabelecimento para obter a chave PIX.
+                </p>
+              )
             )}
 
-            <p className="mb-6 text-sm text-zinc-400">
-              Total: <span className="font-bold text-white">{formatarBRL(totalReais)}</span>
-            </p>
-
-            {chavePix && (
-              <button
-                onClick={() => { navigator.clipboard.writeText(chavePix) }}
-                className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
-              >
-                Copiar chave PIX
-              </button>
+            {erro && (
+              <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+                {erro}
+              </p>
             )}
 
             <button
@@ -651,13 +726,14 @@ function ModalCheckout({
               disabled={enviando}
               className="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
             >
-              {enviando ? 'Enviando...' : 'Já paguei — Confirmar pedido'}
+              {enviando ? 'Enviando...' : formaPagamento === 'pix' ? 'Já paguei — Confirmar pedido' : 'Confirmar pedido'}
             </button>
             <button
-              onClick={() => setEtapaPixAberta(false)}
-              className="mt-2 w-full rounded-xl py-2.5 text-sm text-zinc-500 hover:text-zinc-300"
+              onClick={() => setEtapaResumoAberta(false)}
+              disabled={enviando}
+              className="mt-2 w-full rounded-xl py-2.5 text-sm text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
             >
-              Voltar
+              Voltar e editar
             </button>
           </div>
         </div>

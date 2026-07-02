@@ -18,10 +18,20 @@ interface Pedido {
   bairroNome:      string | null
   taxaEntrega:     number | null
   tipoEntrega:     'entrega' | 'retirada'
+  formaPagamento:  'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
+  precisaTroco:    boolean
+  trocoPara:       number | null
   status:          string
   total:           number
   criadoEm:        string
   itens:           ItemPedido[]
+}
+
+const formaPagamentoLabel: Record<string, string> = {
+  pix:            'PIX',
+  dinheiro:       'Dinheiro',
+  cartao_credito: 'Cartão de Crédito',
+  cartao_debito:  'Cartão de Débito',
 }
 
 interface Estabelecimento {
@@ -129,6 +139,14 @@ export default function ImprimirComanda() {
         <span>R${Number(pedido.total).toFixed(2)}</span>
       </div>
       <div className="linha-dupla" />
+
+      <p>Pagamento: {formaPagamentoLabel[pedido.formaPagamento] ?? pedido.formaPagamento}</p>
+      {pedido.formaPagamento === 'dinheiro' && pedido.precisaTroco && pedido.trocoPara != null && (
+        <>
+          <p>Troco para: R${Number(pedido.trocoPara).toFixed(2)}</p>
+          <p>Levar de troco: R${(Number(pedido.trocoPara) - Number(pedido.total)).toFixed(2)}</p>
+        </>
+      )}
 
       <p className="center no-print" style={{ marginTop: 16, color: '#666' }}>
         A impressão deve iniciar automaticamente.

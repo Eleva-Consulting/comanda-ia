@@ -6,6 +6,7 @@ import { enviarEmail, templates } from '../mailer.js';
 import { enviarPush } from '../push.js';
 import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
+import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
@@ -29,6 +30,8 @@ const FazerPedidoSchema = Type.Object({
     Type.Literal('cartao_credito'),
     Type.Literal('cartao_debito'),
   ]),
+  precisaTroco: Type.Optional(Type.Boolean()),
+  trocoPara:    Type.Optional(Type.Number({ minimum: 0 })),
   itens: Type.Array(
     Type.Object({
       itemCardapioId: Type.String(),
@@ -121,19 +124,25 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     schema: { params: SlugParamsSchema, body: FazerPedidoSchema },
   }, async (request, reply) => {
     const { slug } = request.params as { slug: string };
-    const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, itens } = request.body as {
+    const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, precisaTroco, trocoPara, itens } = request.body as {
       clienteNome:      string;
       clienteFone?:     string;
       enderecoEntrega?: string;
       bairroId?:        string;
       tipoEntrega:      TipoEntrega;
       formaPagamento:   FormaPagamento;
+      precisaTroco?:    boolean;
+      trocoPara?:       number;
       itens:            ItemPedidoInput[];
     };
     const clienteFoneNormalizado = clienteFone?.trim() || null;
 
     if (tipoEntrega === 'entrega' && !enderecoEntrega?.trim()) {
       return reply.status(400).send({ erro: 'Endereço de entrega é obrigatório' });
+    }
+
+    if (formaPagamento === 'dinheiro' && precisaTroco && !trocoPara) {
+      return reply.status(400).send({ erro: 'Informe o valor para o troco' });
     }
 
     const estabelecimento = await prisma.estabelecimento.findUnique({
@@ -199,9 +208,15 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     const total = subtotal + resultadoTaxa.taxa;
 
+    if (formaPagamento === 'dinheiro' && precisaTroco && trocoPara! < total) {
+      return reply.status(400).send({ erro: 'O valor do troco precisa ser maior ou igual ao total do pedido' });
+    }
+
     const pedido = await prisma.pedido.create({
       data: {
         clienteNome, clienteFone: clienteFoneNormalizado, enderecoEntrega, total, formaPagamento, tipoEntrega,
+        precisaTroco: formaPagamento === 'dinheiro' ? !!precisaTroco : false,
+        trocoPara:    formaPagamento === 'dinheiro' && precisaTroco ? trocoPara : null,
         bairroNome:  resultadoTaxa.bairroNome,
         taxaEntrega: resultadoTaxa.taxa,
         estabelecimentoId: estabelecimento.id,
@@ -265,9 +280,23 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp dono'));
     }
 
-    // WhatsApp para o CLIENTE — confirmar recebimento do pedido (fire-and-forget)
-    if (formaPagamento === 'pix' && estabelecimento.chavePix && clienteFoneNormalizado) {
-      const msgCliente = `✅ *Pedido recebido, ${clienteNome}!*\n\nTotal: *R$ ${total.toFixed(2)}*\n\n💸 Faça o PIX para:\n*${estabelecimento.chavePix}*\n\nEm seguida, envie o comprovante aqui neste WhatsApp para confirmarmos seu pedido na hora! 😊`;
+    // WhatsApp para o CLIENTE — resumo do pedido (fire-and-forget)
+    if (clienteFoneNormalizado) {
+      const msgCliente = montarResumoWhatsApp({
+        nomeEstabelecimento: estabelecimento.nome,
+        clienteNome,
+        itens: itensComSnapshot,
+        subtotal,
+        taxaEntrega: resultadoTaxa.taxa,
+        bairroNome: resultadoTaxa.bairroNome,
+        enderecoEntrega: enderecoEntrega ?? null,
+        tipoEntrega,
+        formaPagamento,
+        precisaTroco: formaPagamento === 'dinheiro' ? !!precisaTroco : false,
+        trocoPara: formaPagamento === 'dinheiro' && precisaTroco ? trocoPara ?? null : null,
+        total,
+        chavePix: estabelecimento.chavePix,
+      });
       whatsApp.enviarMensagem(estabelecimento.id, clienteFoneNormalizado, msgCliente)
         .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente'));
     }

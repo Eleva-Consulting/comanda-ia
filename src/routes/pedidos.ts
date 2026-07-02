@@ -5,6 +5,7 @@ import { autenticar, temPermissao } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
+import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -57,6 +58,8 @@ const ManualPedidoSchema = Type.Object({
     Type.Literal('cartao_credito'),
     Type.Literal('cartao_debito'),
   ])),
+  precisaTroco: Type.Optional(Type.Boolean()),
+  trocoPara:    Type.Optional(Type.Number({ minimum: 0 })),
   itens: Type.Array(
     Type.Object({
       itemCardapioId: Type.String({ minLength: 1 }),
@@ -300,20 +303,28 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar, temPermissao('pedido_manual')],
     schema: { body: ManualPedidoSchema },
   }, async (request, reply) => {
-    const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, itens } = request.body as {
+    const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, precisaTroco, trocoPara, itens } = request.body as {
       clienteNome:      string;
       clienteFone?:     string;
       enderecoEntrega?: string;
       bairroId?:        string;
       tipoEntrega?:     TipoEntrega;
       formaPagamento?:  FormaPagamento;
+      precisaTroco?:    boolean;
+      trocoPara?:       number;
       itens: { itemCardapioId: string; quantidade: number; observacao?: string }[];
     };
     const { estabelecimentoId } = request.user;
     const tipoEntregaFinal = tipoEntrega ?? 'retirada';
+    const formaPagamentoFinal = formaPagamento ?? 'dinheiro';
+    const clienteFoneNormalizado = clienteFone?.trim() || null;
 
     if (tipoEntregaFinal === 'entrega' && !enderecoEntrega?.trim()) {
       return reply.status(400).send({ erro: 'Endereço de entrega é obrigatório' });
+    }
+
+    if (formaPagamentoFinal === 'dinheiro' && precisaTroco && !trocoPara) {
+      return reply.status(400).send({ erro: 'Informe o valor para o troco' });
     }
 
     const itemIds = itens.map((i) => i.itemCardapioId);
@@ -360,16 +371,22 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
     const total = subtotal + resultadoTaxa.taxa;
 
+    if (formaPagamentoFinal === 'dinheiro' && precisaTroco && trocoPara! < total) {
+      return reply.status(400).send({ erro: 'O valor do troco precisa ser maior ou igual ao total do pedido' });
+    }
+
     const pedido = await prisma.pedido.create({
       data: {
         clienteNome,
-        clienteFone: clienteFone?.trim() || null,
+        clienteFone: clienteFoneNormalizado,
         enderecoEntrega: enderecoEntrega?.trim() || null,
         bairroNome:  resultadoTaxa.bairroNome,
         taxaEntrega: resultadoTaxa.taxa,
         total,
         tipoEntrega: tipoEntregaFinal,
-        formaPagamento: formaPagamento ?? 'dinheiro',
+        formaPagamento: formaPagamentoFinal,
+        precisaTroco: formaPagamentoFinal === 'dinheiro' ? !!precisaTroco : false,
+        trocoPara:    formaPagamentoFinal === 'dinheiro' && precisaTroco ? trocoPara : null,
         estabelecimentoId: estabelecimentoId!,
         itens: { create: itensComSnapshot },
       },
@@ -377,6 +394,30 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     });
 
     getIO().to(estabelecimentoId!).emit('pedido:novo', pedido);
+
+    // WhatsApp para o CLIENTE — resumo do pedido (fire-and-forget)
+    if (clienteFoneNormalizado) {
+      const estabWp = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+      if (estabWp) {
+        const msgCliente = montarResumoWhatsApp({
+          nomeEstabelecimento: estabWp.nome,
+          clienteNome,
+          itens: itensComSnapshot,
+          subtotal,
+          taxaEntrega: resultadoTaxa.taxa,
+          bairroNome: resultadoTaxa.bairroNome,
+          enderecoEntrega: enderecoEntrega?.trim() || null,
+          tipoEntrega: tipoEntregaFinal,
+          formaPagamento: formaPagamentoFinal,
+          precisaTroco: formaPagamentoFinal === 'dinheiro' ? !!precisaTroco : false,
+          trocoPara: formaPagamentoFinal === 'dinheiro' && precisaTroco ? trocoPara ?? null : null,
+          total,
+          chavePix: estabWp.chavePix,
+        });
+        whatsApp.enviarMensagem(estabelecimentoId!, clienteFoneNormalizado, msgCliente)
+          .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente (pedido manual)'));
+      }
+    }
 
     return reply.status(201).send(pedido);
   });

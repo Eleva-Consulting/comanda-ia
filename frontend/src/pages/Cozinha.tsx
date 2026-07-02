@@ -27,6 +27,8 @@ interface Pedido {
   bairroNome:      string | null
   taxaEntrega:     number | string | null
   total:           number | string
+  precisaTroco:    boolean
+  trocoPara:       number | string | null
   status:          Status
   criadoEm:        string
   itens:           ItemPedido[]
@@ -70,12 +72,30 @@ const statusConfig: Record<Status, { label: string; badge: string }> = {
   cancelado:             { label: 'Cancelado',         badge: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/30' },
 }
 
-const proximaAcao: Partial<Record<Status, { proximoStatus: Status; label: string; Icone: typeof Flame; cor?: string }>> = {
+/** Rótulo do status exibido — "Entregue" não faz sentido pra retirada, vira "Retirado". */
+function labelStatus(status: Status, tipoEntrega: 'entrega' | 'retirada'): string {
+  if (status === 'entregue' && tipoEntrega === 'retirada') return 'Retirado'
+  return statusConfig[status].label
+}
+
+type Acao = { proximoStatus: Status; label: string; Icone: typeof Flame; cor?: string }
+
+const proximaAcaoEntrega: Partial<Record<Status, Acao>> = {
   recebido:             { proximoStatus: 'pagamento_confirmado', label: 'Confirmar pagamento', Icone: Banknote,     cor: 'bg-emerald-600 hover:bg-emerald-700' },
   pagamento_confirmado: { proximoStatus: 'em_preparo',          label: 'Iniciar preparo',      Icone: Flame,        cor: 'bg-orange-500 hover:bg-orange-600' },
   em_preparo:           { proximoStatus: 'pronto',              label: 'Marcar pronto',        Icone: Check,        cor: 'bg-orange-500 hover:bg-orange-600' },
   pronto:               { proximoStatus: 'a_caminho',           label: 'Saiu para entrega',    Icone: Truck,        cor: 'bg-orange-500 hover:bg-orange-600' },
   a_caminho:            { proximoStatus: 'entregue',            label: 'Marcar entregue',      Icone: PackageCheck, cor: 'bg-orange-500 hover:bg-orange-600' },
+}
+
+// Retirada não passa por "saiu para entrega" — de "pronto" já vai direto pra retirado.
+const proximaAcaoRetirada: Partial<Record<Status, Acao>> = {
+  ...proximaAcaoEntrega,
+  pronto: { proximoStatus: 'entregue', label: 'Marcar retirado', Icone: PackageCheck, cor: 'bg-orange-500 hover:bg-orange-600' },
+}
+
+function obterProximaAcao(status: Status, tipoEntrega: 'entrega' | 'retirada'): Acao | undefined {
+  return (tipoEntrega === 'retirada' ? proximaAcaoRetirada : proximaAcaoEntrega)[status]
 }
 
 const statusAtivos: Status[] = ['recebido', 'pagamento_confirmado', 'em_preparo', 'pronto', 'a_caminho']
@@ -123,6 +143,8 @@ export default function Cozinha() {
   const [erroModal, setErroModal]               = useState<string | null>(null)
   const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
   const [tipoEntregaModal, setTipoEntregaModal]       = useState<'entrega' | 'retirada'>('retirada')
+  const [precisaTrocoModal, setPrecisaTrocoModal]     = useState(false)
+  const [trocoParaModal, setTrocoParaModal]           = useState('')
   const [enderecoModal, setEnderecoModal]             = useState('')
   const [bairroIdModal, setBairroIdModal]             = useState('')
   const [bairros, setBairros]                         = useState<Bairro[]>([])
@@ -267,6 +289,8 @@ export default function Cozinha() {
     setErroModal(null)
     setFormaPagamentoModal('dinheiro')
     setTipoEntregaModal('retirada')
+    setPrecisaTrocoModal(false)
+    setTrocoParaModal('')
     setEnderecoModal('')
     setBairroIdModal('')
     setModalAberto(true)
@@ -397,6 +421,10 @@ export default function Cozinha() {
       setErroModal('Selecione o bairro de entrega')
       return
     }
+    if (formaPagamentoModal === 'dinheiro' && precisaTrocoModal && !trocoParaModal.trim()) {
+      setErroModal('Informe o valor para o troco')
+      return
+    }
     setEnviandoManual(true)
     try {
       const resp = await fetch(`${API_URL}/pedidos/manual`, {
@@ -409,6 +437,10 @@ export default function Cozinha() {
           bairroId: tipoEntregaModal === 'entrega' && bairros.length > 0 ? bairroIdModal : undefined,
           itens,
           formaPagamento: formaPagamentoModal,
+          precisaTroco: formaPagamentoModal === 'dinheiro' ? precisaTrocoModal : undefined,
+          trocoPara: formaPagamentoModal === 'dinheiro' && precisaTrocoModal
+            ? parseFloat(trocoParaModal.replace(',', '.'))
+            : undefined,
           tipoEntrega: tipoEntregaModal,
         }),
       })
@@ -471,7 +503,7 @@ export default function Cozinha() {
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {pedidosVisiveis.map((pedido) => {
             const cfg = statusConfig[pedido.status]
-            const acao = proximaAcao[pedido.status]
+            const acao = obterProximaAcao(pedido.status, pedido.tipoEntrega)
             const atualizando = atualizandoId === pedido.id
             const cancelando = cancelandoId === pedido.id
 
@@ -489,7 +521,7 @@ export default function Cozinha() {
                     </div>
                   </div>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cfg.badge}`}>
-                    {cfg.label}
+                    {labelStatus(pedido.status, pedido.tipoEntrega)}
                   </span>
                 </div>
 
@@ -508,6 +540,11 @@ export default function Cozinha() {
                   }`}>
                     {formaPagamentoLabel[pedido.formaPagamento] ?? pedido.formaPagamento}
                   </span>
+                  {pedido.formaPagamento === 'dinheiro' && pedido.precisaTroco && pedido.trocoPara != null && (
+                    <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
+                      Troco p/ R$ {Number(pedido.trocoPara).toFixed(2)}
+                    </span>
+                  )}
                 </div>
 
                 {pedido.tipoEntrega === 'entrega' && pedido.enderecoEntrega && (
@@ -693,6 +730,28 @@ export default function Cozinha() {
                       </button>
                     ))}
                   </div>
+                  {formaPagamentoModal === 'dinheiro' && (
+                    <div className="mt-3 space-y-2">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={precisaTrocoModal}
+                          onChange={(e) => setPrecisaTrocoModal(e.target.checked)}
+                          className="h-4 w-4 rounded border-zinc-600 accent-orange-500"
+                        />
+                        <span className="text-sm text-zinc-300">Precisa de troco?</span>
+                      </label>
+                      {precisaTrocoModal && (
+                        <input
+                          value={trocoParaModal}
+                          onChange={(e) => setTrocoParaModal(e.target.value)}
+                          placeholder="Troco para quanto? (R$)"
+                          inputMode="decimal"
+                          className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

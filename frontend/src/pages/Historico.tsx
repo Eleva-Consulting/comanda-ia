@@ -172,7 +172,9 @@ export default function Historico() {
               >
                 <div className="flex items-center gap-3">
                   <span className={`rounded-lg px-2.5 py-0.5 text-xs font-medium ${statusColor[pedido.status] ?? 'bg-zinc-800 text-zinc-400'}`}>
-                    {statusLabel[pedido.status] ?? pedido.status}
+                    {pedido.status === 'entregue' && pedido.tipoEntrega === 'retirada'
+                      ? 'Retirado'
+                      : statusLabel[pedido.status] ?? pedido.status}
                   </span>
                   <div>
                     <p className="font-medium">{pedido.clienteNome}</p>
