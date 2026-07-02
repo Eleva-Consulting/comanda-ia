@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle, Banknote } from 'lucide-react'
+import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle, Banknote, Pencil } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
@@ -115,6 +115,11 @@ export default function Cozinha() {
   const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
   const [tipoEntregaModal, setTipoEntregaModal]       = useState<'entrega' | 'retirada'>('retirada')
 
+  // Modal editar itens de pedido existente
+  const [edicaoItensPedido, setEdicaoItensPedido] = useState<Pedido | null>(null)
+  const [salvandoItemId, setSalvandoItemId]       = useState<string | null>(null)
+  const [erroEdicaoItens, setErroEdicaoItens]     = useState<string | null>(null)
+
   useEffect(() => {
     if (!token) return
 
@@ -220,14 +225,7 @@ export default function Cozinha() {
     }
   }
 
-  async function abrirModalNovoPedido() {
-    setClienteNomeModal('')
-    setClienteFoneModal('')
-    setSelecionados({})
-    setErroModal(null)
-    setFormaPagamentoModal('dinheiro')
-    setTipoEntregaModal('retirada')
-    setModalAberto(true)
+  async function carregarCardapioSeNecessario() {
     if (cardapio.length > 0) return
     setCarregandoMenu(true)
     try {
@@ -240,6 +238,94 @@ export default function Cozinha() {
       console.error(e)
     } finally {
       setCarregandoMenu(false)
+    }
+  }
+
+  async function abrirModalNovoPedido() {
+    setClienteNomeModal('')
+    setClienteFoneModal('')
+    setSelecionados({})
+    setErroModal(null)
+    setFormaPagamentoModal('dinheiro')
+    setTipoEntregaModal('retirada')
+    setModalAberto(true)
+    await carregarCardapioSeNecessario()
+  }
+
+  function aplicarPedidoAtualizado(pedidoAtualizado: Pedido) {
+    setPedidos((prev) => prev.map((p) => (p.id === pedidoAtualizado.id ? pedidoAtualizado : p)))
+    setEdicaoItensPedido((prev) => (prev && prev.id === pedidoAtualizado.id ? pedidoAtualizado : prev))
+  }
+
+  async function abrirEdicaoItens(pedido: Pedido) {
+    setErroEdicaoItens(null)
+    setEdicaoItensPedido(pedido)
+    await carregarCardapioSeNecessario()
+  }
+
+  async function adicionarItemAoPedido(itemCardapioId: string) {
+    if (!edicaoItensPedido) return
+    setErroEdicaoItens(null)
+    setSalvandoItemId(itemCardapioId)
+    try {
+      const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ itemCardapioId, quantidade: 1 }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroEdicaoItens(dados.erro ?? 'Erro ao adicionar item'); return }
+      aplicarPedidoAtualizado(dados)
+    } catch {
+      setErroEdicaoItens('Falha de conexão')
+    } finally {
+      setSalvandoItemId(null)
+    }
+  }
+
+  async function alterarQuantidadeItemPedido(item: ItemPedido, delta: number) {
+    if (!edicaoItensPedido) return
+    const novaQuantidade = item.quantidade + delta
+    if (novaQuantidade < 1) { removerItemPedido(item.id); return }
+
+    setErroEdicaoItens(null)
+    setSalvandoItemId(item.id)
+    try {
+      const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens/${item.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ quantidade: novaQuantidade }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroEdicaoItens(dados.erro ?? 'Erro ao atualizar item'); return }
+      aplicarPedidoAtualizado(dados)
+    } catch {
+      setErroEdicaoItens('Falha de conexão')
+    } finally {
+      setSalvandoItemId(null)
+    }
+  }
+
+  async function removerItemPedido(itemPedidoId: string) {
+    if (!edicaoItensPedido) return
+    setErroEdicaoItens(null)
+    setSalvandoItemId(itemPedidoId)
+    try {
+      const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens/${itemPedidoId}`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!resp.ok) {
+        const dados = await resp.json().catch(() => ({}))
+        setErroEdicaoItens(dados.erro ?? 'Erro ao remover item')
+        return
+      }
+      const dados = await resp.json()
+      aplicarPedidoAtualizado(dados)
+    } catch {
+      setErroEdicaoItens('Falha de conexão')
+    } finally {
+      setSalvandoItemId(null)
     }
   }
 
@@ -403,13 +489,24 @@ export default function Cozinha() {
                 <div className="border-t border-zinc-800 pt-4">
                   <div className="mb-3 flex items-center justify-between">
                     <span className="text-lg font-bold">R$ {Number(pedido.total).toFixed(2)}</span>
-                    <button
-                      onClick={() => window.open(`/imprimir/${pedido.id}`, '_blank')}
-                      className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
-                      title="Imprimir comanda"
-                    >
-                      <Printer className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {pedido.status !== 'entregue' && pedido.status !== 'cancelado' && (
+                        <button
+                          onClick={() => abrirEdicaoItens(pedido)}
+                          className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                          title="Editar itens do pedido"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => window.open(`/imprimir/${pedido.id}`, '_blank')}
+                        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                        title="Imprimir comanda"
+                      >
+                        <Printer className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     {acao && (
@@ -584,6 +681,109 @@ export default function Cozinha() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal editar itens de pedido existente */}
+      {edicaoItensPedido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="flex h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-zinc-800 bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-800 p-5">
+              <div>
+                <h3 className="text-lg font-bold">Editar pedido</h3>
+                <p className="text-xs text-zinc-500">{edicaoItensPedido.clienteNome} · #{edicaoItensPedido.id.slice(-6)}</p>
+              </div>
+              <button onClick={() => setEdicaoItensPedido(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              <div>
+                <p className="mb-3 text-xs font-medium text-zinc-400">Itens do pedido</p>
+                <div className="space-y-2">
+                  {edicaoItensPedido.itens.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{item.nomeItem}</p>
+                          <p className="text-xs text-orange-400">R$ {Number(item.precoUnit).toFixed(2)}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-800 px-1 py-1">
+                          <button
+                            type="button"
+                            disabled={salvandoItemId === item.id}
+                            onClick={() => alterarQuantidadeItemPedido(item, -1)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700 disabled:opacity-40"
+                            title={item.quantidade === 1 ? 'Remover item' : 'Diminuir'}
+                          >
+                            {item.quantidade === 1 ? <X className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
+                          </button>
+                          {salvandoItemId === item.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-400" />
+                          ) : (
+                            <span className="min-w-5 text-center text-sm font-bold">{item.quantidade}</span>
+                          )}
+                          <button
+                            type="button"
+                            disabled={salvandoItemId === item.id}
+                            onClick={() => alterarQuantidadeItemPedido(item, 1)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700 disabled:opacity-40"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      {item.observacao && (
+                        <p className="mt-1.5 text-xs italic text-zinc-500">obs: {item.observacao}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-xs font-medium text-zinc-400">Adicionar item</p>
+                {carregandoMenu ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {cardapio.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{item.nome}</p>
+                          <p className="text-xs text-orange-400">R$ {Number(item.preco).toFixed(2)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={salvandoItemId === item.id}
+                          onClick={() => adicionarItemAoPedido(item.id)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+                        >
+                          {salvandoItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {erroEdicaoItens && (
+                <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+                  {erroEdicaoItens}
+                </p>
+              )}
+            </div>
+
+            <div className="border-t border-zinc-800 p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Total</span>
+                <span className="text-xl font-extrabold text-orange-400">R$ {Number(edicaoItensPedido.total).toFixed(2)}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

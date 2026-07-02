@@ -68,6 +68,28 @@ const PedidoParamsSchema = Type.Object({
   id: Type.String(),
 });
 
+const ItemPedidoParamsSchema = Type.Object({
+  id:          Type.String(),
+  itemPedidoId: Type.String(),
+});
+
+const AdicionarItemSchema = Type.Object({
+  itemCardapioId: Type.String({ minLength: 1 }),
+  quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+  observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+});
+
+const AtualizarQuantidadeItemSchema = Type.Object({
+  quantidade: Type.Integer({ minimum: 1, maximum: 100 }),
+});
+
+// Status em que o pedido ainda pode ter os itens editados
+const statusEditaveis: StatusPedido[] = ['recebido', 'pagamento_confirmado', 'em_preparo', 'pronto', 'a_caminho'];
+
+function recalcularTotal(itens: { precoUnit: unknown; quantidade: number }[]): number {
+  return itens.reduce((soma, item) => soma + Number(item.precoUnit) * item.quantidade, 0);
+}
+
 // Transições de status permitidas
 const transicoesPermitidas: Record<StatusPedido, StatusPedido[]> = {
   recebido:              ['pagamento_confirmado', 'cancelado'],
@@ -349,5 +371,116 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Pedido não encontrado' });
     }
     return reply.status(204).send();
+  });
+
+  // ── POST /pedidos/:id/itens ──────────────────────────────────────────────────
+  // Adiciona um item a um pedido existente, usando o preço atual do cardápio.
+  fastify.post('/pedidos/:id/itens', {
+    onRequest: [autenticar, temPermissao('cozinha')],
+    schema: { params: PedidoParamsSchema, body: AdicionarItemSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { itemCardapioId, quantidade, observacao } = request.body as {
+      itemCardapioId: string; quantidade: number; observacao?: string;
+    };
+    const { estabelecimentoId } = request.user;
+
+    const pedido = await prisma.pedido.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!pedido) return reply.status(404).send({ erro: 'Pedido não encontrado' });
+    if (!statusEditaveis.includes(pedido.status)) {
+      return reply.status(422).send({ erro: 'Este pedido não pode mais ser editado' });
+    }
+
+    const itemCardapio = await prisma.itemCardapio.findFirst({
+      where: { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+    });
+    if (!itemCardapio) return reply.status(400).send({ erro: 'Item não disponível ou não pertence a este estabelecimento' });
+
+    await prisma.itemPedido.create({
+      data: {
+        pedidoId:   id,
+        nomeItem:   itemCardapio.nome,
+        quantidade,
+        precoUnit:  itemCardapio.preco,
+        observacao: observacao ?? null,
+      },
+    });
+
+    const itens = await prisma.itemPedido.findMany({ where: { pedidoId: id } });
+    const pedidoAtualizado = await prisma.pedido.update({
+      where:   { id },
+      data:    { total: recalcularTotal(itens) },
+      include: { itens: true },
+    });
+
+    getIO().to(estabelecimentoId!).emit('pedido:atualizado', pedidoAtualizado);
+    return reply.status(201).send(pedidoAtualizado);
+  });
+
+  // ── PATCH /pedidos/:id/itens/:itemPedidoId ───────────────────────────────────
+  // Muda a quantidade de um item já existente no pedido — preço travado não muda.
+  fastify.patch('/pedidos/:id/itens/:itemPedidoId', {
+    onRequest: [autenticar, temPermissao('cozinha')],
+    schema: { params: ItemPedidoParamsSchema, body: AtualizarQuantidadeItemSchema },
+  }, async (request, reply) => {
+    const { id, itemPedidoId } = request.params as { id: string; itemPedidoId: string };
+    const { quantidade } = request.body as { quantidade: number };
+    const { estabelecimentoId } = request.user;
+
+    const pedido = await prisma.pedido.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!pedido) return reply.status(404).send({ erro: 'Pedido não encontrado' });
+    if (!statusEditaveis.includes(pedido.status)) {
+      return reply.status(422).send({ erro: 'Este pedido não pode mais ser editado' });
+    }
+
+    const itemExistente = await prisma.itemPedido.findFirst({ where: { id: itemPedidoId, pedidoId: id } });
+    if (!itemExistente) return reply.status(404).send({ erro: 'Item não encontrado neste pedido' });
+
+    await prisma.itemPedido.update({ where: { id: itemPedidoId }, data: { quantidade } });
+
+    const itens = await prisma.itemPedido.findMany({ where: { pedidoId: id } });
+    const pedidoAtualizado = await prisma.pedido.update({
+      where:   { id },
+      data:    { total: recalcularTotal(itens) },
+      include: { itens: true },
+    });
+
+    getIO().to(estabelecimentoId!).emit('pedido:atualizado', pedidoAtualizado);
+    return pedidoAtualizado;
+  });
+
+  // ── DELETE /pedidos/:id/itens/:itemPedidoId ──────────────────────────────────
+  // Remove um item do pedido. Bloqueado se for o último item restante.
+  fastify.delete('/pedidos/:id/itens/:itemPedidoId', {
+    onRequest: [autenticar, temPermissao('cozinha')],
+    schema: { params: ItemPedidoParamsSchema },
+  }, async (request, reply) => {
+    const { id, itemPedidoId } = request.params as { id: string; itemPedidoId: string };
+    const { estabelecimentoId } = request.user;
+
+    const pedido = await prisma.pedido.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!pedido) return reply.status(404).send({ erro: 'Pedido não encontrado' });
+    if (!statusEditaveis.includes(pedido.status)) {
+      return reply.status(422).send({ erro: 'Este pedido não pode mais ser editado' });
+    }
+
+    const itensAtuais = await prisma.itemPedido.findMany({ where: { pedidoId: id } });
+    const itemExistente = itensAtuais.find((i) => i.id === itemPedidoId);
+    if (!itemExistente) return reply.status(404).send({ erro: 'Item não encontrado neste pedido' });
+    if (itensAtuais.length === 1) {
+      return reply.status(422).send({ erro: 'O pedido precisa ter pelo menos 1 item. Para remover tudo, cancele o pedido.' });
+    }
+
+    await prisma.itemPedido.delete({ where: { id: itemPedidoId } });
+
+    const itensRestantes = itensAtuais.filter((i) => i.id !== itemPedidoId);
+    const pedidoAtualizado = await prisma.pedido.update({
+      where:   { id },
+      data:    { total: recalcularTotal(itensRestantes) },
+      include: { itens: true },
+    });
+
+    getIO().to(estabelecimentoId!).emit('pedido:atualizado', pedidoAtualizado);
+    return pedidoAtualizado;
   });
 }
