@@ -5,6 +5,7 @@ import { Bell, BellOff, ChefHat, LogOut, Users, X } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
+import { temPermissao } from '../lib/permissoes'
 
 interface Toast {
   id:          number
@@ -79,6 +80,9 @@ export default function Layout({ children, headerExtra }: Props) {
   }
 
   const isDono = role === 'DONO'
+  const podeCardapio      = isDono || temPermissao('cardapio')
+  const podeHistorico     = isDono || temPermissao('historico')
+  const podeConfiguracoes = isDono || temPermissao('configuracoes')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
 
   return (
@@ -98,7 +102,7 @@ export default function Layout({ children, headerExtra }: Props) {
           <nav className="hidden items-center gap-1 sm:flex">
             {isDono && <NavLink to="/dashboard" className={linkClass}>Home</NavLink>}
             <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
-            {isDono && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
+            {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
             {isDono && (
               <NavLink to="/operadores" className={linkClass}>
                 <span className="flex items-center gap-1.5">
@@ -107,8 +111,8 @@ export default function Layout({ children, headerExtra }: Props) {
                 </span>
               </NavLink>
             )}
-            {isDono && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
-            {isDono && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
+            {podeHistorico && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
+            {podeConfiguracoes && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -136,7 +140,7 @@ export default function Layout({ children, headerExtra }: Props) {
         <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
           {isDono && <NavLink to="/dashboard" className={linkClass}>Home</NavLink>}
           <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
-          {isDono && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
+          {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
           {isDono && (
             <NavLink to="/operadores" className={linkClass}>
               <span className="flex items-center gap-1.5">
@@ -145,8 +149,8 @@ export default function Layout({ children, headerExtra }: Props) {
               </span>
             </NavLink>
           )}
-          {isDono && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
-          {isDono && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
+          {podeHistorico && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
+          {podeConfiguracoes && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
         </div>
       </header>
 
