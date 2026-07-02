@@ -79,6 +79,18 @@ function formatarTempo(criadoEm: string): string {
   return `há ${minutos} min`
 }
 
+function imprimirComandaAutomaticamente(pedidoId: string) {
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.top      = '-10000px'
+  iframe.style.left     = '-10000px'
+  iframe.style.width    = '1px'
+  iframe.style.height   = '1px'
+  iframe.src = `/imprimir/${pedidoId}`
+  document.body.appendChild(iframe)
+  setTimeout(() => iframe.remove(), 8000)
+}
+
 export default function Cozinha() {
   const token = localStorage.getItem('token')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -122,6 +134,7 @@ export default function Cozinha() {
 
     const onNovo = (pedido: Pedido) => {
       setPedidos((prev) => [pedido, ...prev.filter((p) => p.id !== pedido.id)])
+      imprimirComandaAutomaticamente(pedido.id)
     }
 
     const onAtualizado = (pedido: Pedido) => {

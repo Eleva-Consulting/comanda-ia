@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Users, Plus, Trash2, Loader2, X, ChevronDown, ChevronUp, Shield } from 'lucide-react'
+import { Users, Plus, Trash2, Loader2, X, ChevronDown, ChevronUp, Shield, Wand2 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { TODAS_PERMISSOES, type Permissao } from '../lib/permissoes'
+
+function gerarEmailFicticio(nome: string): string {
+  const base = nome
+    .normalize('NFD')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .join('.')
+  const sufixo = Math.random().toString(36).slice(2, 6)
+  return `${base || 'operador'}.${sufixo}@equipe.comanda-ia.app`
+}
 
 interface Operador {
   id:         string
@@ -228,9 +241,19 @@ export default function Operadores() {
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Email</span>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="operador@email.com"
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Email de acesso</span>
+                <div className="flex gap-2">
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="operador@email.com"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
+                  <button type="button" onClick={() => setEmail(gerarEmailFicticio(nome))} title="Gerar email fictício"
+                    className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs font-medium text-zinc-400 transition hover:border-orange-500 hover:text-orange-400">
+                    <Wand2 className="h-3.5 w-3.5" />
+                    Gerar
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-zinc-500">
+                  Não precisa ser um email real — é só o login do funcionário no sistema. Pode gerar um automaticamente.
+                </p>
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-zinc-300">Senha</span>
