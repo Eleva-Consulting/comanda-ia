@@ -18,7 +18,7 @@ const PedidoParamsSchema = Type.Object({
 
 const FazerPedidoSchema = Type.Object({
   clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
-  clienteFone:     Type.String({ minLength: 8, maxLength: 20 }),
+  clienteFone:     Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
   tipoEntrega: Type.Union([Type.Literal('entrega'), Type.Literal('retirada')]),
   formaPagamento:  Type.Union([
@@ -106,12 +106,13 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     const { slug } = request.params as { slug: string };
     const { clienteNome, clienteFone, enderecoEntrega, tipoEntrega, formaPagamento, itens } = request.body as {
       clienteNome:      string;
-      clienteFone:      string;
+      clienteFone?:     string;
       enderecoEntrega?: string;
       tipoEntrega:      TipoEntrega;
       formaPagamento:   FormaPagamento;
       itens:            ItemPedidoInput[];
     };
+    const clienteFoneNormalizado = clienteFone?.trim() || null;
 
     if (tipoEntrega === 'entrega' && !enderecoEntrega?.trim()) {
       return reply.status(400).send({ erro: 'Endereço de entrega é obrigatório' });
@@ -176,7 +177,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     const pedido = await prisma.pedido.create({
       data: {
-        clienteNome, clienteFone, enderecoEntrega, total, formaPagamento, tipoEntrega,
+        clienteNome, clienteFone: clienteFoneNormalizado, enderecoEntrega, total, formaPagamento, tipoEntrega,
         estabelecimentoId: estabelecimento.id,
         itens: { create: itensComSnapshot },
       },
@@ -233,15 +234,15 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         .map((i: { nomeItem: string; quantidade: number; precoUnit: number }) =>
           `• ${i.quantidade}x ${i.nomeItem}`)
         .join('\n');
-      const msgDono = `🍽️ Novo pedido — *${estabelecimento.nome}*\n\nCliente: *${clienteNome}*\nFone: ${clienteFone}\nTotal: *R$ ${total.toFixed(2)}*\n\nItens:\n${itensTxt}`;
+      const msgDono = `🍽️ Novo pedido — *${estabelecimento.nome}*\n\nCliente: *${clienteNome}*\nFone: ${clienteFoneNormalizado ?? 'não informado'}\nTotal: *R$ ${total.toFixed(2)}*\n\nItens:\n${itensTxt}`;
       whatsApp.enviarMensagem(estabelecimento.id, estabelecimento.telefone, msgDono)
         .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp dono'));
     }
 
     // WhatsApp para o CLIENTE — confirmar recebimento do pedido (fire-and-forget)
-    if (formaPagamento === 'pix' && estabelecimento.chavePix) {
+    if (formaPagamento === 'pix' && estabelecimento.chavePix && clienteFoneNormalizado) {
       const msgCliente = `✅ *Pedido recebido, ${clienteNome}!*\n\nTotal: *R$ ${total.toFixed(2)}*\n\n💸 Faça o PIX para:\n*${estabelecimento.chavePix}*\n\nEm seguida, envie o comprovante aqui neste WhatsApp para confirmarmos seu pedido na hora! 😊`;
-      whatsApp.enviarMensagem(estabelecimento.id, clienteFone, msgCliente)
+      whatsApp.enviarMensagem(estabelecimento.id, clienteFoneNormalizado, msgCliente)
         .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente'));
     }
 

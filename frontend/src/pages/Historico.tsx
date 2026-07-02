@@ -41,7 +41,7 @@ interface ItemPedido {
 interface Pedido {
   id:             string
   clienteNome:    string
-  clienteFone:    string
+  clienteFone:    string | null
   status:         string
   total:          number | string
   criadoEm:       string
@@ -185,7 +185,9 @@ export default function Historico() {
 
               {aberto && (
                 <div className="border-t border-zinc-800 p-4">
-                  <p className="mb-2 text-xs text-zinc-500">Fone: {pedido.clienteFone}</p>
+                  {pedido.clienteFone && (
+                    <p className="mb-2 text-xs text-zinc-500">Fone: {pedido.clienteFone}</p>
+                  )}
                   <div className="mb-3 flex flex-wrap gap-2">
                     <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
                       {pedido.tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏪 Retirada'}

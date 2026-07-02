@@ -22,7 +22,7 @@ interface ItemPedido {
 interface Pedido {
   id:              string
   clienteNome:     string
-  clienteFone:     string
+  clienteFone:     string | null
   total:           number | string
   status:          Status
   criadoEm:        string
@@ -284,7 +284,7 @@ export default function Cozinha() {
       const resp = await fetch(`${API_URL}/pedidos/manual`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ clienteNome: clienteNomeModal, clienteFone: clienteFoneModal, itens, formaPagamento: formaPagamentoModal, tipoEntrega: tipoEntregaModal }),
+        body:    JSON.stringify({ clienteNome: clienteNomeModal, clienteFone: clienteFoneModal.trim() || undefined, itens, formaPagamento: formaPagamentoModal, tipoEntrega: tipoEntregaModal }),
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroModal(dados.erro ?? 'Erro ao criar pedido'); return }
@@ -463,12 +463,11 @@ export default function Cozinha() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Telefone *</span>
+                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Telefone</span>
                     <input
-                      required
                       value={clienteFoneModal}
                       onChange={(e) => setClienteFoneModal(e.target.value)}
-                      placeholder="85 99999-9999"
+                      placeholder="85 99999-9999 (opcional)"
                       className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
                     />
                   </label>

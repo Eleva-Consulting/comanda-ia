@@ -10,7 +10,7 @@ import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/pri
 
 const CriarPedidoSchema = Type.Object({
   clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
-  clienteFone:     Type.String({ minLength: 8, maxLength: 20 }),
+  clienteFone:     Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
   itens: Type.Array(
     Type.Object({
@@ -46,7 +46,7 @@ const AtualizarStatusSchema = Type.Object({
 
 const ManualPedidoSchema = Type.Object({
   clienteNome: Type.String({ minLength: 2, maxLength: 100 }),
-  clienteFone: Type.String({ minLength: 8, maxLength: 20 }),
+  clienteFone: Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   tipoEntrega: Type.Optional(Type.Union([Type.Literal('entrega'), Type.Literal('retirada')])),
   formaPagamento: Type.Optional(Type.Union([
     Type.Literal('pix'),
@@ -165,7 +165,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const { clienteNome, clienteFone, enderecoEntrega, itens } = request.body as {
       clienteNome: string;
-      clienteFone: string;
+      clienteFone?: string;
       enderecoEntrega?: string;
       itens: { itemCardapioId: string; quantidade: number }[];
     };
@@ -204,7 +204,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const pedido = await prisma.pedido.create({
       data: {
         clienteNome,
-        clienteFone,
+        clienteFone: clienteFone?.trim() || null,
         enderecoEntrega,
         total,
         estabelecimentoId: estabelecimentoId!,
@@ -261,7 +261,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       cancelado:   '❌ Seu pedido foi cancelado. Qualquer dúvida, entre em contato conosco.',
     };
     const textoWp = mensagensStatus[status];
-    if (textoWp) {
+    if (textoWp && pedidoAtualizado.clienteFone) {
       fastify.log.info({ clienteFone: pedidoAtualizado.clienteFone, status }, 'WhatsApp: disparando notificação de status')
       whatsApp.enviarMensagem(estabelecimentoId!, pedidoAtualizado.clienteFone, textoWp)
         .catch((err) => fastify.log.error({ err, clienteFone: pedidoAtualizado.clienteFone, status }, 'Falha WhatsApp status pedido'));
@@ -277,7 +277,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const { clienteNome, clienteFone, tipoEntrega, formaPagamento, itens } = request.body as {
       clienteNome:     string;
-      clienteFone:     string;
+      clienteFone?:    string;
       tipoEntrega?:    TipoEntrega;
       formaPagamento?: FormaPagamento;
       itens: { itemCardapioId: string; quantidade: number; observacao?: string }[];
@@ -318,7 +318,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const pedido = await prisma.pedido.create({
       data: {
         clienteNome,
-        clienteFone,
+        clienteFone: clienteFone?.trim() || null,
         total,
         tipoEntrega: tipoEntrega ?? 'retirada',
         formaPagamento: formaPagamento ?? 'dinheiro',

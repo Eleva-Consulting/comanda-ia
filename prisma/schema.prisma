@@ -151,7 +151,7 @@ model ItemCardapio {
 model Pedido {
   id                  String         @id @default(uuid())
   clienteNome         String
-  clienteFone         String
+  clienteFone         String?
   enderecoEntrega     String?
   total               Decimal        @db.Decimal(10, 2)
   status              StatusPedido   @default(recebido)

@@ -13,7 +13,7 @@ interface ItemPedido {
 interface Pedido {
   id:          string
   clienteNome: string
-  clienteFone: string
+  clienteFone: string | null
   status:      string
   total:       number
   criadoEm:   string
@@ -92,7 +92,7 @@ export default function ImprimirComanda() {
       <p className="center">{dataStr} {horaStr}</p>
       <div className="linha" />
       <p>Cliente: {pedido.clienteNome}</p>
-      <p>Fone:    {pedido.clienteFone}</p>
+      {pedido.clienteFone && <p>Fone:    {pedido.clienteFone}</p>}
       <div className="linha" />
 
       {pedido.itens.map((item) => (

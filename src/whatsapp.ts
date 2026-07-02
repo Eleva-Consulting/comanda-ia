@@ -216,7 +216,7 @@ class WhatsAppManager {
 
     // 1ª tentativa: match por telefone
     let pedido = pedidosPendentes.find(
-      p => p.clienteFone.replace(/\D/g, '').endsWith(foneDigitos)
+      p => p.clienteFone && p.clienteFone.replace(/\D/g, '').endsWith(foneDigitos)
     )
 
     // 2ª tentativa: match por valor (quando o cliente usa número diferente)

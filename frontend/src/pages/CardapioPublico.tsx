@@ -365,7 +365,7 @@ function ModalCheckout({
     try {
       const body = {
         clienteNome: clienteNome.trim(),
-        clienteFone: clienteFone.trim(),
+        clienteFone: clienteFone.trim() || undefined,
         enderecoEntrega: tipoEntrega === 'entrega' ? endereco.trim() || undefined : undefined,
         tipoEntrega,
         formaPagamento,
@@ -399,7 +399,7 @@ function ModalCheckout({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (formaPagamento === 'pix' && !etapaPixAberta) {
-      if (!clienteNome.trim() || !clienteFone.trim()) return
+      if (!clienteNome.trim()) return
       if (tipoEntrega === 'entrega' && !endereco.trim()) return
       setEtapaPixAberta(true)
       return
@@ -464,12 +464,13 @@ function ModalCheckout({
             </label>
 
             <label className="mb-4 block">
-              <span className="mb-2 block text-sm font-medium text-zinc-300">Telefone (WhatsApp)</span>
+              <span className="mb-2 block text-sm font-medium text-zinc-300">
+                Telefone (WhatsApp) <span className="font-normal text-zinc-500">— opcional</span>
+              </span>
               <div className="relative">
                 <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
                   type="tel"
-                  required
                   minLength={8}
                   maxLength={20}
                   value={clienteFone}
@@ -478,6 +479,9 @@ function ModalCheckout({
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
                 />
               </div>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Se informar, você recebe atualizações do pedido pelo WhatsApp.
+              </p>
             </label>
 
             <div className="flex gap-2 mb-4">
@@ -550,7 +554,7 @@ function ModalCheckout({
 
             <button
               type="submit"
-              disabled={enviando || !clienteNome.trim() || !clienteFone.trim()}
+              disabled={enviando || !clienteNome.trim()}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
             >
               {enviando ? (
