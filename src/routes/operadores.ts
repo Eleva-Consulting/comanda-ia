@@ -18,6 +18,15 @@ const AtualizarPermissoesSchema = Type.Object({
   ),
 });
 
+const AtualizarDadosSchema = Type.Object({
+  nome:  Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
+  email: Type.Optional(Type.String({ format: 'email' })),
+});
+
+const RedefinirSenhaOperadorSchema = Type.Object({
+  novaSenha: Type.String({ minLength: 8, maxLength: 100 }),
+});
+
 const selecionarOperador = {
   id: true, nome: true, email: true, criadoEm: true, permissoes: true,
 } as const;
@@ -92,6 +101,60 @@ export async function operadoresRoutes(fastify: FastifyInstance) {
       data:   { permissoes },
       select: selecionarOperador,
     });
+  });
+
+  // ── PATCH /estabelecimentos/operadores/:id ────────────────────────────────
+  // Corrige nome/email cadastrados errados
+  fastify.patch('/estabelecimentos/operadores/:id', {
+    schema: {
+      params: Type.Object({ id: Type.String() }),
+      body:   AtualizarDadosSchema,
+    },
+  }, async (request, reply) => {
+    if (await apenasDono(request, reply)) return;
+
+    const { id } = request.params as { id: string };
+    const { nome, email } = request.body as { nome?: string; email?: string };
+
+    const operador = await prisma.usuario.findUnique({ where: { id } });
+    if (!operador || operador.estabelecimentoId !== request.user.estabelecimentoId || operador.role !== 'OPERADOR') {
+      return reply.status(404).send({ erro: 'Operador não encontrado' });
+    }
+
+    if (email && email !== operador.email) {
+      const emailExistente = await prisma.usuario.findUnique({ where: { email } });
+      if (emailExistente) return reply.status(409).send({ erro: 'Email já cadastrado' });
+    }
+
+    return prisma.usuario.update({
+      where:  { id },
+      data:   { ...(nome ? { nome } : {}), ...(email ? { email } : {}) },
+      select: selecionarOperador,
+    });
+  });
+
+  // ── PATCH /estabelecimentos/operadores/:id/senha ──────────────────────────
+  // DONO redefine a senha do operador diretamente — sem fluxo de email
+  fastify.patch('/estabelecimentos/operadores/:id/senha', {
+    schema: {
+      params: Type.Object({ id: Type.String() }),
+      body:   RedefinirSenhaOperadorSchema,
+    },
+  }, async (request, reply) => {
+    if (await apenasDono(request, reply)) return;
+
+    const { id } = request.params as { id: string };
+    const { novaSenha } = request.body as { novaSenha: string };
+
+    const operador = await prisma.usuario.findUnique({ where: { id } });
+    if (!operador || operador.estabelecimentoId !== request.user.estabelecimentoId || operador.role !== 'OPERADOR') {
+      return reply.status(404).send({ erro: 'Operador não encontrado' });
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 12);
+    await prisma.usuario.update({ where: { id }, data: { senhaHash } });
+
+    return reply.status(204).send();
   });
 
   // ── DELETE /estabelecimentos/operadores/:id ──────────────────────────────

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Users, Plus, Trash2, Loader2, X, ChevronDown, ChevronUp, Shield, Wand2 } from 'lucide-react'
+import { Users, Plus, Trash2, Loader2, X, ChevronDown, ChevronUp, Shield, Wand2, Pencil } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { TODAS_PERMISSOES, type Permissao } from '../lib/permissoes'
@@ -48,6 +48,14 @@ export default function Operadores() {
   const [expandidoId, setExpandidoId] = useState<string | null>(null)
   const [salvandoPermissoes, setSalvandoPermissoes] = useState<string | null>(null)
   const [slugEstabelecimento, setSlugEstabelecimento] = useState('')
+
+  // Editar operador (nome / email / senha)
+  const [edicaoOperador, setEdicaoOperador] = useState<Operador | null>(null)
+  const [nomeEdicao, setNomeEdicao]         = useState('')
+  const [emailEdicao, setEmailEdicao]       = useState('')
+  const [novaSenhaEdicao, setNovaSenhaEdicao] = useState('')
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false)
+  const [erroEdicao, setErroEdicao]         = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`${API_URL}/estabelecimentos/operadores`, {
@@ -135,6 +143,46 @@ export default function Operadores() {
     }
   }
 
+  function abrirEdicao(operador: Operador) {
+    setEdicaoOperador(operador)
+    setNomeEdicao(operador.nome)
+    setEmailEdicao(operador.email)
+    setNovaSenhaEdicao('')
+    setErroEdicao(null)
+  }
+
+  async function salvarEdicao(e: FormEvent) {
+    e.preventDefault()
+    if (!edicaoOperador) return
+    setErroEdicao(null)
+    setSalvandoEdicao(true)
+    try {
+      const resp = await fetch(`${API_URL}/estabelecimentos/operadores/${edicaoOperador.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ nome: nomeEdicao, email: emailEdicao }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroEdicao(dados.erro ?? 'Erro ao salvar'); return }
+
+      if (novaSenhaEdicao.trim()) {
+        const respSenha = await fetch(`${API_URL}/estabelecimentos/operadores/${edicaoOperador.id}/senha`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ novaSenha: novaSenhaEdicao }),
+        })
+        if (!respSenha.ok) { setErroEdicao('Dados salvos, mas a senha não pôde ser redefinida.'); return }
+      }
+
+      setOperadores((prev) => prev.map((o) => (o.id === edicaoOperador.id ? { ...o, ...dados } : o)))
+      setEdicaoOperador(null)
+    } catch {
+      setErroEdicao('Falha de conexão')
+    } finally {
+      setSalvandoEdicao(false)
+    }
+  }
+
   return (
     <Layout>
       <div className="mb-8 flex items-center justify-between">
@@ -190,6 +238,13 @@ export default function Operadores() {
                   </div>
                 </div>
                 <div className="ml-4 flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => abrirEdicao(op)}
+                    className="rounded-xl border border-zinc-700 p-2.5 text-zinc-400 transition hover:bg-zinc-800"
+                    title="Editar dados / redefinir senha"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => setExpandidoId(expandidoId === op.id ? null : op.id)}
                     className="rounded-xl border border-zinc-700 p-2.5 text-zinc-400 transition hover:bg-zinc-800"
@@ -283,6 +338,57 @@ export default function Operadores() {
                   className="flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500">
                   {criando && <Loader2 className="h-4 w-4 animate-spin" />}
                   Criar operador
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {edicaoOperador && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-lg font-bold">Editar operador</h3>
+              <button onClick={() => setEdicaoOperador(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={salvarEdicao} className="space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Nome</span>
+                <input type="text" required value={nomeEdicao} onChange={(e) => setNomeEdicao(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Email de acesso</span>
+                <div className="flex gap-2">
+                  <input type="email" required value={emailEdicao} onChange={(e) => setEmailEdicao(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
+                  <button type="button" onClick={() => setEmailEdicao(gerarEmailFicticio(nomeEdicao, slugEstabelecimento))} title="Gerar email fictício"
+                    className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-xs font-medium text-zinc-400 transition hover:border-orange-500 hover:text-orange-400">
+                    <Wand2 className="h-3.5 w-3.5" />
+                    Gerar
+                  </button>
+                </div>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Nova senha</span>
+                <input type="password" minLength={8} value={novaSenhaEdicao} onChange={(e) => setNovaSenhaEdicao(e.target.value)}
+                  placeholder="Deixe em branco para manter a atual"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
+                <p className="mt-1.5 text-xs text-zinc-500">
+                  Preencha só se quiser redefinir a senha do operador (mínimo 8 caracteres).
+                </p>
+              </label>
+              {erroEdicao && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">{erroEdicao}</p>}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setEdicaoOperador(null)}
+                  className="rounded-xl border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-400 transition hover:bg-zinc-800">Cancelar</button>
+                <button type="submit" disabled={salvandoEdicao}
+                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500">
+                  {salvandoEdicao && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Salvar
                 </button>
               </div>
             </form>
