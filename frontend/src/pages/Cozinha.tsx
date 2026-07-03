@@ -148,11 +148,13 @@ export default function Cozinha() {
   const [enderecoModal, setEnderecoModal]             = useState('')
   const [bairroIdModal, setBairroIdModal]             = useState('')
   const [bairros, setBairros]                         = useState<Bairro[]>([])
+  const [buscaItemModal, setBuscaItemModal]           = useState('')
 
   // Modal editar itens de pedido existente
   const [edicaoItensPedido, setEdicaoItensPedido] = useState<Pedido | null>(null)
   const [salvandoItemId, setSalvandoItemId]       = useState<string | null>(null)
   const [erroEdicaoItens, setErroEdicaoItens]     = useState<string | null>(null)
+  const [buscaItemEdicao, setBuscaItemEdicao]     = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -293,6 +295,7 @@ export default function Cozinha() {
     setTrocoParaModal('')
     setEnderecoModal('')
     setBairroIdModal('')
+    setBuscaItemModal('')
     setModalAberto(true)
     await carregarCardapioSeNecessario()
   }
@@ -304,6 +307,7 @@ export default function Cozinha() {
 
   async function abrirEdicaoItens(pedido: Pedido) {
     setErroEdicaoItens(null)
+    setBuscaItemEdicao('')
     setEdicaoItensPedido(pedido)
     await carregarCardapioSeNecessario()
   }
@@ -400,6 +404,12 @@ export default function Cozinha() {
     return soma + (sel ? item.preco * sel.quantidade : 0)
   }, 0)
   const totalManual = subtotalManual + taxaModal
+  const itensFiltradosModal = cardapio.filter((item) =>
+    item.nome.toLowerCase().includes(buscaItemModal.trim().toLowerCase())
+  )
+  const itensFiltradosEdicao = cardapio.filter((item) =>
+    item.nome.toLowerCase().includes(buscaItemEdicao.trim().toLowerCase())
+  )
 
   async function criarPedidoManual(e: FormEvent) {
     e.preventDefault()
@@ -755,13 +765,21 @@ export default function Cozinha() {
 
                 <div>
                   <p className="mb-3 text-xs font-medium text-zinc-400">Itens</p>
+                  <input
+                    value={buscaItemModal}
+                    onChange={(e) => setBuscaItemModal(e.target.value)}
+                    placeholder="Buscar item pelo nome..."
+                    className="mb-3 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                  />
                   {carregandoMenu ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
                     </div>
+                  ) : itensFiltradosModal.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-zinc-500">Nenhum item encontrado.</p>
                   ) : (
                     <div className="space-y-2">
-                      {cardapio.map((item) => {
+                      {itensFiltradosModal.map((item) => {
                         const sel = selecionados[item.id]
                         return (
                           <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
@@ -891,13 +909,21 @@ export default function Cozinha() {
 
               <div>
                 <p className="mb-3 text-xs font-medium text-zinc-400">Adicionar item</p>
+                <input
+                  value={buscaItemEdicao}
+                  onChange={(e) => setBuscaItemEdicao(e.target.value)}
+                  placeholder="Buscar item pelo nome..."
+                  className="mb-3 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                />
                 {carregandoMenu ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
                   </div>
+                ) : itensFiltradosEdicao.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-zinc-500">Nenhum item encontrado.</p>
                 ) : (
                   <div className="space-y-2">
-                    {cardapio.map((item) => (
+                    {itensFiltradosEdicao.map((item) => (
                       <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{item.nome}</p>

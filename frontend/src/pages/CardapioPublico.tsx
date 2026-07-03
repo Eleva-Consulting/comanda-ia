@@ -60,6 +60,7 @@ export default function CardapioPublico() {
   const [pedidoConfirmado, setPedidoConfirmado] = useState<PedidoConfirmado | null>(null)
   const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
   const [bairros, setBairros] = useState<Bairro[]>([])
+  const [buscaItem, setBuscaItem] = useState('')
 
   useEffect(() => {
     if (!slug) return
@@ -163,12 +164,29 @@ export default function CardapioPublico() {
             <p className="text-zinc-400">O restaurante ainda não cadastrou itens no cardápio.</p>
           </div>
         ) : (
-          <GruposCardapio
-            cardapio={dados.cardapio}
-            carrinho={carrinho}
-            onAdicionar={adicionar}
-            onRemover={remover}
-          />
+          <>
+            <input
+              value={buscaItem}
+              onChange={(e) => setBuscaItem(e.target.value)}
+              placeholder="Buscar no cardápio..."
+              className="mb-6 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+            />
+            {(() => {
+              const itensFiltrados = dados.cardapio.filter((item) =>
+                item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
+              )
+              return itensFiltrados.length === 0 ? (
+                <p className="py-8 text-center text-sm text-zinc-500">Nenhum item encontrado para "{buscaItem}".</p>
+              ) : (
+                <GruposCardapio
+                  cardapio={itensFiltrados}
+                  carrinho={carrinho}
+                  onAdicionar={adicionar}
+                  onRemover={remover}
+                />
+              )
+            })()}
+          </>
         )}
       </main>
 
