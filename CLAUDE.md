@@ -180,6 +180,34 @@ VITE_API_URL=http://localhost:3000
 - Após cada migration nova: `npx prisma migrate deploy` no console do Railway
 - Deploy manual Railway: `railway up --detach` (auto-deploy às vezes falha)
 
+## Log de mudanças
+
+> Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
+
+### 2026-07-03
+- **Pedido de balcão sem status pro cliente + impressão automática configurável** — `Pedido.origem` (`balcao`/`publico`) distingue pedido manual do painel vs via link público. Balcão deixa de mandar WhatsApp de status (delivery e retirada via link continuam mandando normal). Botão liga/desliga na Cozinha controla se pedido de balcão imprime sozinho (delivery/retirada via link sempre imprimem).
+- **Reabrir pedido concluído/cancelado** — DONO define uma senha em Configurações; qualquer operador com permissão de Cozinha pode reabrir um pedido `entregue`/`cancelado` digitando essa senha (entregue volta pra "em preparo", cancelado volta pra "recebido"). Botão fica no Histórico.
+- **Cardápio público em grade responsiva** — 2 colunas no celular, 3-4 no desktop, ao invés de lista vertical.
+- **Busca por nome** no cardápio público e nos modais de pedido manual/adicionar item na Cozinha.
+- **Nome do cliente opcional** no pedido manual (balcão) — usa "Cliente" como padrão quando em branco.
+- **Fonte maior na comanda impressa** — base 12px → 15px, título e total 14px → 18px.
+
+### 2026-07-03 (em andamento, não commitado)
+- **Evolution API self-hosted no Fly.io** (`evolution-fly/fly.toml`) — app `evolution-comanda`, região `gru`, imagem `atendai/evolution-api`, Postgres habilitado, `min_machines_running = 1`.
+- **Suporte a proxy em `src/evolution.ts`** — `proxyFromEnv()` lê `EVOLUTION_PROXY_HOST/PORT/PROTOCOL/USERNAME/PASSWORD` do ambiente e injeta `proxy` no payload de `criarInstancia()` (`POST /instance/create`). Objetivo: evitar bloqueio do WhatsApp quando várias instâncias saem do mesmo IP do Fly.io.
+
+### 2026-07-02
+- **Impressão automática da comanda + email fictício facilitado no operador** (`edf6997`) — comanda imprime sozinha ao chegar pedido novo na Cozinha; cadastro de operador ganha botão pra gerar email fictício automaticamente.
+- **Email fictício do operador usa nome do estabelecimento como domínio** (`2822dbe`, `be7d9f6`) — formato `primeiro.ultimo@slug-do-estabelecimento.com`, sem sufixo aleatório nem travessão.
+- **Telefone do cliente vira opcional no pedido** (`dc7dacd`) — no pedido manual e no checkout público; notificações WhatsApp (status, PIX) são puladas quando não há telefone.
+- **Editar dados do operador e redefinir senha** (`5b79576`) — DONO corrige nome/email do operador e redefine senha direto, sem depender do fluxo de email.
+- **Comanda impressa em negrito por padrão** (`d436580`) — melhora legibilidade em impressora térmica.
+- **Aplicar permissões granulares do operador no backend** (`6693137`) — antes só existiam dois níveis de acesso (autenticado ou DONO); adiciona middleware `temPermissao()` aplicado por rota (cardápio, pedido manual, configurações, WhatsApp). Pausar/retomar pedido vira endpoint próprio pra não exigir permissão "configuracoes".
+- **Editar itens de um pedido já criado** (`c3e4141`) — adicionar/ajustar quantidade/remover item direto no card da Cozinha, sem cancelar o pedido inteiro.
+- **Mostrar links de navegação conforme permissão do operador** (`9f92b54`) — menu (Cardápio, Histórico, Configurações) agora aparece quando o operador tem a permissão, mesmo sem ser DONO.
+- **Taxa de entrega por bairro + endereço no pedido** (`079f9bc`) — bairros com taxa própria cadastrados em Configurações (opcional, em branco = grátis); checkout e pedido manual pedem bairro/endereço; aparece na comanda, histórico e dashboard.
+- **Troco no pagamento em dinheiro, status por tipo de entrega, resumo do pedido** (`44437aa`) — indicar troco em pagamento dinheiro; retirada pula "saiu para entrega" (vai direto pra "retirado"); tela de confirmação com resumo completo passa a valer pra qualquer forma de pagamento (antes só PIX) e o resumo é enviado por WhatsApp em qualquer pedido.
+
 ## Próximas features planejadas
 
 1. **Mercado Pago** — PIX real no checkout (substituir exibição de chave manual)

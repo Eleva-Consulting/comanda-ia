@@ -34,6 +34,7 @@ interface Pedido {
   itens:           ItemPedido[]
   formaPagamento:  'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
   tipoEntrega:     'entrega' | 'retirada'
+  origem:          'balcao' | 'publico'
 }
 
 interface Bairro {
@@ -132,6 +133,10 @@ export default function Cozinha() {
   const [aceitando, setAceitando]         = useState(true)
   const [togglingPausa, setTogglingPausa] = useState(false)
 
+  // Impressão automática do balcão
+  const [imprimirAutoBalcao, setImprimirAutoBalcao] = useState(true)
+  const [togglingImprimir, setTogglingImprimir]     = useState(false)
+
   // Modal novo pedido
   const [modalAberto, setModalAberto]           = useState(false)
   const [cardapio, setCardapio]                 = useState<ItemCardapio[]>([])
@@ -175,7 +180,9 @@ export default function Cozinha() {
 
     const onNovo = (pedido: Pedido) => {
       setPedidos((prev) => [pedido, ...prev.filter((p) => p.id !== pedido.id)])
-      imprimirComandaAutomaticamente(pedido.id)
+      if (pedido.origem !== 'balcao' || imprimirAutoBalcao) {
+        imprimirComandaAutomaticamente(pedido.id)
+      }
     }
 
     const onAtualizado = (pedido: Pedido) => {
@@ -189,7 +196,7 @@ export default function Cozinha() {
       socket.off('pedido:novo', onNovo)
       socket.off('pedido:atualizado', onAtualizado)
     }
-  }, [socket])
+  }, [socket, imprimirAutoBalcao])
 
   useEffect(() => {
     if (!token) return
@@ -197,7 +204,10 @@ export default function Cozinha() {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((est) => setAceitando(est.aceitandoPedidos ?? true))
+      .then((est) => {
+        setAceitando(est.aceitandoPedidos ?? true)
+        setImprimirAutoBalcao(est.imprimirAutomaticoBalcao ?? true)
+      })
       .catch(console.error)
 
     fetch(`${API_URL}/bairros`, {
@@ -265,6 +275,22 @@ export default function Cozinha() {
       console.error(e)
     } finally {
       setTogglingPausa(false)
+    }
+  }
+
+  async function toggleImprimirAutoBalcao() {
+    setTogglingImprimir(true)
+    try {
+      const resp = await fetch(`${API_URL}/meu-estabelecimento/imprimir-automatico-balcao`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ imprimirAutomaticoBalcao: !imprimirAutoBalcao }),
+      })
+      if (resp.ok) setImprimirAutoBalcao((v) => !v)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setTogglingImprimir(false)
     }
   }
 
@@ -489,6 +515,19 @@ export default function Cozinha() {
               ? <PauseCircle className="h-4 w-4" />
               : <PlayCircle className="h-4 w-4" />}
             <span className="hidden sm:inline">{aceitando ? 'Pausar' : 'Reabrir'}</span>
+          </button>
+          <button
+            onClick={toggleImprimirAutoBalcao}
+            disabled={togglingImprimir}
+            title="Impressão automática de pedidos de balcão (delivery e retirada via link sempre imprimem)"
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition disabled:opacity-50 ${
+              imprimirAutoBalcao
+                ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                : 'border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+            }`}
+          >
+            <Printer className="h-4 w-4" />
+            <span className="hidden sm:inline">Balcão: {imprimirAutoBalcao ? 'auto' : 'manual'}</span>
           </button>
           <StatusConexao conectado={conectado} erro={erro} aceitando={aceitando} />
         </div>

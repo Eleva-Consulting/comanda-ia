@@ -141,7 +141,7 @@ export default function CardapioPublico() {
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-zinc-100 pb-32">
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur">
-        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-4">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500">
             <ChefHat className="h-6 w-6 text-white" />
           </div>
@@ -152,7 +152,7 @@ export default function CardapioPublico() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-6">
+      <main className="mx-auto max-w-5xl px-4 py-6">
         {!dados.estabelecimento.aceitandoPedidos && (
           <div className="mx-4 mb-4 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-center">
             <p className="font-semibold text-orange-400">Estamos temporariamente fechados</p>
@@ -261,7 +261,7 @@ function GruposCardapio({
               {grupo.nome}
             </h2>
           )}
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {grupo.itens.map((item) => (
               <ItemCard
                 key={item.id}
@@ -287,51 +287,52 @@ function ItemCard({
   onRemover: () => void
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
       {item.foto && (
         <img
           src={item.foto}
           alt={item.nome}
           loading="lazy"
-          className="h-44 w-full object-cover"
+          className="aspect-square w-full object-cover"
         />
       )}
-      <div className="flex items-center justify-between gap-4 p-4">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-bold">{item.nome}</h3>
-          {item.descricao && (
-            <p className="mt-1 text-sm text-zinc-400 line-clamp-2">{item.descricao}</p>
-          )}
-          <p className="mt-2 font-extrabold text-orange-400">{formatarBRL(item.preco)}</p>
-        </div>
+      <div className="flex flex-1 flex-col p-3">
+        <h3 className="text-sm font-bold leading-snug">{item.nome}</h3>
+        {item.descricao && (
+          <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{item.descricao}</p>
+        )}
+        <p className="mt-2 font-extrabold text-orange-400">{formatarBRL(item.preco)}</p>
 
-        {quantidade === 0 ? (
-          <button
-            onClick={onAdicionar}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600"
-            aria-label="Adicionar"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-        ) : (
-          <div className="flex shrink-0 items-center gap-2 rounded-xl bg-zinc-800 px-1 py-1">
-            <button
-              onClick={onRemover}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
-              aria-label="Remover um"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-            <span className="min-w-6 text-center font-bold">{quantidade}</span>
+        <div className="mt-auto pt-3">
+          {quantidade === 0 ? (
             <button
               onClick={onAdicionar}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
-              aria-label="Adicionar mais um"
+              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-orange-500 text-sm font-semibold text-white transition hover:bg-orange-600"
+              aria-label="Adicionar"
             >
               <Plus className="h-4 w-4" />
+              Adicionar
             </button>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center justify-between rounded-xl bg-zinc-800 px-1 py-1">
+              <button
+                onClick={onRemover}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
+                aria-label="Remover um"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="min-w-6 text-center font-bold">{quantidade}</span>
+              <button
+                onClick={onAdicionar}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
+                aria-label="Adicionar mais um"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -349,7 +350,7 @@ function BarraCarrinho({
   const total = subtotal + (taxaEntrega ?? 0)
   return (
     <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur">
-      <div className="mx-auto max-w-2xl p-4">
+      <div className="mx-auto max-w-5xl p-4">
         {taxaEntrega != null && taxaEntrega > 0 && (
           <p className="mb-2 text-center text-xs text-zinc-500">
             + {formatarBRL(taxaEntrega)} taxa de entrega

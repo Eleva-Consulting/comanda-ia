@@ -13,6 +13,7 @@ interface Estabelecimento {
   aceitandoPedidos: boolean
   chavePix:         string | null
   taxaEntrega:      number | null
+  senhaReabrirPedidoConfigurada: boolean
 }
 
 interface Bairro {
@@ -46,6 +47,13 @@ export default function Configuracoes() {
   const [desconectando, setDesconectando] = useState(false)
   const [erroWp, setErroWp]              = useState<string | null>(null)
   const [verificandoStatus, setVerificandoStatus] = useState(false)
+
+  // Senha de reabertura de pedido
+  const [senhaReabrirConfigurada, setSenhaReabrirConfigurada] = useState(false)
+  const [novaSenhaReabrir, setNovaSenhaReabrir]                 = useState('')
+  const [salvandoSenhaReabrir, setSalvandoSenhaReabrir]         = useState(false)
+  const [erroSenhaReabrir, setErroSenhaReabrir]                 = useState<string | null>(null)
+  const [sucessoSenhaReabrir, setSucessoSenhaReabrir]           = useState(false)
 
   // Bairros
   const [bairros, setBairros]                   = useState<Bairro[]>([])
@@ -83,6 +91,7 @@ export default function Configuracoes() {
         setTelefone(est.telefone)
         setChavePix(est.chavePix ?? '')
         setTaxaEntrega(est.taxaEntrega != null ? String(est.taxaEntrega) : '')
+        setSenhaReabrirConfigurada(est.senhaReabrirPedidoConfigurada)
         verificarStatus()
       })
       .catch(() => null)
@@ -258,6 +267,30 @@ export default function Configuracoes() {
       setErroWp('Falha ao desconectar')
     } finally {
       setDesconectando(false)
+    }
+  }
+
+  async function salvarSenhaReabrir(e: FormEvent) {
+    e.preventDefault()
+    setErroSenhaReabrir(null)
+    setSucessoSenhaReabrir(false)
+    setSalvandoSenhaReabrir(true)
+    try {
+      const r = await fetch(`${API_URL}/meu-estabelecimento/senha-reabrir-pedido`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ senha: novaSenhaReabrir.trim() || null }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setErroSenhaReabrir(data.erro ?? 'Erro ao salvar'); return }
+      setSenhaReabrirConfigurada(data.senhaReabrirPedidoConfigurada)
+      setNovaSenhaReabrir('')
+      setSucessoSenhaReabrir(true)
+      setTimeout(() => setSucessoSenhaReabrir(false), 3000)
+    } catch {
+      setErroSenhaReabrir('Falha ao salvar')
+    } finally {
+      setSalvandoSenhaReabrir(false)
     }
   }
 
@@ -573,6 +606,56 @@ export default function Configuracoes() {
               }
             </button>
           </div>
+        </div>
+
+        {/* Senha de reabertura de pedido */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
+          <div>
+            <h2 className="font-semibold text-zinc-200">Reabrir pedido</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Define a senha que qualquer operador da Cozinha vai precisar digitar pra reabrir um
+              pedido já entregue ou cancelado (ex: cliente pediu mais um item depois de concluído).
+              Deixe em branco e salve pra desativar essa função.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+              senhaReabrirConfigurada
+                ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30'
+                : 'bg-zinc-700 text-zinc-400 ring-zinc-600'
+            }`}>
+              {senhaReabrirConfigurada ? 'Senha configurada' : 'Nenhuma senha definida'}
+            </span>
+          </div>
+
+          {erroSenhaReabrir && (
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+              {erroSenhaReabrir}
+            </p>
+          )}
+          {sucessoSenhaReabrir && (
+            <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400 ring-1 ring-emerald-500/30">
+              Salvo com sucesso!
+            </p>
+          )}
+
+          <form onSubmit={salvarSenhaReabrir} className="flex gap-2">
+            <input
+              type="password"
+              value={novaSenhaReabrir}
+              onChange={(e) => setNovaSenhaReabrir(e.target.value)}
+              placeholder={senhaReabrirConfigurada ? 'Nova senha (deixe em branco pra desativar)' : 'Defina uma senha'}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+            />
+            <button
+              type="submit"
+              disabled={salvandoSenhaReabrir}
+              className="shrink-0 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+            >
+              {salvandoSenhaReabrir ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+            </button>
+          </form>
         </div>
 
         {/* Info somente leitura */}

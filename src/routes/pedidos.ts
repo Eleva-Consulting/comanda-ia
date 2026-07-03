@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
@@ -235,6 +236,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
         clienteFone: clienteFone?.trim() || null,
         enderecoEntrega,
         total,
+        origem: 'balcao',
         estabelecimentoId: estabelecimentoId!,
         itens: { create: itensComSnapshot },
       },
@@ -289,13 +291,54 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       cancelado:   '❌ Seu pedido foi cancelado. Qualquer dúvida, entre em contato conosco.',
     };
     const textoWp = mensagensStatus[status];
-    if (textoWp && pedidoAtualizado.clienteFone) {
+    if (textoWp && pedidoAtualizado.clienteFone && pedidoAtualizado.origem !== 'balcao') {
       fastify.log.info({ clienteFone: pedidoAtualizado.clienteFone, status }, 'WhatsApp: disparando notificação de status')
       whatsApp.enviarMensagem(estabelecimentoId!, pedidoAtualizado.clienteFone, textoWp)
         .catch((err) => fastify.log.error({ err, clienteFone: pedidoAtualizado.clienteFone, status }, 'Falha WhatsApp status pedido'));
     }
 
     return pedidoAtualizado;
+  });
+
+  // ── POST /pedidos/:id/reabrir ───────────────────────────────────────────────
+  // Reverte um pedido entregue/cancelado de volta pra um status ativo, pra
+  // corrigir engano (ex: cliente pede mais um item depois de "concluído").
+  // Exige a senha configurada pelo DONO em Configurações.
+  fastify.post('/pedidos/:id/reabrir', {
+    onRequest: [autenticar, temPermissao('cozinha')],
+    schema: { params: PedidoParamsSchema, body: Type.Object({ senha: Type.String({ minLength: 1 }) }) },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { senha } = request.body as { senha: string };
+    const { estabelecimentoId } = request.user;
+
+    const pedido = await prisma.pedido.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!pedido) return reply.status(404).send({ erro: 'Pedido não encontrado' });
+
+    if (pedido.status !== 'entregue' && pedido.status !== 'cancelado') {
+      return reply.status(422).send({ erro: 'Só é possível reabrir pedidos entregues ou cancelados' });
+    }
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+    if (!estabelecimento?.senhaReabrirPedido) {
+      return reply.status(400).send({ erro: 'Configure uma senha de reabertura em Configurações antes de usar essa função' });
+    }
+
+    const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
+    if (!senhaCorreta) {
+      return reply.status(403).send({ erro: 'Senha incorreta' });
+    }
+
+    const novoStatus: StatusPedido = pedido.status === 'entregue' ? 'em_preparo' : 'recebido';
+    const pedidoReaberto = await prisma.pedido.update({
+      where:   { id },
+      data:    { status: novoStatus },
+      include: { itens: true },
+    });
+
+    getIO().to(estabelecimentoId!).emit('pedido:atualizado', pedidoReaberto);
+
+    return pedidoReaberto;
   });
 
   // ── POST /pedidos/manual ────────────────────────────────────────────────────
@@ -388,6 +431,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
         formaPagamento: formaPagamentoFinal,
         precisaTroco: formaPagamentoFinal === 'dinheiro' ? !!precisaTroco : false,
         trocoPara:    formaPagamentoFinal === 'dinheiro' && precisaTroco ? trocoPara : null,
+        origem: 'balcao',
         estabelecimentoId: estabelecimentoId!,
         itens: { create: itensComSnapshot },
       },

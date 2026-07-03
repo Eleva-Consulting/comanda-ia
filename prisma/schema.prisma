@@ -59,6 +59,11 @@ enum TipoEntrega {
   retirada
 }
 
+enum OrigemPedido {
+  balcao
+  publico
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -74,6 +79,8 @@ model Estabelecimento {
   taxaEntrega      Decimal?              @db.Decimal(10, 2)
   evolutionUrl     String?
   evolutionToken   String?
+  imprimirAutomaticoBalcao Boolean       @default(true)
+  senhaReabrirPedido       String?
   criadoEm         DateTime              @default(now())
 
   usuarios         Usuario[]
@@ -175,6 +182,7 @@ model Pedido {
   status              StatusPedido   @default(recebido)
   formaPagamento      FormaPagamento @default(pix)
   tipoEntrega         TipoEntrega    @default(entrega)
+  origem              OrigemPedido   @default(publico)
   avaliacao           Int?
   comentarioAvaliacao String?
   criadoEm            DateTime       @default(now())

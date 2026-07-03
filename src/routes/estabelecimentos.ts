@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { whatsApp } from '../whatsapp.js';
@@ -27,7 +28,9 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     if (!estabelecimento) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
-    return estabelecimento;
+
+    const { senhaReabrirPedido, ...resto } = estabelecimento;
+    return { ...resto, senhaReabrirPedidoConfigurada: senhaReabrirPedido !== null };
   });
 
   fastify.patch('/meu-estabelecimento', {
@@ -66,6 +69,48 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     });
 
     return atualizado;
+  });
+
+  // ── PATCH /meu-estabelecimento/imprimir-automatico-balcao ────────────────
+  // Liga/desliga a impressão automática de pedidos de balcão. Delivery e
+  // retirada via link público sempre imprimem automático, independente disso.
+  fastify.patch('/meu-estabelecimento/imprimir-automatico-balcao', {
+    onRequest: [autenticar, temPermissao('cozinha', 'configuracoes')],
+    schema: { body: Type.Object({ imprimirAutomaticoBalcao: Type.Boolean() }) },
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+    const { imprimirAutomaticoBalcao } = request.body as { imprimirAutomaticoBalcao: boolean };
+
+    const atualizado = await prisma.estabelecimento.update({
+      where: { id: estabelecimentoId! },
+      data:  { imprimirAutomaticoBalcao },
+    });
+
+    return { imprimirAutomaticoBalcao: atualizado.imprimirAutomaticoBalcao };
+  });
+
+  // ── PATCH /meu-estabelecimento/senha-reabrir-pedido ───────────────────────
+  // DONO define/altera a senha usada por qualquer operador de Cozinha pra
+  // reabrir um pedido já concluído/cancelado. Enviar senha: null desativa.
+  fastify.patch('/meu-estabelecimento/senha-reabrir-pedido', {
+    onRequest: [autenticar, temPermissao('configuracoes')],
+    schema: {
+      body: Type.Object({
+        senha: Type.Union([Type.String({ minLength: 4, maxLength: 50 }), Type.Null()]),
+      }),
+    },
+  }, async (request, reply) => {
+    const { estabelecimentoId } = request.user;
+    const { senha } = request.body as { senha: string | null };
+
+    const senhaReabrirPedido = senha ? await bcrypt.hash(senha, 12) : null;
+
+    await prisma.estabelecimento.update({
+      where: { id: estabelecimentoId! },
+      data:  { senhaReabrirPedido },
+    });
+
+    return { senhaReabrirPedidoConfigurada: senhaReabrirPedido !== null };
   });
 
   fastify.get('/meu-estabelecimento/dashboard', {

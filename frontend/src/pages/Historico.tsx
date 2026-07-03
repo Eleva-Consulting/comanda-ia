@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronDown, ChevronUp, ShoppingBag } from 'lucide-react'
+import { ChevronDown, ChevronUp, ShoppingBag, RotateCcw, Loader2 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -64,6 +64,10 @@ export default function Historico() {
   const [pedidos, setPedidos] = useState<Pedido[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandido, setExpandido] = useState<Set<string>>(new Set())
+  const [reabrindoId, setReabrindoId]   = useState<string | null>(null)
+  const [senhaReabrir, setSenhaReabrir] = useState('')
+  const [erroReabrir, setErroReabrir]   = useState<string | null>(null)
+  const [enviandoReabrir, setEnviandoReabrir] = useState(false)
 
   const buscar = useCallback(async () => {
     if (!token) return
@@ -91,6 +95,32 @@ export default function Historico() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  function abrirFormReabrir(id: string) {
+    setReabrindoId(id)
+    setSenhaReabrir('')
+    setErroReabrir(null)
+  }
+
+  async function confirmarReabrir(id: string) {
+    setErroReabrir(null)
+    setEnviandoReabrir(true)
+    try {
+      const resp = await fetch(`${API_URL}/pedidos/${id}/reabrir`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ senha: senhaReabrir }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroReabrir(data.erro ?? 'Não foi possível reabrir'); return }
+      setPedidos((prev) => prev?.map((p) => (p.id === id ? { ...p, status: data.status } : p)) ?? null)
+      setReabrindoId(null)
+    } catch {
+      setErroReabrir('Falha de conexão')
+    } finally {
+      setEnviandoReabrir(false)
+    }
   }
 
   return (
@@ -223,6 +253,52 @@ export default function Historico() {
                     <span>Total</span>
                     <span className="text-orange-400">{fmt(pedido.total)}</span>
                   </div>
+
+                  {(pedido.status === 'entregue' || pedido.status === 'cancelado') && (
+                    <div className="mt-3 border-t border-zinc-800 pt-3">
+                      {reabrindoId === pedido.id ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-zinc-500">Digite a senha de reabertura definida em Configurações</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="password"
+                              value={senhaReabrir}
+                              onChange={(e) => setSenhaReabrir(e.target.value)}
+                              placeholder="Senha"
+                              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+                            />
+                            <button
+                              onClick={() => confirmarReabrir(pedido.id)}
+                              disabled={enviandoReabrir || !senhaReabrir}
+                              className="shrink-0 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                            >
+                              {enviandoReabrir ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar'}
+                            </button>
+                            <button
+                              onClick={() => setReabrindoId(null)}
+                              disabled={enviandoReabrir}
+                              className="shrink-0 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700 disabled:opacity-50"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                          {erroReabrir && (
+                            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400 ring-1 ring-red-500/30">
+                              {erroReabrir}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => abrirFormReabrir(pedido.id)}
+                          className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 transition hover:bg-zinc-700"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Reabrir pedido
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
