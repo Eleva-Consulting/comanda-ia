@@ -637,12 +637,11 @@ export default function Cozinha() {
               <div className="flex-1 space-y-4 overflow-y-auto p-5">
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Nome *</span>
+                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Nome</span>
                     <input
-                      required
                       value={clienteNomeModal}
                       onChange={(e) => setClienteNomeModal(e.target.value)}
-                      placeholder="Nome do cliente"
+                      placeholder="Nome do cliente (opcional)"
                       className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
                     />
                   </label>

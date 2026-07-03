@@ -83,7 +83,7 @@ export default function ImprimirComanda() {
         }
         .comanda {
           font-family: 'Courier New', Courier, monospace;
-          font-size: 12px;
+          font-size: 15px;
           font-weight: bold;
           width: 72mm;
           margin: 0 auto;
@@ -98,10 +98,10 @@ export default function ImprimirComanda() {
         .row    { display: flex; justify-content: space-between; }
         .item-row { margin-bottom: 2px; }
         .obs    { margin-left: 16px; font-style: italic; }
-        .total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; }
+        .total-row { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; }
       `}</style>
 
-      <p className="center bold" style={{ fontSize: 14 }}>{estab.nome}</p>
+      <p className="center bold" style={{ fontSize: 18 }}>{estab.nome}</p>
       <div className="linha" />
       <p className="center bold">Pedido #{pedido.id.slice(-6).toUpperCase()}</p>
       <p className="center">{dataStr} {horaStr}</p>

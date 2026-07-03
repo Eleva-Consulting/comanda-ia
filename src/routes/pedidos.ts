@@ -47,7 +47,7 @@ const AtualizarStatusSchema = Type.Object({
 });
 
 const ManualPedidoSchema = Type.Object({
-  clienteNome:     Type.String({ minLength: 2, maxLength: 100 }),
+  clienteNome:     Type.Optional(Type.String({ maxLength: 100 })),
   clienteFone:     Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   enderecoEntrega: Type.Optional(Type.String({ maxLength: 500 })),
   bairroId:        Type.Optional(Type.String()),
@@ -304,7 +304,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     schema: { body: ManualPedidoSchema },
   }, async (request, reply) => {
     const { clienteNome, clienteFone, enderecoEntrega, bairroId, tipoEntrega, formaPagamento, precisaTroco, trocoPara, itens } = request.body as {
-      clienteNome:      string;
+      clienteNome?:     string;
       clienteFone?:     string;
       enderecoEntrega?: string;
       bairroId?:        string;
@@ -317,6 +317,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
     const tipoEntregaFinal = tipoEntrega ?? 'retirada';
     const formaPagamentoFinal = formaPagamento ?? 'dinheiro';
+    const clienteNomeFinal = clienteNome?.trim() || 'Cliente';
     const clienteFoneNormalizado = clienteFone?.trim() || null;
 
     if (tipoEntregaFinal === 'entrega' && !enderecoEntrega?.trim()) {
@@ -377,7 +378,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
     const pedido = await prisma.pedido.create({
       data: {
-        clienteNome,
+        clienteNome: clienteNomeFinal,
         clienteFone: clienteFoneNormalizado,
         enderecoEntrega: enderecoEntrega?.trim() || null,
         bairroNome:  resultadoTaxa.bairroNome,
@@ -401,7 +402,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       if (estabWp) {
         const msgCliente = montarResumoWhatsApp({
           nomeEstabelecimento: estabWp.nome,
-          clienteNome,
+          clienteNome: clienteNomeFinal,
           itens: itensComSnapshot,
           subtotal,
           taxaEntrega: resultadoTaxa.taxa,
