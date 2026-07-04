@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, PauseCircle, PlayCircle, Banknote, Pencil, MapPin } from 'lucide-react'
+import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, Banknote, Pencil, MapPin } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
@@ -497,39 +497,33 @@ export default function Cozinha() {
         <div className="flex items-center gap-2">
           <button
             onClick={abrirModalNovoPedido}
-            className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="flex items-center gap-1.5 rounded-full bg-orange-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition hover:bg-orange-600 sm:px-4"
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Novo Pedido</span>
+            <span className="hidden sm:inline">Novo pedido</span>
           </button>
-          <button
-            onClick={togglePausa}
-            disabled={togglingPausa}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition disabled:opacity-50 ${
-              aceitando
-                ? 'border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                : 'border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20'
-            }`}
-          >
-            {aceitando
-              ? <PauseCircle className="h-4 w-4" />
-              : <PlayCircle className="h-4 w-4" />}
-            <span className="hidden sm:inline">{aceitando ? 'Pausar' : 'Reabrir'}</span>
-          </button>
-          <button
-            onClick={toggleImprimirAutoBalcao}
-            disabled={togglingImprimir}
-            title="Impressão automática de pedidos de balcão (delivery e retirada via link sempre imprimem)"
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition disabled:opacity-50 ${
-              imprimirAutoBalcao
-                ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                : 'border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-            }`}
-          >
-            <Printer className="h-4 w-4" />
-            <span className="hidden sm:inline">Balcão: {imprimirAutoBalcao ? 'auto' : 'manual'}</span>
-          </button>
-          <StatusConexao conectado={conectado} erro={erro} aceitando={aceitando} />
+          <div className="flex items-center divide-x divide-zinc-800 overflow-hidden rounded-full bg-zinc-900/80 ring-1 ring-zinc-800">
+            <ControleAceitandoPedidos
+              conectado={conectado}
+              erro={erro}
+              aceitando={aceitando}
+              disabled={togglingPausa}
+              onToggle={togglePausa}
+            />
+            <button
+              onClick={toggleImprimirAutoBalcao}
+              disabled={togglingImprimir}
+              title={`Impressão automática de pedidos de balcão: ${imprimirAutoBalcao ? 'ligada' : 'desligada'} (delivery e retirada via link sempre imprimem)`}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition disabled:opacity-50 ${
+                imprimirAutoBalcao
+                  ? 'text-emerald-400 hover:bg-emerald-500/10'
+                  : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+              }`}
+            >
+              <Printer className="h-4 w-4" />
+              <span className="hidden sm:inline">{imprimirAutoBalcao ? 'Auto' : 'Manual'}</span>
+            </button>
+          </div>
         </div>
       }>
       <div className="mb-6 flex items-baseline justify-between">
@@ -1002,34 +996,56 @@ export default function Cozinha() {
   )
 }
 
-function StatusConexao({ conectado, erro, aceitando }: { conectado: boolean; erro: string | null; aceitando: boolean }) {
+interface ControleAceitandoPedidosProps {
+  conectado: boolean
+  erro:      string | null
+  aceitando: boolean
+  disabled:  boolean
+  onToggle:  () => void
+}
+
+/** Estado da conexão + toggle de aceitar pedidos num único controle (evita repetir o mesmo status em dois lugares). */
+function ControleAceitandoPedidos({ conectado, erro, aceitando, disabled, onToggle }: ControleAceitandoPedidosProps) {
   if (erro) {
     return (
-      <div className="flex items-center gap-2 rounded-full bg-red-500/10 px-3 py-1.5 ring-1 ring-red-500/30">
-        <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>
-        <span className="text-sm font-medium text-red-300">{erro}</span>
-      </div>
+      <button
+        onClick={onToggle}
+        disabled={disabled}
+        title={erro}
+        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
+      >
+        <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+        <span className="hidden sm:inline">{erro}</span>
+      </button>
     )
   }
   if (!aceitando) {
     return (
-      <div className="flex items-center gap-2 rounded-full bg-orange-500/10 px-3 py-1.5 ring-1 ring-orange-500/30">
-        <span className="h-2.5 w-2.5 rounded-full bg-orange-500"></span>
-        <span className="text-sm font-medium text-orange-400">Pausada</span>
-      </div>
+      <button
+        onClick={onToggle}
+        disabled={disabled}
+        title="Toque para reabrir e voltar a receber pedidos"
+        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-400 transition hover:bg-orange-500/10 disabled:opacity-50"
+      >
+        <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" />
+        <span className="hidden sm:inline">Pausada</span>
+      </button>
     )
   }
   return (
-    <div className="flex items-center gap-2 rounded-full bg-zinc-800 px-3 py-1.5">
-      <span className="relative flex h-2.5 w-2.5">
+    <button
+      onClick={onToggle}
+      disabled={disabled}
+      title="Toque para pausar o recebimento de pedidos"
+      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50"
+    >
+      <span className="relative flex h-2 w-2 shrink-0">
         {conectado && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
         )}
-        <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${conectado ? 'bg-emerald-500' : 'bg-zinc-500'}`}></span>
+        <span className={`relative inline-flex h-2 w-2 rounded-full ${conectado ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
       </span>
-      <span className="text-sm font-medium text-zinc-300">
-        {conectado ? 'Cozinha ativa' : 'Conectando...'}
-      </span>
-    </div>
+      <span className="hidden sm:inline">{conectado ? 'Ativa' : 'Conectando...'}</span>
+    </button>
   )
 }
