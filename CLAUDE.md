@@ -192,9 +192,8 @@ VITE_API_URL=http://localhost:3000
 - **Nome do cliente opcional** no pedido manual (balcão) — usa "Cliente" como padrão quando em branco.
 - **Fonte maior na comanda impressa** — base 12px → 15px, título e total 14px → 18px.
 
-### 2026-07-03 (em andamento, não commitado)
-- **Evolution API self-hosted no Fly.io** (`evolution-fly/fly.toml`) — app `evolution-comanda`, região `gru`, imagem `atendai/evolution-api`, Postgres habilitado, `min_machines_running = 1`.
-- **Suporte a proxy em `src/evolution.ts`** — `proxyFromEnv()` lê `EVOLUTION_PROXY_HOST/PORT/PROTOCOL/USERNAME/PASSWORD` do ambiente e injeta `proxy` no payload de `criarInstancia()` (`POST /instance/create`). Objetivo: evitar bloqueio do WhatsApp quando várias instâncias saem do mesmo IP do Fly.io.
+### 2026-07-04
+- **Remoção do Evolution API / Fly.io (`a14380c`)** — análise confirmou que `src/evolution.ts` e `evolution-fly/fly.toml` (trabalho em andamento da sessão de 2026-07-03, nunca commitado/deployado) não eram referenciados por nenhum código ativo. O WhatsApp do produto já roda inteiramente via bot próprio com Baileys (`src/whatsapp.ts`), com sessão persistida em `WhatsAppSession` no Postgres. Os campos `evolutionUrl`/`evolutionToken` continuam no schema/rota de estabelecimento por enquanto (não usados, remoção adiada para não mexer em migration agora).
 
 ### 2026-07-02
 - **Impressão automática da comanda + email fictício facilitado no operador** (`edf6997`) — comanda imprime sozinha ao chegar pedido novo na Cozinha; cadastro de operador ganha botão pra gerar email fictício automaticamente.
