@@ -262,17 +262,30 @@ E, na lista de relations do mesmo model (junto de `whatsappSession`), adicionar:
   mesas            Mesa[]
   setores          Setor[]
   contas           Conta[]
+  pagamentos       Pagamento[]
+  pagamentoItens   PagamentoItem[]
   logsAuditoria    LogAuditoria[]
 ```
+
+> **Correção pós-review (Task 3 já implementada):** `pagamentos`/`pagamentoItens` foram adicionados
+> depois da implementação inicial — ver nota nos models `Pagamento`/`PagamentoItem` no Step 5 abaixo
+> sobre por que esses dois modelos ganharam `estabelecimentoId` direto (dado financeiro, isolamento de
+> tenant sem depender de join até `Conta`).
 
 - [ ] **Step 3: Adicionar `setorId` em `ItemCardapio`**
 
 No model `ItemCardapio`, logo abaixo do campo `categoriaId`/`categoria` existente, adicionar:
 
 ```prisma
-  setorId    String?
-  setor      Setor?     @relation(fields: [setorId], references: [id])
+  setorId      String?
+  setor        Setor?        @relation(fields: [setorId], references: [id])
+  itensComanda ItemComanda[]
 ```
+
+> **Correção pós-review:** o campo `itensComanda ItemComanda[]` não estava no texto original deste
+> plano — é a relação inversa obrigatória do Prisma para `ItemComanda.itemCardapio` (Step 5), que
+> faltava no desenho original. Sem isso `prisma validate` falha. Descoberto e corrigido durante a
+> implementação da Task 3.
 
 - [ ] **Step 4: Adicionar relations novas em `Usuario`**
 
@@ -409,6 +422,12 @@ model Pagamento {
   status         StatusPagamento @default(confirmado)
   criadoEm       DateTime        @default(now())
 
+  // estabelecimentoId direto (denormalizado a partir de Conta) — decisão pós-review da Task 3:
+  // dado financeiro não deve depender de join até Conta pra isolamento de tenant. Toda rota que
+  // consultar Pagamento filtra direto por { id, estabelecimentoId }, igual ao resto do projeto.
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
   contaId String
   conta   Conta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
 
@@ -423,6 +442,10 @@ model Pagamento {
 model PagamentoItem {
   id           String  @id @default(uuid())
   valorCoberto Decimal @db.Decimal(10, 2)
+
+  // Mesmo raciocínio do Pagamento acima — dado financeiro, isolamento direto sem depender de join.
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
 
   pagamentoId String
   pagamento   Pagamento @relation(fields: [pagamentoId], references: [id], onDelete: Cascade)
