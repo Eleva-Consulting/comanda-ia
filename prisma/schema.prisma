@@ -64,6 +64,28 @@ enum OrigemPedido {
   publico
 }
 
+enum StatusConta {
+  aberta
+  aguardando_pagamento
+  fechada
+  cancelada
+}
+
+enum StatusProducao {
+  recebido
+  em_preparo
+  pronto
+  entregue
+  cancelado
+}
+
+enum StatusPagamento {
+  pendente
+  confirmado
+  recusado
+  estornado
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -81,6 +103,7 @@ model Estabelecimento {
   evolutionToken   String?
   imprimirAutomaticoBalcao Boolean       @default(true)
   senhaReabrirPedido       String?
+  modulosAtivos    String[]              @default([])
   criadoEm         DateTime              @default(now())
 
   usuarios         Usuario[]
@@ -90,6 +113,10 @@ model Estabelecimento {
   categorias       Categoria[]
   bairros          Bairro[]
   whatsappSession  WhatsAppSession?
+  mesas            Mesa[]
+  setores          Setor[]
+  contas           Conta[]
+  logsAuditoria    LogAuditoria[]
 
   @@map("estabelecimentos")
 }
@@ -123,6 +150,9 @@ model Usuario {
   estabelecimentoId String?
   estabelecimento   Estabelecimento?   @relation(fields: [estabelecimentoId], references: [id])
   pushSubscriptions PushSubscription[]
+  itensComandaCriados ItemComanda[]
+  pagamentosRegistrados Pagamento[]
+  logsAuditoria         LogAuditoria[]
 
   @@map("usuarios")
 }
@@ -165,6 +195,11 @@ model ItemCardapio {
 
   categoriaId String?
   categoria   Categoria? @relation(fields: [categoriaId], references: [id])
+
+  setorId    String?
+  setor      Setor?     @relation(fields: [setorId], references: [id])
+
+  itensComanda ItemComanda[]
 
   @@map("itens_cardapio")
 }
@@ -246,4 +281,168 @@ model Mensagem {
   conversa   Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
 
   @@map("mensagens")
+}
+
+// ============================================================================
+// MÓDULO DE MESAS (Fase 1)
+// ============================================================================
+
+model Mesa {
+  id         String   @id @default(uuid())
+  numero     String
+  area       String?
+  capacidade Int?
+  ativa      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  contas Conta[]
+
+  @@unique([estabelecimentoId, numero])
+  @@map("mesas")
+}
+
+model Setor {
+  id               String   @id @default(uuid())
+  nome             String
+  tempoAlvoMinutos Int?
+  criadoEm         DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  itensCardapio ItemCardapio[]
+  itensComanda  ItemComanda[]
+
+  @@unique([estabelecimentoId, nome])
+  @@map("setores")
+}
+
+model Conta {
+  id        String      @id @default(uuid())
+  status    StatusConta @default(aberta)
+  abertaEm  DateTime    @default(now())
+  fechadaEm DateTime?
+
+  mesaId String?
+  mesa   Mesa?   @relation(fields: [mesaId], references: [id])
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  comandas   Comanda[]
+  pagamentos Pagamento[]
+
+  @@map("contas")
+}
+
+model Comanda {
+  id       String   @id @default(uuid())
+  nome     String   @default("Geral")
+  criadaEm DateTime @default(now())
+
+  contaId String
+  conta   Conta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
+
+  itens   ItemComanda[]
+  rateios ItemComandaRateio[]
+
+  @@map("comandas")
+}
+
+model ItemComanda {
+  id          String         @id @default(uuid())
+  nomeItem    String
+  quantidade  Int
+  precoUnit   Decimal        @db.Decimal(10, 2)
+  observacao  String?
+  status      StatusProducao @default(recebido)
+  recebidoEm  DateTime       @default(now())
+  prontoEm    DateTime?
+  entregueEm  DateTime?
+  canceladoEm DateTime?
+
+  comandaId String
+  comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+
+  itemCardapioId String?
+  itemCardapio   ItemCardapio? @relation(fields: [itemCardapioId], references: [id])
+
+  setorId String?
+  setor   Setor?  @relation(fields: [setorId], references: [id])
+
+  criadoPorUsuarioId String?
+  criadoPor          Usuario? @relation(fields: [criadoPorUsuarioId], references: [id])
+
+  rateios        ItemComandaRateio[]
+  pagamentoItens PagamentoItem[]
+
+  @@map("itens_comanda")
+}
+
+model ItemComandaRateio {
+  id     String  @id @default(uuid())
+  fracao Decimal @db.Decimal(4, 3)
+
+  itemComandaId String
+  itemComanda   ItemComanda @relation(fields: [itemComandaId], references: [id], onDelete: Cascade)
+
+  comandaId String
+  comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+
+  @@unique([itemComandaId, comandaId])
+  @@map("itens_comanda_rateio")
+}
+
+model Pagamento {
+  id             String          @id @default(uuid())
+  valor          Decimal         @db.Decimal(10, 2)
+  formaPagamento FormaPagamento
+  status         StatusPagamento @default(confirmado)
+  criadoEm       DateTime        @default(now())
+
+  contaId String
+  conta   Conta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
+
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  itens PagamentoItem[]
+
+  @@map("pagamentos")
+}
+
+model PagamentoItem {
+  id           String  @id @default(uuid())
+  valorCoberto Decimal @db.Decimal(10, 2)
+
+  pagamentoId String
+  pagamento   Pagamento @relation(fields: [pagamentoId], references: [id], onDelete: Cascade)
+
+  itemComandaId String
+  itemComanda   ItemComanda @relation(fields: [itemComandaId], references: [id])
+
+  @@map("pagamento_itens")
+}
+
+model LogAuditoria {
+  id           String   @id @default(uuid())
+  acao         String
+  entidadeTipo String
+  entidadeId   String
+  motivo       String?
+  dadosAntes   Json?
+  dadosDepois  Json?
+  criadoEm     DateTime @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([estabelecimentoId, criadoEm])
+  @@map("log_auditoria")
 }
