@@ -208,11 +208,36 @@ VITE_API_URL=http://localhost:3000
 - **Taxa de entrega por bairro + endereço no pedido** (`079f9bc`) — bairros com taxa própria cadastrados em Configurações (opcional, em branco = grátis); checkout e pedido manual pedem bairro/endereço; aparece na comanda, histórico e dashboard.
 - **Troco no pagamento em dinheiro, status por tipo de entrega, resumo do pedido** (`44437aa`) — indicar troco em pagamento dinheiro; retirada pula "saiu para entrega" (vai direto pra "retirado"); tela de confirmação com resumo completo passa a valer pra qualquer forma de pagamento (antes só PIX) e o resumo é enviado por WhatsApp em qualquer pedido.
 
+## Iniciativa em andamento: Módulo de Mesas
+
+> Se este chat foi reiniciado: leia primeiro `docs/superpowers/specs/2026-07-04-modulo-mesas-design.md`
+> — tem toda a análise de negócio, problemas identificados, modelagem de domínio (Mesa/Conta/Comanda/
+> Setor/Pagamento/Auditoria) e decisões já validadas com o usuário. Não repita o brainstorming, só
+> continue da fase em andamento.
+
+**Status:** Fase 1 com plano de implementação em
+`docs/superpowers/plans/2026-07-04-modulo-mesas-fase1.md`.
+
+**Decisão-chave da spec:** módulos habilitáveis por estabelecimento
+(`Estabelecimento.modulosAtivos: String[]`, mesmo padrão de `Usuario.permissoes`) — mesas e estoque
+avançado são add-ons pagos que não mudam nada pra quem não usa (ex: a galeteria, que é só
+balcão/delivery).
+
+**Fases** (só a 1 está sendo implementada agora; 2–5 são visão futura já desenhada na spec, não
+implementar sem revisitar o documento):
+
+1. [ ] **Mesas/Contas/Comandas + Setor de produção + Kanban multi-setor + fechamento simples + auditoria básica** ← fase atual
+2. [ ] Papéis (`mesas`, `caixa`) + tela de Caixa + senha de supervisor generalizada
+3. [ ] Pagamento via gateway (`Pagamento`/`TransacaoAdquirente`/Adapter — PagBank primeiro)
+4. [ ] Estoque avançado (ficha técnica/CMV)
+5. [ ] Relatórios avançados + auditoria completa
+
 ## Próximas features planejadas
 
-1. **Mercado Pago** — PIX real no checkout (substituir exibição de chave manual)
+1. **Mercado Pago** — PIX real no checkout (substituir exibição de chave manual) — spec e plano já
+   escritos em `docs/superpowers/specs/2026-07-03-mercado-pago-checkout-design.md` e
+   `docs/superpowers/plans/2026-07-03-mercado-pago-checkout.md`, implementação ainda não começou
 2. **Painel de avaliações** — ver média de estrelas e comentários no Dashboard
 3. **Relatórios avançados** — exportar histórico em CSV, filtro por período
 4. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
 5. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
-6. **Comanda por mesa** — associar pedido a número de mesa
