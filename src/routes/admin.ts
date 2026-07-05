@@ -26,12 +26,21 @@ const CriarEstabelecimentoSchema = Type.Object({
   emailDono:           Type.String({ format: 'email' }),
 });
 
+const MODULOS_VALIDOS = ['mesas', 'estoque_avancado'] as const;
+
+const AtualizarModulosSchema = Type.Object({
+  modulos: Type.Array(
+    Type.Union(MODULOS_VALIDOS.map((m) => Type.Literal(m)) as [ReturnType<typeof Type.Literal>])
+  ),
+});
+
 type EstabelecimentoComCount = {
   id: string;
   nome: string;
   slug: string;
   telefone: string;
   status: string;
+  modulosAtivos: string[];
   criadoEm: Date;
   _count: { usuarios: number; pedidos: number; itens: number };
 };
@@ -124,6 +133,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       slug: e.slug,
       telefone: e.telefone,
       status: e.status,
+      modulosAtivos: e.modulosAtivos,
       criadoEm: e.criadoEm,
       totalUsuarios: e._count.usuarios,
       totalPedidos: e._count.pedidos,
@@ -170,6 +180,31 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     return { id: atualizado.id, nome: atualizado.nome, status: atualizado.status };
+  });
+
+  // ── PATCH /admin/estabelecimentos/:id/modulos ────────────────────────────
+  // Liga/desliga módulos pagos (mesas, estoque avançado) por estabelecimento.
+  // TypeBox valida e rejeita módulo desconhecido com 400.
+  fastify.patch('/admin/estabelecimentos/:id/modulos', {
+    schema: {
+      params: AdminParamsSchema,
+      body:   AtualizarModulosSchema,
+    },
+  }, async (request, reply) => {
+    const { id }      = request.params as { id: string };
+    const { modulos } = request.body as { modulos: string[] };
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id } });
+    if (!estabelecimento) {
+      return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
+    }
+
+    const atualizado = await prisma.estabelecimento.update({
+      where: { id },
+      data:  { modulosAtivos: modulos },
+    });
+
+    return { id: atualizado.id, modulosAtivos: atualizado.modulosAtivos };
   });
 
   // ── GET /admin/metricas ──────────────────────────────────────────────────
