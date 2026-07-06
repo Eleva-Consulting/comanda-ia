@@ -1,8 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
-import { temPermissao } from './auth.js';
+import { temPermissao, moduloAtivo } from './auth.js';
+
+vi.mock('../database.js', () => ({
+  prisma: {
+    estabelecimento: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
+
+import { prisma } from '../database.js';
 
 function criarRequestFake(role: string, permissoes: string[]) {
-  return { user: { role, permissoes } } as unknown as Parameters<ReturnType<typeof temPermissao>>[0];
+  return { user: { role, permissoes, estabelecimentoId: 'test-id' } } as unknown as Parameters<ReturnType<typeof temPermissao>>[0];
 }
 
 function criarReplyFake() {
@@ -55,6 +65,53 @@ describe('temPermissao', () => {
   it('libera OPERADOR que tem QUALQUER uma das permissões informadas', async () => {
     const middleware = temPermissao('mesas', 'caixa');
     const request = criarRequestFake('OPERADOR', ['caixa']);
+    const reply = criarReplyFake();
+
+    await middleware(request, reply);
+
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('moduloAtivo', () => {
+  it('libera quando o estabelecimento tem o módulo ativo', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ modulosAtivos: ['mesas'] } as any);
+    const middleware = moduloAtivo('mesas');
+    const request = criarRequestFake('OPERADOR', ['mesas']);
+    const reply = criarReplyFake();
+
+    await middleware(request, reply);
+
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia com 403 quando o módulo não está ativo', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ modulosAtivos: [] } as any);
+    const middleware = moduloAtivo('mesas');
+    const request = criarRequestFake('DONO', []);
+    const reply = criarReplyFake();
+
+    await middleware(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ erro: 'Módulo não habilitado para este estabelecimento' });
+  });
+
+  it('NÃO libera o DONO automaticamente — módulo é sobre o estabelecimento, não sobre o papel do usuário', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ modulosAtivos: [] } as any);
+    const middleware = moduloAtivo('mesas');
+    const request = criarRequestFake('DONO', []);
+    const reply = criarReplyFake();
+
+    await middleware(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(403);
+  });
+
+  it('libera quando o estabelecimento tem QUALQUER um dos módulos informados', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ modulosAtivos: ['estoque_avancado'] } as any);
+    const middleware = moduloAtivo('mesas', 'estoque_avancado');
+    const request = criarRequestFake('DONO', []);
     const reply = criarReplyFake();
 
     await middleware(request, reply);

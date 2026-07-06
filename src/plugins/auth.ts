@@ -1,4 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import { prisma } from '../database.js';
 
 // ============================================================================
 // MODULE AUGMENTATION — define o payload do JWT
@@ -78,5 +79,30 @@ export function temPermissao(...permissoes: string[]) {
     if (request.user.role === 'DONO') return;
     if (permissoes.some((p) => request.user.permissoes.includes(p))) return;
     return reply.status(403).send({ erro: 'Você não tem permissão para acessar este recurso' });
+  };
+}
+
+/**
+ * Garante que o estabelecimento do usuário autenticado tem pelo menos um dos
+ * módulos informados habilitado em `modulosAtivos`. Ao contrário de
+ * `temPermissao`, NÃO libera o DONO automaticamente — é uma checagem sobre o plano
+ * contratado pelo estabelecimento, não sobre o papel do usuário dentro dele.
+ * Deve ser usado APÓS o hook autenticar.
+ */
+export function moduloAtivo(...modulos: string[]) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    const { estabelecimentoId } = request.user;
+    if (!estabelecimentoId) {
+      return reply.status(403).send({ erro: 'Acesso negado' });
+    }
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({
+      where:  { id: estabelecimentoId },
+      select: { modulosAtivos: true },
+    });
+
+    if (!estabelecimento || !modulos.some((m) => estabelecimento.modulosAtivos.includes(m))) {
+      return reply.status(403).send({ erro: 'Módulo não habilitado para este estabelecimento' });
+    }
   };
 }
