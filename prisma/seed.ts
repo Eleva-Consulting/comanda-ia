@@ -6,9 +6,18 @@ async function main() {
 
   await prisma.mensagem.deleteMany()
   await prisma.conversa.deleteMany()
+  await prisma.pagamentoItem.deleteMany()
+  await prisma.pagamento.deleteMany()
+  await prisma.itemComandaRateio.deleteMany()
+  await prisma.itemComanda.deleteMany()
+  await prisma.comanda.deleteMany()
+  await prisma.conta.deleteMany()
+  await prisma.mesa.deleteMany()
+  await prisma.logAuditoria.deleteMany()
   await prisma.itemPedido.deleteMany()
   await prisma.pedido.deleteMany()
   await prisma.itemCardapio.deleteMany()
+  await prisma.setor.deleteMany()
   await prisma.usuario.deleteMany()
   await prisma.estabelecimento.deleteMany()
   console.log('🗑️  Dados anteriores limpos')
@@ -77,6 +86,30 @@ async function main() {
     },
   })
   console.log(`✅ ${pizzaria.nome} (slug: ${pizzaria.slug})`)
+
+  // ── Setor padrão para os estabelecimentos de teste ────────────────────────
+  const setorCozinhaGaleteria = await prisma.setor.create({
+    data: { nome: 'Cozinha', estabelecimentoId: galeteria.id },
+  })
+  await prisma.itemCardapio.updateMany({
+    where: { estabelecimentoId: galeteria.id },
+    data:  { setorId: setorCozinhaGaleteria.id },
+  })
+
+  const setorCozinhaPizzaria = await prisma.setor.create({
+    data: { nome: 'Cozinha', estabelecimentoId: pizzaria.id },
+  })
+  await prisma.itemCardapio.updateMany({
+    where: { estabelecimentoId: pizzaria.id },
+    data:  { setorId: setorCozinhaPizzaria.id },
+  })
+
+  // ── Pizzaria é o estabelecimento de referência para o módulo de mesas ─────
+  await prisma.estabelecimento.update({
+    where: { id: pizzaria.id },
+    data:  { modulosAtivos: ['mesas'] },
+  })
+  console.log('✅ Módulo "mesas" habilitado na Pizzaria do Bairro (estabelecimento de teste)')
 
   // ── Estabelecimento pendente (simula um signup aguardando aprovação) ───────
   const senhaTeste = await bcrypt.hash('teste123456', 12)
