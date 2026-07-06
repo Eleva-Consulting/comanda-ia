@@ -226,8 +226,9 @@ export async function contasRoutes(fastify: FastifyInstance) {
     if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
 
     const atualizada = await prisma.comanda.update({ where: { id }, data: { nome }, include: { itens: true } });
-    getIO().to(estabelecimentoId!).emit('comanda:atualizada', atualizada);
-    return atualizada;
+    const serializada = { ...atualizada, itens: atualizada.itens.map(serializarItemComanda) };
+    getIO().to(estabelecimentoId!).emit('comanda:atualizada', serializada);
+    return serializada;
   });
 
   // ── POST /comandas/:id/itens ────────────────────────────────────────────────
