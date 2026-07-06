@@ -131,6 +131,11 @@ async function main() {
   })
   console.log(`⏳ ${hamburgueria.nome} (pendente — aguardando aprovação)`)
 
+  // ── Setor padrão para a hamburgueria (sem itens de cardápio ainda) ────────
+  await prisma.setor.create({
+    data: { nome: 'Cozinha', estabelecimentoId: hamburgueria.id },
+  })
+
   console.log('\n🎉 Seed concluído!')
   console.log('\nCredenciais:')
   console.log('  Super Admin  → admin@comanda-ia.dev  / superadmin123')
