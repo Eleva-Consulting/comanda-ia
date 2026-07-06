@@ -41,6 +41,10 @@ const AtualizarStatusItemComandaSchema = Type.Object({
   ]),
 });
 
+const TransferirItemComandaSchema = Type.Object({
+  comandaId: Type.String({ minLength: 1 }),
+});
+
 const AtualizarStatusContaSchema = Type.Object({
   status: Type.Union([
     Type.Literal('aberta'),
@@ -292,6 +296,35 @@ export async function contasRoutes(fastify: FastifyInstance) {
     if (status === 'cancelado') timestamps.canceladoEm = new Date();
 
     const atualizado = await prisma.itemComanda.update({ where: { id }, data: { status, ...timestamps } });
+    const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
+    getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+    return serializado;
+  });
+
+  // ── PATCH /itens-comanda/:id/transferir ─────────────────────────────────────
+  // Move o item pra outra comanda da MESMA conta (mesma mesa) — nunca entre mesas diferentes.
+  fastify.patch('/itens-comanda/:id/transferir', {
+    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    schema: { params: ItemComandaParamsSchema, body: TransferirItemComandaSchema },
+  }, async (request, reply) => {
+    const { id }        = request.params as { id: string };
+    const { comandaId } = request.body as { comandaId: string };
+    const { estabelecimentoId } = request.user;
+
+    const item = await prisma.itemComanda.findFirst({
+      where:   { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+      include: { comanda: true },
+    });
+    if (!item) return reply.status(404).send({ erro: 'Item não encontrado' });
+
+    const comandaDestino = await prisma.comanda.findFirst({
+      where: { id: comandaId, contaId: item.comanda.contaId },
+    });
+    if (!comandaDestino) {
+      return reply.status(400).send({ erro: 'Comanda de destino não encontrada ou não pertence à mesma conta' });
+    }
+
+    const atualizado = await prisma.itemComanda.update({ where: { id }, data: { comandaId } });
     const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
     getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
     return serializado;
