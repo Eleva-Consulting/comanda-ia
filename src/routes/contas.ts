@@ -3,7 +3,8 @@ import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
-import type { StatusConta } from '../generated/prisma/enums.js';
+import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
+import type { StatusConta, StatusProducao } from '../generated/prisma/enums.js';
 import { Prisma } from '../generated/prisma/client.js';
 
 const AbrirContaSchema = Type.Object({
@@ -26,6 +27,18 @@ const AdicionarItemComandaSchema = Type.Object({
   itemCardapioId: Type.String({ minLength: 1 }),
   quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
   observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+});
+
+const ItemComandaParamsSchema = Type.Object({ id: Type.String() });
+
+const AtualizarStatusItemComandaSchema = Type.Object({
+  status: Type.Union([
+    Type.Literal('recebido'),
+    Type.Literal('em_preparo'),
+    Type.Literal('pronto'),
+    Type.Literal('entregue'),
+    Type.Literal('cancelado'),
+  ]),
 });
 
 const AtualizarStatusContaSchema = Type.Object({
@@ -250,5 +263,37 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const serializado = serializarItemComanda(itemComanda);
     getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
     return reply.status(201).send(serializado);
+  });
+
+  // ── PATCH /itens-comanda/:id/status ─────────────────────────────────────────
+  fastify.patch('/itens-comanda/:id/status', {
+    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    schema: { params: ItemComandaParamsSchema, body: AtualizarStatusItemComandaSchema },
+  }, async (request, reply) => {
+    const { id }     = request.params as { id: string };
+    const { status } = request.body as { status: StatusProducao };
+    const { estabelecimentoId } = request.user;
+
+    const item = await prisma.itemComanda.findFirst({
+      where: { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+    });
+    if (!item) return reply.status(404).send({ erro: 'Item não encontrado' });
+
+    if (!transicaoProducaoValida(item.status, status)) {
+      return reply.status(422).send({ erro: 'Transição de status não permitida' });
+    }
+    if (status === 'cancelado' && !podeCancelarLivremente(item.status)) {
+      return reply.status(422).send({ erro: 'Cancelamento de item pronto/entregue ainda não disponível nesta versão' });
+    }
+
+    const timestamps: { prontoEm?: Date; entregueEm?: Date; canceladoEm?: Date } = {};
+    if (status === 'pronto')    timestamps.prontoEm    = new Date();
+    if (status === 'entregue')  timestamps.entregueEm  = new Date();
+    if (status === 'cancelado') timestamps.canceladoEm = new Date();
+
+    const atualizado = await prisma.itemComanda.update({ where: { id }, data: { status, ...timestamps } });
+    const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
+    getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+    return serializado;
   });
 }
