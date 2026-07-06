@@ -4,6 +4,7 @@ import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import type { StatusConta } from '../generated/prisma/enums.js';
+import { Prisma } from '../generated/prisma/client.js';
 
 const AbrirContaSchema = Type.Object({
   mesaId: Type.String({ minLength: 1 }),
@@ -109,17 +110,28 @@ export async function contasRoutes(fastify: FastifyInstance) {
     });
     if (contaAberta) return reply.status(409).send({ erro: 'Esta mesa já está ocupada' });
 
-    const conta = await prisma.conta.create({
-      data: {
-        mesaId,
-        estabelecimentoId: estabelecimentoId!,
-        comandas: { create: [{ nome: 'Geral' }] },
-      },
-      include: { mesa: true, comandas: { include: { itens: true } } },
-    });
+    try {
+      const conta = await prisma.conta.create({
+        data: {
+          mesaId,
+          estabelecimentoId: estabelecimentoId!,
+          comandas: { create: [{ nome: 'Geral' }] },
+        },
+        include: { mesa: true, comandas: { include: { itens: true } } },
+      });
 
-    getIO().to(estabelecimentoId!).emit('conta:atualizada', serializarConta(conta));
-    return reply.status(201).send(serializarConta(conta));
+      getIO().to(estabelecimentoId!).emit('conta:atualizada', serializarConta(conta));
+      return reply.status(201).send(serializarConta(conta));
+    } catch (err) {
+      // Safety net para a janela de corrida entre o findFirst acima e este create:
+      // o índice único parcial `contas_mesa_aberta_unica` (ver migration) barra a
+      // segunda Conta aberta simultânea na mesma mesa quando duas requisições
+      // concorrentes passam ambas pelo findFirst antes de qualquer create commitar.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return reply.status(409).send({ erro: 'Esta mesa já está ocupada' });
+      }
+      throw err;
+    }
   });
 
   // ── PATCH /contas/:id/status ────────────────────────────────────────────────
