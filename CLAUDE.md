@@ -192,6 +192,9 @@ VITE_API_URL=http://localhost:3000
 - **Nome do cliente opcional** no pedido manual (balcão) — usa "Cliente" como padrão quando em branco.
 - **Fonte maior na comanda impressa** — base 12px → 15px, título e total 14px → 18px.
 
+### 2026-07-06
+- **Módulo de Mesas — Fase 1a implementada e em produção (`fdaed53`)** — schema Prisma completo (Mesa, Setor, Conta, Comanda, ItemComanda, ItemComandaRateio, Pagamento, PagamentoItem, LogAuditoria), migration com backfill de setor padrão, módulos habilitáveis por estabelecimento (`Estabelecimento.modulosAtivos`) com toggle no Super Admin, permissões `mesas`/`caixa` no backend. Implementado via subagent-driven-development (7 tarefas + 1 correção pós-revisão final: `DELETE /admin/estabelecimentos` quebrava por causa das novas FKs `RESTRICT`). Primeira infraestrutura de teste automatizado do projeto (Vitest). Migration já rodada em produção via Railway, verificado sem quebra pros estabelecimentos reais existentes.
+
 ### 2026-07-04
 - **Remoção do Evolution API / Fly.io (`a14380c`)** — análise confirmou que `src/evolution.ts` e `evolution-fly/fly.toml` (trabalho em andamento da sessão de 2026-07-03, nunca commitado/deployado) não eram referenciados por nenhum código ativo. O WhatsApp do produto já roda inteiramente via bot próprio com Baileys (`src/whatsapp.ts`), com sessão persistida em `WhatsAppSession` no Postgres. Os campos `evolutionUrl`/`evolutionToken` continuam no schema/rota de estabelecimento por enquanto (não usados, remoção adiada para não mexer em migration agora). Também foi removido do Railway um serviço `evolution-api` (imagem `atendai/evolution-api`) que estava provisionado no mesmo projeto sem estar conectado ao backend.
 - **Barra de controles da Cozinha redesenhada (`4fb75b8`)** — "Pausar/Reabrir" e o indicador de status de conexão (que mostravam a mesma informação duas vezes) viraram um único controle clicável; o toggle "Balcão: auto/manual" virou um botão compacto por ícone. Os dois ficam juntos numa pílula única, com "Novo pedido" isolado como ação primária — resolve o header ficando apertado/poluído com muito texto.
@@ -215,22 +218,27 @@ VITE_API_URL=http://localhost:3000
 > Setor/Pagamento/Auditoria) e decisões já validadas com o usuário. Não repita o brainstorming, só
 > continue da fase em andamento.
 
-**Status:** Fase 1 com plano de implementação em
-`docs/superpowers/plans/2026-07-04-modulo-mesas-fase1.md`.
+**Status:** dentro da Fase 1 (visão completa na spec), quebrada em sub-planos sequenciais menores:
+
+1. [x] **Fase 1a — Fundação de dados** — `docs/superpowers/plans/2026-07-04-modulo-mesas-fase1.md`.
+   Schema Prisma completo (Mesa, Setor, Conta, Comanda, ItemComanda, ItemComandaRateio, Pagamento,
+   PagamentoItem, LogAuditoria), migration com backfill, módulos habilitáveis por estabelecimento,
+   permissões `mesas`/`caixa` no backend. **Mesclado no main (`fdaed53`) e em produção** — migration
+   já rodada no Railway, verificado sem quebra pros clientes existentes.
+2. [ ] **Fase 1b — Backend de Mesas/Contas/Comandas** ← próxima. CRUD de mesa/setor, abrir/fechar
+   conta, criar/renomear comanda, adicionar/transferir/cancelar item com status, Socket.IO por setor.
+3. [ ] Fase 1c — Tela do garçom (frontend)
+4. [ ] Fase 1d — Produção multi-setor (Kanban), feed unificado com pedidos de balcão/delivery
+5. [ ] Fase 1e — Fechamento de conta (dividir por comanda/igual/parcial, sem gateway ainda)
+6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis)
 
 **Decisão-chave da spec:** módulos habilitáveis por estabelecimento
 (`Estabelecimento.modulosAtivos: String[]`, mesmo padrão de `Usuario.permissoes`) — mesas e estoque
 avançado são add-ons pagos que não mudam nada pra quem não usa (ex: a galeteria, que é só
 balcão/delivery).
 
-**Fases** (só a 1 está sendo implementada agora; 2–5 são visão futura já desenhada na spec, não
-implementar sem revisitar o documento):
-
-1. [ ] **Mesas/Contas/Comandas + Setor de produção + Kanban multi-setor + fechamento simples + auditoria básica** ← fase atual
-2. [ ] Papéis (`mesas`, `caixa`) + tela de Caixa + senha de supervisor generalizada
-3. [ ] Pagamento via gateway (`Pagamento`/`TransacaoAdquirente`/Adapter — PagBank primeiro)
-4. [ ] Estoque avançado (ficha técnica/CMV)
-5. [ ] Relatórios avançados + auditoria completa
+**Fases 2-5 da spec** (papéis/caixa, pagamento via gateway, estoque avançado, relatórios) são visão
+futura já desenhada no documento — não implementar sem revisitar a spec primeiro.
 
 ## Próximas features planejadas
 
