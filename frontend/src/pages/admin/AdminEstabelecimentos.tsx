@@ -10,6 +10,7 @@ interface Estabelecimento {
   slug: string
   telefone: string
   status: 'pendente' | 'ativo' | 'suspenso'
+  modulosAtivos: string[]
   criadoEm: string
   totalUsuarios: number
   totalPedidos: number
@@ -39,6 +40,11 @@ const badgeStatus = {
     Icone: XCircle,
   },
 }
+
+const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
+  { id: 'mesas', label: 'Mesas' },
+  { id: 'estoque_avancado', label: 'Estoque avançado' },
+]
 
 export default function AdminEstabelecimentos() {
   const token = localStorage.getItem('token')
@@ -81,6 +87,36 @@ export default function AdminEstabelecimentos() {
       const atualizado = await resp.json()
       setLista((prev) =>
         prev.map((e) => (e.id === id ? { ...e, status: atualizado.status } : e))
+      )
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAtualizando(null)
+    }
+  }
+
+  async function alternarModulo(id: string, moduloId: string, ativo: boolean) {
+    const estabelecimento = lista.find((e) => e.id === id)
+    if (!estabelecimento) return
+
+    const modulos = ativo
+      ? [...estabelecimento.modulosAtivos, moduloId]
+      : estabelecimento.modulosAtivos.filter((m) => m !== moduloId)
+
+    setAtualizando(id)
+    try {
+      const resp = await fetch(`${API_URL}/admin/estabelecimentos/${id}/modulos`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ modulos }),
+      })
+      if (!resp.ok) return
+      const atualizado = await resp.json()
+      setLista((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, modulosAtivos: atualizado.modulosAtivos } : e))
       )
     } catch (err) {
       console.error(err)
@@ -195,6 +231,7 @@ export default function AdminEstabelecimentos() {
                 mudarStatus={mudarStatus}
                 deletandoId={deletandoId}
                 onDelete={() => setConfirmId(e.id)}
+                alternarModulo={alternarModulo}
               />
             ))}
           </div>
@@ -212,6 +249,7 @@ export default function AdminEstabelecimentos() {
               mudarStatus={mudarStatus}
               deletandoId={deletandoId}
               onDelete={() => setConfirmId(e.id)}
+              alternarModulo={alternarModulo}
             />
           ))}
         </div>
@@ -352,12 +390,14 @@ function CardEstabelecimento({
   mudarStatus,
   deletandoId,
   onDelete,
+  alternarModulo,
 }: {
   e: Estabelecimento
   atualizando: string | null
   mudarStatus: (id: string, status: StatusEstabelecimento) => void
   deletandoId: string | null
   onDelete: () => void
+  alternarModulo: (id: string, moduloId: string, ativo: boolean) => void
 }) {
   const badge = badgeStatus[e.status]
   const ocupado = atualizando === e.id
@@ -384,6 +424,20 @@ function CardEstabelecimento({
             <span>{e.totalUsuarios} usuário{e.totalUsuarios !== 1 ? 's' : ''}</span>
             <span>{e.totalPedidos} pedido{e.totalPedidos !== 1 ? 's' : ''}</span>
             <span>{e.totalItens} item{e.totalItens !== 1 ? 'ns' : ''} no cardápio</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-400">
+            {MODULOS_DISPONIVEIS.map((m) => (
+              <label key={m.id} className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={e.modulosAtivos.includes(m.id)}
+                  onChange={(ev) => alternarModulo(e.id, m.id, ev.target.checked)}
+                  disabled={atualizando === e.id}
+                  className="h-3.5 w-3.5 rounded border-zinc-700 bg-zinc-800 text-orange-500 focus:ring-orange-500"
+                />
+                {m.label}
+              </label>
+            ))}
           </div>
         </div>
       </div>
