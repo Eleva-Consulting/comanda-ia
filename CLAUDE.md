@@ -194,6 +194,7 @@ VITE_API_URL=http://localhost:3000
 
 ### 2026-07-06
 - **Módulo de Mesas — Fase 1a implementada e em produção (`fdaed53`)** — schema Prisma completo (Mesa, Setor, Conta, Comanda, ItemComanda, ItemComandaRateio, Pagamento, PagamentoItem, LogAuditoria), migration com backfill de setor padrão, módulos habilitáveis por estabelecimento (`Estabelecimento.modulosAtivos`) com toggle no Super Admin, permissões `mesas`/`caixa` no backend. Implementado via subagent-driven-development (7 tarefas + 1 correção pós-revisão final: `DELETE /admin/estabelecimentos` quebrava por causa das novas FKs `RESTRICT`). Primeira infraestrutura de teste automatizado do projeto (Vitest). Migration já rodada em produção via Railway, verificado sem quebra pros estabelecimentos reais existentes.
+- **Módulo de Mesas — Fase 1b mesclada no main (`30c88c8`)** — backend completo de Mesas/Contas/Comandas: middleware `moduloAtivo` (a Fase 1a só tinha o toggle, faltava a rota de fato bloquear quem não contratou), CRUD de Setor (base, sem exigir módulo) e Mesa (exige módulo), abrir mesa (Conta + Comanda "Geral" automática), criar/renomear comanda, adicionar item (com snapshot de setor), avançar status de produção (bloqueando cancelamento pós-pronto, que exige senha de supervisor ainda não construída), transferir item entre comandas. 9 tarefas via subagent-driven-development + 2 correções pós-revisão: uma corrida real (duas Contas abertas na mesma mesa, corrigida com índice único parcial no Postgres + tratamento do erro de constraint) e uma inconsistência de serialização (Decimal vs Number). Ainda **não** enviado pro GitHub nem deployado — falta rodar a migration nova em produção.
 
 ### 2026-07-04
 - **Remoção do Evolution API / Fly.io (`a14380c`)** — análise confirmou que `src/evolution.ts` e `evolution-fly/fly.toml` (trabalho em andamento da sessão de 2026-07-03, nunca commitado/deployado) não eram referenciados por nenhum código ativo. O WhatsApp do produto já roda inteiramente via bot próprio com Baileys (`src/whatsapp.ts`), com sessão persistida em `WhatsAppSession` no Postgres. Os campos `evolutionUrl`/`evolutionToken` continuam no schema/rota de estabelecimento por enquanto (não usados, remoção adiada para não mexer em migration agora). Também foi removido do Railway um serviço `evolution-api` (imagem `atendai/evolution-api`) que estava provisionado no mesmo projeto sem estar conectado ao backend.
@@ -225,9 +226,15 @@ VITE_API_URL=http://localhost:3000
    PagamentoItem, LogAuditoria), migration com backfill, módulos habilitáveis por estabelecimento,
    permissões `mesas`/`caixa` no backend. **Mesclado no main (`fdaed53`) e em produção** — migration
    já rodada no Railway, verificado sem quebra pros clientes existentes.
-2. [ ] **Fase 1b — Backend de Mesas/Contas/Comandas** ← próxima. CRUD de mesa/setor, abrir/fechar
-   conta, criar/renomear comanda, adicionar/transferir/cancelar item com status, Socket.IO por setor.
-3. [ ] Fase 1c — Tela do garçom (frontend)
+2. [x] **Fase 1b — Backend de Mesas/Contas/Comandas** — `docs/superpowers/plans/2026-07-06-modulo-mesas-fase1b.md`.
+   Middleware `moduloAtivo` (checagem server-side do módulo contratado — a Fase 1a só tinha o
+   toggle), máquina de estado `StatusProducao`, CRUD de Setor/Mesa, abrir mesa (Conta + Comanda
+   "Geral" automática), criar/renomear comanda, adicionar/transferir item, mudar status de produção
+   (com bloqueio de cancelamento pós-pronto). **Mesclado no main (`30c88c8`), ainda não enviado pro
+   GitHub nem deployado em produção** — falta rodar a migration nova (índice único parcial em
+   `contas.mesaId`, corrige uma corrida real de "duas contas abertas na mesma mesa") no Railway antes
+   do próximo push. Nenhuma tela nova ainda — tudo via API/curl.
+3. [ ] Fase 1c — Tela do garçom (frontend) ← próxima
 4. [ ] Fase 1d — Produção multi-setor (Kanban), feed unificado com pedidos de balcão/delivery
 5. [ ] Fase 1e — Fechamento de conta (dividir por comanda/igual/parcial, sem gateway ainda)
 6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis)
