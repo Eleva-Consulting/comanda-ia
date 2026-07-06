@@ -12,6 +12,16 @@ const AbrirContaSchema = Type.Object({
 
 const ContaParamsSchema = Type.Object({ id: Type.String() });
 
+const CriarComandaSchema = Type.Object({
+  nome: Type.String({ minLength: 1, maxLength: 40 }),
+});
+
+const AtualizarComandaSchema = Type.Object({
+  nome: Type.String({ minLength: 1, maxLength: 40 }),
+});
+
+const ComandaParamsSchema = Type.Object({ id: Type.String() });
+
 const AtualizarStatusContaSchema = Type.Object({
   status: Type.Union([
     Type.Literal('aberta'),
@@ -158,5 +168,42 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
     getIO().to(estabelecimentoId!).emit('conta:atualizada', serializarConta(atualizada));
     return serializarConta(atualizada);
+  });
+
+  // ── POST /contas/:id/comandas ───────────────────────────────────────────────
+  // Cria uma nova comanda dentro de uma conta aberta (ex: separar "Luiz" do "Geral").
+  fastify.post('/contas/:id/comandas', {
+    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    schema: { params: ContaParamsSchema, body: CriarComandaSchema },
+  }, async (request, reply) => {
+    const { id }   = request.params as { id: string };
+    const { nome } = request.body as { nome: string };
+    const { estabelecimentoId } = request.user;
+
+    const conta = await prisma.conta.findFirst({ where: { id, estabelecimentoId: estabelecimentoId!, status: 'aberta' } });
+    if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada ou não está aberta' });
+
+    const comanda = await prisma.comanda.create({ data: { contaId: id, nome }, include: { itens: true } });
+    getIO().to(estabelecimentoId!).emit('comanda:criada', comanda);
+    return reply.status(201).send(comanda);
+  });
+
+  // ── PATCH /comandas/:id ─────────────────────────────────────────────────────
+  fastify.patch('/comandas/:id', {
+    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    schema: { params: ComandaParamsSchema, body: AtualizarComandaSchema },
+  }, async (request, reply) => {
+    const { id }   = request.params as { id: string };
+    const { nome } = request.body as { nome: string };
+    const { estabelecimentoId } = request.user;
+
+    const comanda = await prisma.comanda.findFirst({
+      where: { id, conta: { estabelecimentoId: estabelecimentoId! } },
+    });
+    if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
+
+    const atualizada = await prisma.comanda.update({ where: { id }, data: { nome }, include: { itens: true } });
+    getIO().to(estabelecimentoId!).emit('comanda:atualizada', atualizada);
+    return atualizada;
   });
 }
