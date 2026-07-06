@@ -822,6 +822,15 @@ git add src/routes/contas.ts src/server.ts
 git commit -m "feat: abrir mesa (Conta + Comanda Geral automática), listar, buscar e mudar status da conta"
 ```
 
+> **Correção pós-review:** a checagem "mesa já ocupada" (`findFirst` antes do `create`) não tinha
+> nenhuma trava no banco atrás dela — `Conta.mesaId` não tinha `@@unique`/índice. Duas requisições
+> `POST /contas` na mesma mesa quase simultâneas podiam as duas passar pela checagem antes de
+> qualquer uma comitar, criando duas Contas abertas na mesma mesa (corrompendo a invariante central
+> desta fase). Corrigido com um índice único parcial no Postgres
+> (`CREATE UNIQUE INDEX ... ON contas ("mesaId") WHERE status IN ('aberta', 'aguardando_pagamento')`)
+> — a checagem `findFirst` continua existindo (dá o 409 rápido no caso comum), e o índice é a rede de
+> segurança pro caso de corrida de verdade, convertendo a violação de constraint em 409 também.
+
 ---
 
 ### Task 6: Comanda — criar e renomear
