@@ -22,6 +22,12 @@ const AtualizarComandaSchema = Type.Object({
 
 const ComandaParamsSchema = Type.Object({ id: Type.String() });
 
+const AdicionarItemComandaSchema = Type.Object({
+  itemCardapioId: Type.String({ minLength: 1 }),
+  quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+  observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+});
+
 const AtualizarStatusContaSchema = Type.Object({
   status: Type.Union([
     Type.Literal('aberta'),
@@ -205,5 +211,44 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const atualizada = await prisma.comanda.update({ where: { id }, data: { nome }, include: { itens: true } });
     getIO().to(estabelecimentoId!).emit('comanda:atualizada', atualizada);
     return atualizada;
+  });
+
+  // ── POST /comandas/:id/itens ────────────────────────────────────────────────
+  fastify.post('/comandas/:id/itens', {
+    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    schema: { params: ComandaParamsSchema, body: AdicionarItemComandaSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { itemCardapioId, quantidade, observacao } = request.body as {
+      itemCardapioId: string; quantidade: number; observacao?: string;
+    };
+    const { estabelecimentoId, userId } = request.user;
+
+    const comanda = await prisma.comanda.findFirst({
+      where: { id, conta: { estabelecimentoId: estabelecimentoId! } },
+    });
+    if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
+
+    const itemCardapio = await prisma.itemCardapio.findFirst({
+      where: { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+    });
+    if (!itemCardapio) return reply.status(400).send({ erro: 'Item não disponível ou não pertence a este estabelecimento' });
+
+    const itemComanda = await prisma.itemComanda.create({
+      data: {
+        comandaId:          id,
+        itemCardapioId:     itemCardapio.id,
+        nomeItem:           itemCardapio.nome,
+        quantidade,
+        precoUnit:          itemCardapio.preco,
+        observacao:         observacao ?? null,
+        setorId:            itemCardapio.setorId,
+        criadoPorUsuarioId: userId,
+      },
+    });
+
+    const serializado = serializarItemComanda(itemComanda);
+    getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
+    return reply.status(201).send(serializado);
   });
 }
