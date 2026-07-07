@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
 import { FastifyInstance } from 'fastify';
+import { salasParaConexao } from './utils/salasSocket.js';
 
 let io: Server;
 
@@ -24,9 +25,18 @@ export function inicializarSocket(fastify: FastifyInstance) {
     if (!token) return next(new Error('Token ausente'));
 
     try {
-      const payload = fastify.jwt.verify<{ estabelecimentoId: string; userId: string }>(token);
+      const payload = fastify.jwt.verify<{ estabelecimentoId: string; userId: string; setorId: string | null }>(token);
+      const contexto = (socket.handshake.auth?.contexto as string | undefined) ?? null;
       socket.data.estabelecimentoId = payload.estabelecimentoId;
-      socket.join(payload.estabelecimentoId);
+
+      for (const sala of salasParaConexao({
+        estabelecimentoId: payload.estabelecimentoId,
+        setorId:           payload.setorId,
+        contexto,
+      })) {
+        socket.join(sala);
+      }
+
       next();
     } catch {
       next(new Error('Token inválido'));

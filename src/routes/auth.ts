@@ -124,6 +124,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       estabelecimentoId: usuario.estabelecimentoId,
       role:              usuario.role,
       permissoes:        usuario.role === 'OPERADOR' ? usuario.permissoes : [],
+      setorId:           usuario.setorId,
     });
 
     return {

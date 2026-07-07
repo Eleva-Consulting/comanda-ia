@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2 } from 'lucide-react'
+import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
@@ -122,6 +122,14 @@ export default function Layout({ children, headerExtra }: Props) {
                 </span>
               </NavLink>
             )}
+            {mostrarMesas && (
+              <NavLink to="/producao" className={linkClass}>
+                <span className="flex items-center gap-1.5">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Produção
+                </span>
+              </NavLink>
+            )}
             <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
             {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
             {isDono && (
@@ -165,6 +173,14 @@ export default function Layout({ children, headerExtra }: Props) {
               <span className="flex items-center gap-1.5">
                 <Table2 className="h-3.5 w-3.5" />
                 Mesas
+              </span>
+            </NavLink>
+          )}
+          {mostrarMesas && (
+            <NavLink to="/producao" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <ClipboardList className="h-3.5 w-3.5" />
+                Produção
               </span>
             </NavLink>
           )}

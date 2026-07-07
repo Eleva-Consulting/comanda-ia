@@ -17,6 +17,7 @@ import { bairrosRoutes } from './routes/bairros.js';
 import { setoresRoutes } from './routes/setores.js';
 import { mesasRoutes } from './routes/mesas.js';
 import { contasRoutes } from './routes/contas.js';
+import { producaoRoutes } from './routes/producao.js';
 import { pushRoutes } from './routes/push.js';
 
 function origensPermitidas(): string[] {
@@ -73,6 +74,7 @@ export async function buildServer() {
   await fastify.register(setoresRoutes);
   await fastify.register(mesasRoutes);
   await fastify.register(contasRoutes);
+  await fastify.register(producaoRoutes);
 
   // Rotas exclusivas do Super Admin
   await fastify.register(adminRoutes);
