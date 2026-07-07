@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { Bell, BellOff, ChefHat, LogOut, Users, X } from 'lucide-react'
+import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2 } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
 import { temPermissao } from '../lib/permissoes'
+import { API_URL } from '../lib/api'
 
 interface Toast {
   id:          number
@@ -83,6 +84,18 @@ export default function Layout({ children, headerExtra }: Props) {
   const podeCardapio      = isDono || temPermissao('cardapio')
   const podeHistorico     = isDono || temPermissao('historico')
   const podeConfiguracoes = isDono || temPermissao('configuracoes')
+  const podeMesas = isDono || temPermissao('mesas')
+  const [modulosAtivos, setModulosAtivos] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!token) return
+    fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => setModulosAtivos(data.modulosAtivos ?? []))
+      .catch(console.error)
+  }, [token])
+
+  const mostrarMesas = podeMesas && modulosAtivos.includes('mesas')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
 
   return (
@@ -101,6 +114,14 @@ export default function Layout({ children, headerExtra }: Props) {
           {/* Nav desktop */}
           <nav className="hidden items-center gap-1 sm:flex">
             {isDono && <NavLink to="/dashboard" className={linkClass}>Home</NavLink>}
+            {mostrarMesas && (
+              <NavLink to="/mesas" className={linkClass}>
+                <span className="flex items-center gap-1.5">
+                  <Table2 className="h-3.5 w-3.5" />
+                  Mesas
+                </span>
+              </NavLink>
+            )}
             <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
             {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
             {isDono && (
@@ -139,6 +160,14 @@ export default function Layout({ children, headerExtra }: Props) {
         {/* Nav mobile */}
         <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
           {isDono && <NavLink to="/dashboard" className={linkClass}>Home</NavLink>}
+          {mostrarMesas && (
+            <NavLink to="/mesas" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <Table2 className="h-3.5 w-3.5" />
+                Mesas
+              </span>
+            </NavLink>
+          )}
           <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
           {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
           {isDono && (

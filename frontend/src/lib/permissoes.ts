@@ -1,6 +1,6 @@
 import { getRole } from './auth'
 
-export type Permissao = 'cozinha' | 'cardapio' | 'historico' | 'pedido_manual' | 'configuracoes'
+export type Permissao = 'cozinha' | 'cardapio' | 'historico' | 'pedido_manual' | 'configuracoes' | 'mesas'
 
 export const TODAS_PERMISSOES: { id: Permissao; label: string }[] = [
   { id: 'cozinha',       label: 'Cozinha — ver e atualizar pedidos' },
@@ -8,6 +8,7 @@ export const TODAS_PERMISSOES: { id: Permissao; label: string }[] = [
   { id: 'historico',     label: 'Histórico — ver pedidos anteriores' },
   { id: 'pedido_manual', label: 'Criar pedido manualmente' },
   { id: 'configuracoes', label: 'Configurações do estabelecimento' },
+  { id: 'mesas',         label: 'Mesas — abrir mesas e lançar pedidos' },
 ]
 
 export function getPermissoes(): Permissao[] {
