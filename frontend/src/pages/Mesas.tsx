@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Plus, Search, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
@@ -94,6 +94,13 @@ export default function Mesas() {
   const [buscaItem, setBuscaItem] = useState('')
   const [adicionandoItemId, setAdicionandoItemId] = useState<string | null>(null)
 
+  const [novaComandaAberta, setNovaComandaAberta] = useState(false)
+  const [nomeNovaComanda, setNomeNovaComanda] = useState('')
+  const [salvandoComanda, setSalvandoComanda] = useState(false)
+
+  const [renomeandoComandaId, setRenomeandoComandaId] = useState<string | null>(null)
+  const [nomeRenomeacao, setNomeRenomeacao] = useState('')
+
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
@@ -188,6 +195,55 @@ export default function Mesas() {
     }
   }
 
+  async function criarComanda(e: FormEvent) {
+    e.preventDefault()
+    if (!contaSelecionada || !nomeNovaComanda.trim()) return
+    setSalvandoComanda(true)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/comandas`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nomeNovaComanda.trim() }),
+      })
+      if (resp.ok) {
+        const novaComanda = await resp.json()
+        setContaSelecionada((prev) => prev ? { ...prev, comandas: [...prev.comandas, novaComanda] } : prev)
+        setNovaComandaAberta(false)
+        setNomeNovaComanda('')
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSalvandoComanda(false)
+    }
+  }
+
+  function iniciarRenomeacao(comanda: Comanda) {
+    setRenomeandoComandaId(comanda.id)
+    setNomeRenomeacao(comanda.nome)
+  }
+
+  async function salvarRenomeacao(e: FormEvent) {
+    e.preventDefault()
+    if (!renomeandoComandaId || !nomeRenomeacao.trim()) return
+    try {
+      const resp = await fetch(`${API_URL}/comandas/${renomeandoComandaId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nomeRenomeacao.trim() }),
+      })
+      if (resp.ok) {
+        const atualizada = await resp.json()
+        setContaSelecionada((prev) => prev
+          ? { ...prev, comandas: prev.comandas.map((c) => c.id === atualizada.id ? atualizada : c) }
+          : prev)
+        setRenomeandoComandaId(null)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const itensFiltrados = cardapio.filter((item) =>
     item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
   )
@@ -251,11 +307,33 @@ export default function Mesas() {
             <h2 className="text-xl font-extrabold">Mesa {contaSelecionada.mesa.numero}</h2>
           </div>
 
+          <button
+            onClick={() => setNovaComandaAberta(true)}
+            className="mb-4 flex items-center gap-1.5 rounded-xl bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700"
+          >
+            <Plus className="h-4 w-4" /> Nova comanda
+          </button>
+
           <div className="space-y-4">
             {contaSelecionada.comandas.map((comanda) => (
               <div key={comanda.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="font-semibold">{comanda.nome}</span>
+                  {renomeandoComandaId === comanda.id ? (
+                    <form onSubmit={salvarRenomeacao} className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={nomeRenomeacao}
+                        onChange={(e) => setNomeRenomeacao(e.target.value)}
+                        className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm"
+                      />
+                      <button type="submit" className="text-sm text-orange-400">Salvar</button>
+                      <button type="button" onClick={() => setRenomeandoComandaId(null)} className="text-sm text-zinc-500">Cancelar</button>
+                    </form>
+                  ) : (
+                    <button onClick={() => iniciarRenomeacao(comanda)} className="font-semibold hover:text-orange-400">
+                      {comanda.nome}
+                    </button>
+                  )}
                   <button
                     onClick={() => abrirModalItem(comanda.id)}
                     className="flex items-center gap-1 rounded-lg bg-orange-500/10 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-500/20"
@@ -324,6 +402,28 @@ export default function Mesas() {
               </ul>
             )}
           </div>
+        </div>
+      )}
+
+      {novaComandaAberta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setNovaComandaAberta(false)}>
+          <form onSubmit={criarComanda} className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Nova comanda</h3>
+            <input
+              autoFocus
+              value={nomeNovaComanda}
+              onChange={(e) => setNomeNovaComanda(e.target.value)}
+              placeholder="Nome (ex: Luiz)"
+              className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={salvandoComanda || !nomeNovaComanda.trim()}
+              className="w-full rounded-xl bg-orange-500 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Criar
+            </button>
+          </form>
         </div>
       )}
     </Layout>
