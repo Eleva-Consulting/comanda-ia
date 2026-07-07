@@ -75,12 +75,12 @@ interface ComandaComItens {
   [chave: string]: unknown;
 }
 
-interface ContaComComandas {
+export interface ContaComComandas {
   comandas?: ComandaComItens[];
   [chave: string]: unknown;
 }
 
-function serializarConta(conta: ContaComComandas) {
+export function serializarConta(conta: ContaComComandas) {
   return {
     ...conta,
     comandas: conta.comandas?.map((comanda) => ({
@@ -94,7 +94,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
   // ── GET /contas ─────────────────────────────────────────────────────────────
   // ?status=aberta,aguardando_pagamento,fechada,cancelada — default: só as em andamento.
   fastify.get('/contas', {
-    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('mesas', 'caixa'), moduloAtivo('mesas')],
   }, async (request) => {
     const { estabelecimentoId } = request.user;
     const q = request.query as { status?: string };
@@ -113,7 +113,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
   // ── GET /contas/:id ─────────────────────────────────────────────────────────
   fastify.get('/contas/:id', {
-    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('mesas', 'caixa'), moduloAtivo('mesas')],
     schema: { params: ContaParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
