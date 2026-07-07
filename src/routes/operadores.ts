@@ -7,9 +7,10 @@ import { autenticar } from '../plugins/auth.js';
 const PERMISSOES_VALIDAS = ['cozinha', 'cardapio', 'historico', 'pedido_manual', 'configuracoes', 'mesas', 'caixa'] as const;
 
 const CriarOperadorSchema = Type.Object({
-  nome:  Type.String({ minLength: 2, maxLength: 100 }),
-  email: Type.String({ format: 'email' }),
-  senha: Type.String({ minLength: 8, maxLength: 100 }),
+  nome:    Type.String({ minLength: 2, maxLength: 100 }),
+  email:   Type.String({ format: 'email' }),
+  senha:   Type.String({ minLength: 8, maxLength: 100 }),
+  setorId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 
 const AtualizarPermissoesSchema = Type.Object({
@@ -19,8 +20,9 @@ const AtualizarPermissoesSchema = Type.Object({
 });
 
 const AtualizarDadosSchema = Type.Object({
-  nome:  Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
-  email: Type.Optional(Type.String({ format: 'email' })),
+  nome:    Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
+  email:   Type.Optional(Type.String({ format: 'email' })),
+  setorId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 
 const RedefinirSenhaOperadorSchema = Type.Object({
@@ -29,6 +31,8 @@ const RedefinirSenhaOperadorSchema = Type.Object({
 
 const selecionarOperador = {
   id: true, nome: true, email: true, criadoEm: true, permissoes: true,
+  setorId: true,
+  setor: { select: { nome: true } },
 } as const;
 
 function apenasDono(request: Parameters<typeof autenticar>[0], reply: Parameters<typeof autenticar>[1]) {
@@ -57,7 +61,9 @@ export async function operadoresRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     if (await apenasDono(request, reply)) return;
 
-    const { nome, email, senha } = request.body as { nome: string; email: string; senha: string };
+    const { nome, email, senha, setorId } = request.body as {
+      nome: string; email: string; senha: string; setorId?: string | null;
+    };
 
     const emailExistente = await prisma.usuario.findUnique({ where: { email } });
     if (emailExistente) return reply.status(409).send({ erro: 'Email já cadastrado' });
@@ -72,6 +78,7 @@ export async function operadoresRoutes(fastify: FastifyInstance) {
         role:              'OPERADOR',
         estabelecimentoId: request.user.estabelecimentoId!,
         permissoes:        ['cozinha'],
+        setorId:           setorId ?? null,
       },
       select: selecionarOperador,
     });
@@ -104,7 +111,7 @@ export async function operadoresRoutes(fastify: FastifyInstance) {
   });
 
   // ── PATCH /estabelecimentos/operadores/:id ────────────────────────────────
-  // Corrige nome/email cadastrados errados
+  // Corrige nome/email cadastrados errados, e/ou muda o setor fixo do operador
   fastify.patch('/estabelecimentos/operadores/:id', {
     schema: {
       params: Type.Object({ id: Type.String() }),
@@ -114,7 +121,7 @@ export async function operadoresRoutes(fastify: FastifyInstance) {
     if (await apenasDono(request, reply)) return;
 
     const { id } = request.params as { id: string };
-    const { nome, email } = request.body as { nome?: string; email?: string };
+    const { nome, email, setorId } = request.body as { nome?: string; email?: string; setorId?: string | null };
 
     const operador = await prisma.usuario.findUnique({ where: { id } });
     if (!operador || operador.estabelecimentoId !== request.user.estabelecimentoId || operador.role !== 'OPERADOR') {
@@ -128,7 +135,11 @@ export async function operadoresRoutes(fastify: FastifyInstance) {
 
     return prisma.usuario.update({
       where:  { id },
-      data:   { ...(nome ? { nome } : {}), ...(email ? { email } : {}) },
+      data:   {
+        ...(nome ? { nome } : {}),
+        ...(email ? { email } : {}),
+        ...(setorId !== undefined ? { setorId } : {}),
+      },
       select: selecionarOperador,
     });
   });
