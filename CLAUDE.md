@@ -177,7 +177,11 @@ VITE_API_URL=http://localhost:3000
 **Produção:**
 - Backend: Railway (DATABASE_URL gerado automaticamente pelo serviço Postgres do Railway)
 - Frontend: Vercel (VITE_API_URL aponta pro Railway)
-- Após cada migration nova: `npx prisma migrate deploy` no console do Railway
+- Migrations novas rodam sozinhas: o release process do Railway já executa `npx prisma migrate deploy`
+  automaticamente antes de subir o servidor a cada deploy (confirmado nos logs do container na Fase 1d)
+  — não precisa rodar manual no console. Se quiser confirmar/forçar manualmente mesmo assim (ex: pra
+  debugar), usar `DATABASE_URL=<DATABASE_PUBLIC_URL do serviço Postgres> npx prisma migrate deploy`
+  local, apontando pro proxy público do Postgres do Railway.
 - Deploy manual Railway: `railway up --detach` (auto-deploy às vezes falha)
 
 ## Log de mudanças
@@ -198,6 +202,7 @@ VITE_API_URL=http://localhost:3000
 
 ### 2026-07-07
 - **Módulo de Mesas — Fase 1c mesclada no main (`896ec49`) e enviada pro GitHub** — primeira tela do módulo: link "Mesas" no menu (permissão + módulo ativo, checagens independentes), grade de mesas por status, abrir mesa e ver comandas/itens, modal de adicionar item, criar/renomear comanda, transferir item entre comandas, cancelar mesa, tudo com atualização em tempo real via Socket.IO. 8 tarefas via subagent-driven-development + revisão final de todo o branch (aprovada sem ressalvas bloqueantes). Sem migration nova (fase 100% frontend). Achados: um bug real de serialização (`preco` chega como string do backend, não number — corrigido na Task 4) e duas quebras de infraestrutura de subagente sem relação com o código (Task 7 caiu por erro de rede com o código já correto; Tasks 6/7/8 não tinham acesso à extensão do Chrome no ambiente do subagente, então a verificação visual/tempo-real foi completada pelo controller diretamente).
+- **Módulo de Mesas — Fase 1d mesclada no main (`d11fcf9`) e em produção** — Kanban de produção multi-setor: `Usuario.setorId` (operador fixo num setor, opcional), `GET /producao/itens` filtrado por setor do usuário logado (DONO/sem setor vê tudo), salas de Socket.IO por setor (opt-in via `contexto: 'producao'` na conexão — só a tela nova usa, resto do app continua na sala ampla de sempre), tela `/producao` com 3 colunas e cronômetro colorido por `tempoAlvoMinutos`. 10 tarefas via subagent-driven-development + revisão final de todo o branch. Migration aplicada automaticamente pelo Railway no deploy (confirmado: o release process já roda `prisma migrate deploy` antes de subir o servidor — não precisei rodar manual dessa vez). Achados: a spec do plano tinha um bug real (`Conta.mesa` assumido não-nulo, mas é `Mesa?` no schema) pego pelo implementador da Task 5; a verificação de isolamento entre setores (ponto mais arriscado da fase) foi feita manualmente com dois operadores de teste em abas separadas, confirmando que eventos de um setor não vazam pra conexões de outro setor.
 
 ### 2026-07-04
 - **Remoção do Evolution API / Fly.io (`a14380c`)** — análise confirmou que `src/evolution.ts` e `evolution-fly/fly.toml` (trabalho em andamento da sessão de 2026-07-03, nunca commitado/deployado) não eram referenciados por nenhum código ativo. O WhatsApp do produto já roda inteiramente via bot próprio com Baileys (`src/whatsapp.ts`), com sessão persistida em `WhatsAppSession` no Postgres. Os campos `evolutionUrl`/`evolutionToken` continuam no schema/rota de estabelecimento por enquanto (não usados, remoção adiada para não mexer em migration agora). Também foi removido do Railway um serviço `evolution-api` (imagem `atendai/evolution-api`) que estava provisionado no mesmo projeto sem estar conectado ao backend.
@@ -251,8 +256,25 @@ VITE_API_URL=http://localhost:3000
    controller terminou a verificação e commitou); Task 8 (tempo real) precisou de verificação manual
    com duas abas do navegador feita pelo controller, já que subagentes não têm acesso à extensão do
    Chrome nesse ambiente.
-4. [ ] Fase 1d — Produção multi-setor (Kanban), feed unificado com pedidos de balcão/delivery ← próxima
-5. [ ] Fase 1e — Fechamento de conta (dividir por comanda/igual/parcial, sem gateway ainda)
+4. [x] **Fase 1d — Produção multi-setor (Kanban)** — `docs/superpowers/plans/2026-07-07-modulo-mesas-fase1d.md`.
+   Tela de Kanban (Recebido/Em preparo/Pronto) com um card por item de `ItemComanda`, filtrada pelo
+   setor fixo do operador logado (`Usuario.setorId`, novo — DONO e operador sem setor definido veem
+   tudo). Tempo real via Socket.IO com salas por setor (`estabelecimentoId:setorId`), opt-in via
+   `contexto: 'producao'` na conexão — só a tela nova usa isso, Layout/Cozinha/Mesas continuam na
+   sala ampla de sempre, sem nenhuma mudança de comportamento. Cronômetro no card muda de cor
+   passado o `tempoAlvoMinutos` do setor. **Não inclui** unificação com pedidos de balcão/delivery —
+   ficou de fora do escopo (decisão explícita, feed unificado com `ItemPedido` é feature futura
+   separada). Implementado via subagent-driven-development (10 tarefas + revisão final de todo o
+   branch, aprovada sem ressalvas bloqueantes). **Mesclado no main (`d11fcf9`), enviado pro GitHub e
+   em produção** — migration (`Usuario.setorId` + índice em `ItemComanda`) aplicada automaticamente
+   pelo Railway no deploy (o release process já roda `prisma migrate deploy` antes de subir o
+   servidor). Achados de interesse: a spec do plano tinha um bug real (assumia `Conta.mesa`
+   não-nulo, mas é `Mesa?` no schema de verdade) — pego e corrigido pelo implementador da Task 5,
+   reproduzido de forma independente pelo revisor; a verificação de isolamento entre setores (o
+   ponto mais arriscado da fase) foi feita manualmente pelo controller com dois operadores de teste
+   em abas separadas, confirmando que um operador do setor "Bar" não recebe eventos de itens do
+   setor "Cozinha" em tempo real, e vice-versa recebe corretamente os do próprio setor.
+5. [ ] Fase 1e — Fechamento de conta (dividir por comanda/igual/parcial, sem gateway ainda) ← próxima
 6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis)
 
 **Decisão-chave da spec:** módulos habilitáveis por estabelecimento
