@@ -333,6 +333,9 @@ model Conta {
   abertaEm  DateTime    @default(now())
   fechadaEm DateTime?
 
+  descontoValor  Decimal? @db.Decimal(10, 2)
+  descontoMotivo String?
+
   mesaId String?
   mesa   Mesa?   @relation(fields: [mesaId], references: [id])
 
