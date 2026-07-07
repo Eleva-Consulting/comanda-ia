@@ -1653,8 +1653,8 @@ const labelAvancar: Partial<Record<StatusProducao, string>> = {
   pronto:     'Marcar entregue',
 }
 
-function minutosDesde(dataIso: string): number {
-  return Math.floor((Date.now() - new Date(dataIso).getTime()) / 60000)
+function minutosDesde(dataIso: string, referencia: number): number {
+  return Math.floor((referencia - new Date(dataIso).getTime()) / 60000)
 }
 
 function corCronometro(minutos: number, tempoAlvoMinutos: number | null): string {
@@ -1781,7 +1781,7 @@ export default function Producao() {
                 ) : (
                   <div className="space-y-2">
                     {itensDaColuna.map((item) => {
-                      const minutos = minutosDesde(item.recebidoEm)
+                      const minutos = minutosDesde(item.recebidoEm, agora)
                       return (
                         <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                           <div className="mb-1 flex items-center justify-between gap-2">
@@ -1825,9 +1825,11 @@ export default function Producao() {
 }
 ```
 
-Nota sobre `agora`/`setAgora`: o estado existe só pra forçar um re-render a cada 15s, já que
-`minutosDesde` lê `Date.now()` diretamente — sem esse estado, o cronômetro do card só atualizaria
-quando outro evento (socket, clique) disparasse um re-render por outro motivo.
+Nota sobre `agora`: o `setInterval` atualiza esse estado a cada 15s só pra disparar um re-render
+periódico do componente. `minutosDesde` recebe `agora` como parâmetro (em vez de chamar `Date.now()`
+diretamente) justamente para que o valor seja de fato lido no cálculo — o projeto tem
+`noUnusedLocals` ativado (`tsconfig.app.json`), então uma variável de estado declarada e nunca lida
+causaria erro de compilação.
 
 - [ ] **Step 2: Verificar compilação**
 
@@ -1835,10 +1837,7 @@ quando outro evento (socket, clique) disparasse um re-render por outro motivo.
 cd frontend && npx tsc --noEmit
 ```
 
-Expected: sem erros. Se o linter reclamar de `agora`/`setAgora` como não utilizados (o valor em si
-não é lido no JSX, só o `setAgora` dispara o re-render), isso é esperado — o padrão é intencional
-("estado gatilho"); confirme que `tsc --noEmit` (não o eslint) passa, que é o gate real deste
-projeto.
+Expected: sem erros.
 
 - [ ] **Step 3: Testar manualmente no navegador**
 
