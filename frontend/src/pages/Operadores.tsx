@@ -22,12 +22,19 @@ function gerarEmailFicticio(nomePessoa: string, slugEstabelecimento: string): st
   return `${usuario}@${dominio}.com`
 }
 
+interface Setor {
+  id: string
+  nome: string
+}
+
 interface Operador {
   id:         string
   nome:       string
   email:      string
   criadoEm:   string
   permissoes: Permissao[]
+  setorId:    string | null
+  setor:      { nome: string } | null
 }
 
 function formatarData(data: string) {
@@ -37,11 +44,13 @@ function formatarData(data: string) {
 export default function Operadores() {
   const token = localStorage.getItem('token')
   const [operadores, setOperadores] = useState<Operador[]>([])
+  const [setores, setSetores] = useState<Setor[]>([])
   const [carregando, setCarregando] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+  const [setorId, setSetorId] = useState('')
   const [criando, setCriando] = useState(false)
   const [removendoId, setRemovendoId] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
@@ -49,11 +58,12 @@ export default function Operadores() {
   const [salvandoPermissoes, setSalvandoPermissoes] = useState<string | null>(null)
   const [slugEstabelecimento, setSlugEstabelecimento] = useState('')
 
-  // Editar operador (nome / email / senha)
+  // Editar operador (nome / email / senha / setor)
   const [edicaoOperador, setEdicaoOperador] = useState<Operador | null>(null)
   const [nomeEdicao, setNomeEdicao]         = useState('')
   const [emailEdicao, setEmailEdicao]       = useState('')
   const [novaSenhaEdicao, setNovaSenhaEdicao] = useState('')
+  const [setorIdEdicao, setSetorIdEdicao]   = useState('')
   const [salvandoEdicao, setSalvandoEdicao] = useState(false)
   const [erroEdicao, setErroEdicao]         = useState<string | null>(null)
 
@@ -65,6 +75,13 @@ export default function Operadores() {
       .then(setOperadores)
       .catch(console.error)
       .finally(() => setCarregando(false))
+  }, [token])
+
+  useEffect(() => {
+    fetch(`${API_URL}/setores`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then(setSetores)
+      .catch(console.error)
   }, [token])
 
   useEffect(() => {
@@ -80,6 +97,7 @@ export default function Operadores() {
     setNome('')
     setEmail('')
     setSenha('')
+    setSetorId('')
     setErro(null)
     setModalAberto(true)
   }
@@ -92,7 +110,7 @@ export default function Operadores() {
       const resp = await fetch(`${API_URL}/estabelecimentos/operadores`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ nome, email, senha }),
+        body: JSON.stringify({ nome, email, senha, setorId: setorId || null }),
       })
       const dados = await resp.json()
       if (!resp.ok) { setErro(dados.erro ?? 'Erro ao criar operador'); return }
@@ -148,6 +166,7 @@ export default function Operadores() {
     setNomeEdicao(operador.nome)
     setEmailEdicao(operador.email)
     setNovaSenhaEdicao('')
+    setSetorIdEdicao(operador.setorId ?? '')
     setErroEdicao(null)
   }
 
@@ -160,7 +179,7 @@ export default function Operadores() {
       const resp = await fetch(`${API_URL}/estabelecimentos/operadores/${edicaoOperador.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ nome: nomeEdicao, email: emailEdicao }),
+        body: JSON.stringify({ nome: nomeEdicao, email: emailEdicao, setorId: setorIdEdicao || null }),
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroEdicao(dados.erro ?? 'Erro ao salvar'); return }
@@ -228,7 +247,10 @@ export default function Operadores() {
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{op.nome}</p>
                   <p className="mt-0.5 text-sm text-zinc-400">{op.email}</p>
-                  <p className="mt-0.5 text-xs text-zinc-600">desde {formatarData(op.criadoEm)}</p>
+                  <p className="mt-0.5 text-xs text-zinc-600">
+                    desde {formatarData(op.criadoEm)}
+                    {op.setor && <> · setor: <span className="text-zinc-400">{op.setor.nome}</span></>}
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {op.permissoes.map((p) => (
                       <span key={p} className="rounded-md bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-400 ring-1 ring-orange-500/20">
@@ -329,6 +351,22 @@ export default function Operadores() {
                 <input type="password" required minLength={8} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 8 caracteres"
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500" />
               </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Setor fixo (opcional)</span>
+                <select
+                  value={setorId}
+                  onChange={(e) => setSetorId(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none transition focus:border-orange-500"
+                >
+                  <option value="">Sem setor fixo (vê a produção de todos)</option>
+                  {setores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-zinc-500">
+                  Define qual painel de produção esse operador vê. Deixe em branco se ele deve ver tudo.
+                </p>
+              </label>
               <p className="text-xs text-zinc-500">O operador começa com acesso à Cozinha. Ajuste as permissões depois.</p>
               {erro && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">{erro}</p>}
               <div className="flex justify-end gap-3 pt-2">
@@ -380,6 +418,19 @@ export default function Operadores() {
                 <p className="mt-1.5 text-xs text-zinc-500">
                   Preencha só se quiser redefinir a senha do operador (mínimo 8 caracteres).
                 </p>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-zinc-300">Setor fixo</span>
+                <select
+                  value={setorIdEdicao}
+                  onChange={(e) => setSetorIdEdicao(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none transition focus:border-orange-500"
+                >
+                  <option value="">Sem setor fixo (vê a produção de todos)</option>
+                  {setores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
               </label>
               {erroEdicao && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">{erroEdicao}</p>}
               <div className="flex justify-end gap-3 pt-2">
