@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Loader2, Plus, Search, X } from 'lucide-react'
+import { Loader2, Plus, Search, X, ArrowRightLeft } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -100,6 +100,7 @@ export default function Mesas() {
 
   const [renomeandoComandaId, setRenomeandoComandaId] = useState<string | null>(null)
   const [nomeRenomeacao, setNomeRenomeacao] = useState('')
+  const [transferindoItemId, setTransferindoItemId] = useState<string | null>(null)
 
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
@@ -244,6 +245,21 @@ export default function Mesas() {
     }
   }
 
+  async function transferirItem(itemId: string, comandaDestinoId: string) {
+    try {
+      const resp = await fetch(`${API_URL}/itens-comanda/${itemId}/transferir`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comandaId: comandaDestinoId }),
+      })
+      if (resp.ok) await recarregarContaAtual()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setTransferindoItemId(null)
+    }
+  }
+
   const itensFiltrados = cardapio.filter((item) =>
     item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
   )
@@ -352,9 +368,20 @@ export default function Mesas() {
                           <span className="font-medium">{item.quantidade}x {item.nomeItem}</span>
                           {item.observacao && <p className="text-xs text-zinc-500">{item.observacao}</p>}
                         </div>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatusItem[item.status]}`}>
-                          {labelStatusItem[item.status]}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatusItem[item.status]}`}>
+                            {labelStatusItem[item.status]}
+                          </span>
+                          {contaSelecionada.comandas.length > 1 && (
+                            <button
+                              onClick={() => setTransferindoItemId(item.id)}
+                              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                              title="Transferir pra outra comanda"
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -424,6 +451,28 @@ export default function Mesas() {
               Criar
             </button>
           </form>
+        </div>
+      )}
+
+      {transferindoItemId && contaSelecionada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTransferindoItemId(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Transferir pra qual comanda?</h3>
+            <ul className="space-y-1">
+              {contaSelecionada.comandas
+                .filter((c) => !c.itens.some((i) => i.id === transferindoItemId))
+                .map((comanda) => (
+                  <li key={comanda.id}>
+                    <button
+                      onClick={() => transferirItem(transferindoItemId, comanda.id)}
+                      className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-800"
+                    >
+                      {comanda.nome}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </div>
         </div>
       )}
     </Layout>
