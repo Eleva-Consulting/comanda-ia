@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, Search, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -88,6 +88,11 @@ export default function Mesas() {
   const [erroGrade, setErroGrade] = useState<string | null>(null)
 
   const [contaSelecionada, setContaSelecionada] = useState<Conta | null>(null)
+  const [modalItemAberto, setModalItemAberto] = useState<string | null>(null) // comandaId
+  const [cardapio, setCardapio] = useState<ItemCardapio[]>([])
+  const [carregandoCardapio, setCarregandoCardapio] = useState(false)
+  const [buscaItem, setBuscaItem] = useState('')
+  const [adicionandoItemId, setAdicionandoItemId] = useState<string | null>(null)
 
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
@@ -137,6 +142,55 @@ export default function Mesas() {
     setContaSelecionada(null)
     carregarMesas()
   }
+
+  async function carregarCardapioSeNecessario() {
+    if (cardapio.length > 0) return
+    setCarregandoCardapio(true)
+    try {
+      const resp = await fetch(`${API_URL}/cardapio`, { headers: { Authorization: `Bearer ${token}` } })
+      const dados = await resp.json()
+      if (resp.ok) setCardapio(dados.filter((i: ItemCardapio) => i.disponivel))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCarregandoCardapio(false)
+    }
+  }
+
+  async function abrirModalItem(comandaId: string) {
+    setModalItemAberto(comandaId)
+    setBuscaItem('')
+    await carregarCardapioSeNecessario()
+  }
+
+  async function recarregarContaAtual() {
+    if (!contaSelecionada) return
+    const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (resp.ok) setContaSelecionada(await resp.json())
+  }
+
+  async function adicionarItem(itemCardapioId: string) {
+    if (!modalItemAberto) return
+    setAdicionandoItemId(itemCardapioId)
+    try {
+      const resp = await fetch(`${API_URL}/comandas/${modalItemAberto}/itens`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemCardapioId, quantidade: 1 }),
+      })
+      if (resp.ok) await recarregarContaAtual()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAdicionandoItemId(null)
+    }
+  }
+
+  const itensFiltrados = cardapio.filter((item) =>
+    item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
+  )
 
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
@@ -202,6 +256,12 @@ export default function Mesas() {
               <div key={comanda.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-semibold">{comanda.nome}</span>
+                  <button
+                    onClick={() => abrirModalItem(comanda.id)}
+                    className="flex items-center gap-1 rounded-lg bg-orange-500/10 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-500/20"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Item
+                  </button>
                 </div>
 
                 {comanda.itens.length === 0 ? (
@@ -223,6 +283,46 @@ export default function Mesas() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {modalItemAberto && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={() => setModalItemAberto(null)}>
+          <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-bold">Adicionar item</h3>
+              <button onClick={() => setModalItemAberto(null)}><X className="h-5 w-5 text-zinc-400" /></button>
+            </div>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                value={buscaItem}
+                onChange={(e) => setBuscaItem(e.target.value)}
+                placeholder="Buscar item..."
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-sm"
+              />
+            </div>
+            {carregandoCardapio ? (
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+            ) : itensFiltrados.length === 0 ? (
+              <p className="text-sm text-zinc-500">Nenhum item encontrado.</p>
+            ) : (
+              <ul className="space-y-1">
+                {itensFiltrados.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => adicionarItem(item.id)}
+                      disabled={adicionandoItemId === item.id}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
+                    >
+                      <span>{item.nome}</span>
+                      <span className="text-zinc-400">R$ {Number(item.preco).toFixed(2)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
