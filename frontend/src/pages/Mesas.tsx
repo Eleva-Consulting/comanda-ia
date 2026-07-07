@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Plus, Search, X, ArrowRightLeft } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
+import { useSocket } from '../hooks/useSocket'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ const labelStatusItem: Record<StatusProducao, string> = {
 
 export default function Mesas() {
   const token = localStorage.getItem('token')
+  const { socket } = useSocket(token)
 
   const [modulosAtivos, setModulosAtivos] = useState<string[] | null>(null)
   const [mesas, setMesas] = useState<Mesa[]>([])
@@ -281,6 +283,34 @@ export default function Mesas() {
   const itensFiltrados = cardapio.filter((item) =>
     item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
   )
+
+  useEffect(() => {
+    if (!socket) return
+
+    function atualizarSeForContaAtual(conta: Conta) {
+      setContaSelecionada((prev) => (prev && prev.id === conta.id) ? conta : prev)
+    }
+
+    function recarregarContaEGrade() {
+      recarregarContaAtual()
+      carregarMesas()
+    }
+
+    socket.on('conta:atualizada', atualizarSeForContaAtual)
+    socket.on('comanda:criada', recarregarContaEGrade)
+    socket.on('comanda:atualizada', recarregarContaEGrade)
+    socket.on('item-comanda:novo', recarregarContaEGrade)
+    socket.on('item-comanda:atualizado', recarregarContaEGrade)
+
+    return () => {
+      socket.off('conta:atualizada', atualizarSeForContaAtual)
+      socket.off('comanda:criada', recarregarContaEGrade)
+      socket.off('comanda:atualizada', recarregarContaEGrade)
+      socket.off('item-comanda:novo', recarregarContaEGrade)
+      socket.off('item-comanda:atualizado', recarregarContaEGrade)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, contaSelecionada?.id])
 
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
