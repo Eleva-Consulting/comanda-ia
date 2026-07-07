@@ -194,7 +194,10 @@ VITE_API_URL=http://localhost:3000
 
 ### 2026-07-06
 - **Módulo de Mesas — Fase 1a implementada e em produção (`fdaed53`)** — schema Prisma completo (Mesa, Setor, Conta, Comanda, ItemComanda, ItemComandaRateio, Pagamento, PagamentoItem, LogAuditoria), migration com backfill de setor padrão, módulos habilitáveis por estabelecimento (`Estabelecimento.modulosAtivos`) com toggle no Super Admin, permissões `mesas`/`caixa` no backend. Implementado via subagent-driven-development (7 tarefas + 1 correção pós-revisão final: `DELETE /admin/estabelecimentos` quebrava por causa das novas FKs `RESTRICT`). Primeira infraestrutura de teste automatizado do projeto (Vitest). Migration já rodada em produção via Railway, verificado sem quebra pros estabelecimentos reais existentes.
-- **Módulo de Mesas — Fase 1b mesclada no main (`30c88c8`)** — backend completo de Mesas/Contas/Comandas: middleware `moduloAtivo` (a Fase 1a só tinha o toggle, faltava a rota de fato bloquear quem não contratou), CRUD de Setor (base, sem exigir módulo) e Mesa (exige módulo), abrir mesa (Conta + Comanda "Geral" automática), criar/renomear comanda, adicionar item (com snapshot de setor), avançar status de produção (bloqueando cancelamento pós-pronto, que exige senha de supervisor ainda não construída), transferir item entre comandas. 9 tarefas via subagent-driven-development + 2 correções pós-revisão: uma corrida real (duas Contas abertas na mesma mesa, corrigida com índice único parcial no Postgres + tratamento do erro de constraint) e uma inconsistência de serialização (Decimal vs Number). Ainda **não** enviado pro GitHub nem deployado — falta rodar a migration nova em produção.
+- **Módulo de Mesas — Fase 1b mesclada no main (`30c88c8`) e em produção** — backend completo de Mesas/Contas/Comandas: middleware `moduloAtivo` (a Fase 1a só tinha o toggle, faltava a rota de fato bloquear quem não contratou), CRUD de Setor (base, sem exigir módulo) e Mesa (exige módulo), abrir mesa (Conta + Comanda "Geral" automática), criar/renomear comanda, adicionar item (com snapshot de setor), avançar status de produção (bloqueando cancelamento pós-pronto, que exige senha de supervisor ainda não construída), transferir item entre comandas. 9 tarefas via subagent-driven-development + 2 correções pós-revisão: uma corrida real (duas Contas abertas na mesma mesa, corrigida com índice único parcial no Postgres + tratamento do erro de constraint) e uma inconsistência de serialização (Decimal vs Number). Migration do índice único já rodada em produção via Railway.
+
+### 2026-07-07
+- **Módulo de Mesas — Fase 1c mesclada no main (`896ec49`) e enviada pro GitHub** — primeira tela do módulo: link "Mesas" no menu (permissão + módulo ativo, checagens independentes), grade de mesas por status, abrir mesa e ver comandas/itens, modal de adicionar item, criar/renomear comanda, transferir item entre comandas, cancelar mesa, tudo com atualização em tempo real via Socket.IO. 8 tarefas via subagent-driven-development + revisão final de todo o branch (aprovada sem ressalvas bloqueantes). Sem migration nova (fase 100% frontend). Achados: um bug real de serialização (`preco` chega como string do backend, não number — corrigido na Task 4) e duas quebras de infraestrutura de subagente sem relação com o código (Task 7 caiu por erro de rede com o código já correto; Tasks 6/7/8 não tinham acesso à extensão do Chrome no ambiente do subagente, então a verificação visual/tempo-real foi completada pelo controller diretamente).
 
 ### 2026-07-04
 - **Remoção do Evolution API / Fly.io (`a14380c`)** — análise confirmou que `src/evolution.ts` e `evolution-fly/fly.toml` (trabalho em andamento da sessão de 2026-07-03, nunca commitado/deployado) não eram referenciados por nenhum código ativo. O WhatsApp do produto já roda inteiramente via bot próprio com Baileys (`src/whatsapp.ts`), com sessão persistida em `WhatsAppSession` no Postgres. Os campos `evolutionUrl`/`evolutionToken` continuam no schema/rota de estabelecimento por enquanto (não usados, remoção adiada para não mexer em migration agora). Também foi removido do Railway um serviço `evolution-api` (imagem `atendai/evolution-api`) que estava provisionado no mesmo projeto sem estar conectado ao backend.
@@ -230,12 +233,25 @@ VITE_API_URL=http://localhost:3000
    Middleware `moduloAtivo` (checagem server-side do módulo contratado — a Fase 1a só tinha o
    toggle), máquina de estado `StatusProducao`, CRUD de Setor/Mesa, abrir mesa (Conta + Comanda
    "Geral" automática), criar/renomear comanda, adicionar/transferir item, mudar status de produção
-   (com bloqueio de cancelamento pós-pronto). **Mesclado no main (`30c88c8`), ainda não enviado pro
-   GitHub nem deployado em produção** — falta rodar a migration nova (índice único parcial em
-   `contas.mesaId`, corrige uma corrida real de "duas contas abertas na mesma mesa") no Railway antes
-   do próximo push. Nenhuma tela nova ainda — tudo via API/curl.
-3. [ ] Fase 1c — Tela do garçom (frontend) ← próxima
-4. [ ] Fase 1d — Produção multi-setor (Kanban), feed unificado com pedidos de balcão/delivery
+   (com bloqueio de cancelamento pós-pronto). **Mesclado no main (`30c88c8`), enviado pro GitHub e em
+   produção** — migration do índice único parcial em `contas.mesaId` (corrige uma corrida real de
+   "duas contas abertas na mesma mesa") já rodada no Railway. Nenhuma tela nova nessa fase — tudo via
+   API/curl.
+3. [x] **Fase 1c — Tela do garçom (frontend)** — `docs/superpowers/plans/2026-07-06-modulo-mesas-fase1c.md`.
+   Primeira UI do módulo: link "Mesas" no menu (permissão `mesas` **e** módulo ativo, checagens
+   independentes), grade de mesas coloridas por status, abrir mesa/ver comandas e itens, modal de
+   adicionar item, criar/renomear comanda, transferir item entre comandas, cancelar mesa, tudo em
+   tempo real via Socket.IO (5 eventos: `conta:atualizada`, `comanda:criada`, `comanda:atualizada`,
+   `item-comanda:novo`, `item-comanda:atualizado`). Implementado via subagent-driven-development
+   (8 tarefas + revisão final de todo o branch). **Mesclado no main (`896ec49`) e enviado pro
+   GitHub** — sem migration nova (fase 100% frontend, só chama rotas já existentes da Fase 1b).
+   Vercel faz deploy automático no push. Achados de interesse: Task 4 pegou um bug real (backend
+   retorna `preco` como string por serialização de Decimal, não number) e corrigiu; Task 7 teve um
+   subagente que caiu por erro de rede no meio da verificação manual (o código já estava correto,
+   controller terminou a verificação e commitou); Task 8 (tempo real) precisou de verificação manual
+   com duas abas do navegador feita pelo controller, já que subagentes não têm acesso à extensão do
+   Chrome nesse ambiente.
+4. [ ] Fase 1d — Produção multi-setor (Kanban), feed unificado com pedidos de balcão/delivery ← próxima
 5. [ ] Fase 1e — Fechamento de conta (dividir por comanda/igual/parcial, sem gateway ainda)
 6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis)
 
