@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Cadastro from './pages/Cadastro'
 import AguardandoAprovacao from './pages/AguardandoAprovacao'
 import Cozinha from './pages/Cozinha'
+import Mesas from './pages/Mesas'
 import Dashboard from './pages/Dashboard'
 import Cardapio from './pages/Cardapio'
 import CardapioPublico from './pages/CardapioPublico'
@@ -37,6 +38,7 @@ function App() {
       <Route path="/"          element={<Landing />} />
       <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
       <Route path="/cozinha"   element={<RotaPermissao permissao="cozinha"><Cozinha /></RotaPermissao>} />
+      <Route path="/mesas"     element={<RotaPermissao permissao="mesas"><Mesas /></RotaPermissao>} />
       <Route path="/cardapio"  element={<RotaPermissao permissao="cardapio"><Cardapio /></RotaPermissao>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
       <Route path="/historico"      element={<RotaPermissao permissao="historico"><Historico /></RotaPermissao>} />
