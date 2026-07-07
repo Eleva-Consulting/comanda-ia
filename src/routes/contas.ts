@@ -4,6 +4,7 @@ import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
+import { serializarItemProducao, salaProducao } from '../utils/producao.js';
 import type { StatusConta, StatusProducao } from '../generated/prisma/enums.js';
 import { Prisma } from '../generated/prisma/client.js';
 
@@ -267,6 +268,19 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
     const serializado = serializarItemComanda(itemComanda);
     getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
+
+    if (itemComanda.setorId) {
+      const itemParaProducao = await prisma.itemComanda.findUnique({
+        where:   { id: itemComanda.id },
+        include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+      });
+      if (itemParaProducao) {
+        getIO()
+          .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
+          .emit('producao:item-novo', serializarItemProducao(itemParaProducao));
+      }
+    }
+
     return reply.status(201).send(serializado);
   });
 
@@ -299,6 +313,19 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const atualizado = await prisma.itemComanda.update({ where: { id }, data: { status, ...timestamps } });
     const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
     getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+
+    if (atualizado.setorId) {
+      const itemParaProducao = await prisma.itemComanda.findUnique({
+        where:   { id: atualizado.id },
+        include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+      });
+      if (itemParaProducao) {
+        getIO()
+          .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
+          .emit('producao:item-atualizado', serializarItemProducao(itemParaProducao));
+      }
+    }
+
     return serializado;
   });
 
@@ -328,6 +355,19 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const atualizado = await prisma.itemComanda.update({ where: { id }, data: { comandaId } });
     const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
     getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+
+    if (atualizado.setorId) {
+      const itemParaProducao = await prisma.itemComanda.findUnique({
+        where:   { id: atualizado.id },
+        include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+      });
+      if (itemParaProducao) {
+        getIO()
+          .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
+          .emit('producao:item-atualizado', serializarItemProducao(itemParaProducao));
+      }
+    }
+
     return serializado;
   });
 }
