@@ -101,6 +101,7 @@ export default function Mesas() {
   const [renomeandoComandaId, setRenomeandoComandaId] = useState<string | null>(null)
   const [nomeRenomeacao, setNomeRenomeacao] = useState('')
   const [transferindoItemId, setTransferindoItemId] = useState<string | null>(null)
+  const [cancelandoConta, setCancelandoConta] = useState(false)
 
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
@@ -260,6 +261,23 @@ export default function Mesas() {
     }
   }
 
+  async function cancelarConta() {
+    if (!contaSelecionada) return
+    setCancelandoConta(true)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelada' }),
+      })
+      if (resp.ok) fecharDetalhe()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCancelandoConta(false)
+    }
+  }
+
   const itensFiltrados = cardapio.filter((item) =>
     item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
   )
@@ -320,7 +338,17 @@ export default function Mesas() {
             <button onClick={fecharDetalhe} className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200">
               ← Mesas
             </button>
-            <h2 className="text-xl font-extrabold">Mesa {contaSelecionada.mesa.numero}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-extrabold">Mesa {contaSelecionada.mesa.numero}</h2>
+              <button
+                onClick={cancelarConta}
+                disabled={cancelandoConta}
+                className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                title="Cancelar mesa"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <button
