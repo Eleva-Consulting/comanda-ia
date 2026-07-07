@@ -97,6 +97,47 @@ export default function Mesas() {
       .finally(() => setCarregandoMesas(false))
   }
 
+  async function abrirMesa(mesaId: string) {
+    setAbrindoMesaId(mesaId)
+    setErroGrade(null)
+    try {
+      const resp = await fetch(`${API_URL}/contas`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mesaId }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroGrade(dados.erro ?? 'Falha ao abrir mesa'); return }
+      setContaSelecionada(dados)
+      carregarMesas()
+    } catch {
+      setErroGrade('Falha de conexão')
+    } finally {
+      setAbrindoMesaId(null)
+    }
+  }
+
+  async function abrirContaExistente(mesa: Mesa) {
+    if (!mesa.contaAbertaId) return
+    setCarregandoConta(true)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${mesa.contaAbertaId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const dados = await resp.json()
+      if (resp.ok) setContaSelecionada(dados)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCarregandoConta(false)
+    }
+  }
+
+  function fecharDetalhe() {
+    setContaSelecionada(null)
+    carregarMesas()
+  }
+
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
@@ -134,6 +175,7 @@ export default function Mesas() {
               {mesas.map((mesa) => (
                 <button
                   key={mesa.id}
+                  onClick={() => mesa.statusMesa === 'livre' ? abrirMesa(mesa.id) : abrirContaExistente(mesa)}
                   disabled={abrindoMesaId === mesa.id || carregandoConta}
                   className={`flex flex-col items-center justify-center gap-1 rounded-2xl border p-4 transition disabled:opacity-50 ${corStatusMesa[mesa.statusMesa]}`}
                 >
@@ -148,7 +190,40 @@ export default function Mesas() {
         </div>
       ) : (
         <div>
-          <p className="text-sm text-zinc-400">Detalhe da conta — Task 3</p>
+          <div className="mb-6 flex items-center justify-between">
+            <button onClick={fecharDetalhe} className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200">
+              ← Mesas
+            </button>
+            <h2 className="text-xl font-extrabold">Mesa {contaSelecionada.mesa.numero}</h2>
+          </div>
+
+          <div className="space-y-4">
+            {contaSelecionada.comandas.map((comanda) => (
+              <div key={comanda.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="font-semibold">{comanda.nome}</span>
+                </div>
+
+                {comanda.itens.length === 0 ? (
+                  <p className="text-sm text-zinc-500">Nenhum item ainda.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {comanda.itens.map((item) => (
+                      <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                        <div>
+                          <span className="font-medium">{item.quantidade}x {item.nomeItem}</span>
+                          {item.observacao && <p className="text-xs text-zinc-500">{item.observacao}</p>}
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatusItem[item.status]}`}>
+                          {labelStatusItem[item.status]}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </Layout>
