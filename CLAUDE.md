@@ -188,6 +188,16 @@ VITE_API_URL=http://localhost:3000
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-08
+- **Módulo de Mesas — Fase 1f mesclada no main (`1bb1c60`) e em produção** — auditoria básica:
+  finalmente construiu cancelar item pronto/entregue com senha de supervisor (bloqueado desde
+  a Fase 1b), auditoria de cancelamento e transferência de item em `LogAuditoria`, guarda
+  contra cancelar item já pago, tela `/auditoria` (DONO). 7 tarefas via
+  subagent-driven-development + revisão final de todo o branch (opus) + 1 commit de correção
+  pós-revisão (rota de cancelamento não checava `conta.status`; guarda de item pago só cobre
+  pagamento vinculado a item específico, não valor livre — aceito como limitação conhecida).
+  Sem migration nova. Ver detalhes completos na seção da Fase 1f do roadmap acima.
+
 ### 2026-07-03
 - **Pedido de balcão sem status pro cliente + impressão automática configurável** — `Pedido.origem` (`balcao`/`publico`) distingue pedido manual do painel vs via link público. Balcão deixa de mandar WhatsApp de status (delivery e retirada via link continuam mandando normal). Botão liga/desliga na Cozinha controla se pedido de balcão imprime sozinho (delivery/retirada via link sempre imprimem).
 - **Reabrir pedido concluído/cancelado** — DONO define uma senha em Configurações; qualquer operador com permissão de Cozinha pode reabrir um pedido `entregue`/`cancelado` digitando essa senha (entregue volta pra "em preparo", cancelado volta pra "recebido"). Botão fica no Histórico.
@@ -311,15 +321,45 @@ VITE_API_URL=http://localhost:3000
    mesa da conta já tivesse sido reaberta com uma Conta nova nesse meio tempo (corrida rara,
    pega pelo índice único parcial) — corrigido com o mesmo padrão de tratamento de P2002 já
    usado em `POST /contas`.
-6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis) ← próxima
+6. [x] **Fase 1f — Auditoria básica** — `docs/superpowers/plans/2026-07-08-modulo-mesas-fase1f.md`.
+   Finalmente construiu "cancelar item pronto/entregue com senha de supervisor" — feature
+   bloqueada desde a Fase 1b com a mensagem literal "ainda não disponível nesta versão", que o
+   comentário no código dizia estar esperando exatamente a senha de supervisor generalizada
+   (entregue na Fase 1e). Cancelamento livre (antes de pronto) e transferência de item entre
+   comandas passam a gravar em `LogAuditoria`. Nova guarda de integridade financeira (não
+   pedida pela spec original, decisão de design desta fase): item já coberto por um
+   `PagamentoItem` de pagamento confirmado não pode ser cancelado — força estornar primeiro.
+   Botão "Cancelar item" novo tanto em Mesas.tsx (garçom) quanto Producao.tsx (cozinha/Kanban)
+   — não existia nenhuma forma de cancelar um item individual até agora, só a mesa inteira.
+   Nova tela `/auditoria` (DONO-only, via `apenasDono`) lista o log com filtro por data/ação.
+   Implementado via subagent-driven-development (7 tarefas + revisão final de todo o branch).
+   **Mesclado no main (`1bb1c60`), enviado pro GitHub e em produção** — sem migration nova
+   (reaproveita a tabela `LogAuditoria` que já existia desde a Fase 1a, sem uso até a Fase 1e).
+   Achados de interesse: a Task 1 pegou um bug real no próprio código do plano — um
+   `LogAuditoria.create` usava a forma curta `usuarioId,` referenciando uma variável nunca
+   declarada (o handler desestrutura `userId`, não `usuarioId`), corrigido pra
+   `usuarioId: userId`. A revisão final do branch (opus) encontrou 2 problemas Importantes,
+   ambos corrigidos antes do merge: (1) a rota de cancelamento nunca checava
+   `conta.status` — dava pra cancelar item de uma conta já fechada/cancelada; corrigido com a
+   mesma guarda de `aberta`/`aguardando_pagamento` que as rotas de pagamento já usam; (2) a
+   guarda de "item já pago" só cobre pagamentos vinculados a itens específicos
+   (`PagamentoItem`) — um pagamento em "valor livre" (divisão igual, por exemplo) não fica
+   rastreado por item, então não bloqueia cancelamento por essa via. Aceito como limitação
+   conhecida documentada em comentário (a guarda de `conta.status` já reduz bastante a janela
+   real de risco); resolver de verdade exigiria redesenhar como pagamento em valor livre
+   rastreia cobertura por item — fica pra uma fase futura se vira problema na prática.
 
 **Decisão-chave da spec:** módulos habilitáveis por estabelecimento
 (`Estabelecimento.modulosAtivos: String[]`, mesmo padrão de `Usuario.permissoes`) — mesas e estoque
 avançado são add-ons pagos que não mudam nada pra quem não usa (ex: a galeteria, que é só
 balcão/delivery).
 
-**Fases 2-5 da spec** (papéis/caixa, pagamento via gateway, estoque avançado, relatórios) são visão
-futura já desenhada no documento — não implementar sem revisitar a spec primeiro.
+**Fases 2-5 da spec original** (numeração própria da spec, diferente das sub-fases 1a-1f acima):
+Fase 2 (papéis `mesas`/`caixa` + tela de Caixa + senha de supervisor generalizada) **já foi
+entregue** — saiu de graça dentro da Fase 1e. Restam: Fase 3 (pagamento via gateway,
+`TransacaoAdquirente`/Adapter, primeiro provedor PagBank), Fase 4 (estoque avançado —
+ficha técnica/CMV), Fase 5 (relatórios avançados + auditoria completa/dashboards/exportação).
+Todas visão futura já desenhada no documento — não implementar sem revisitar a spec primeiro.
 
 ## Próximas features planejadas
 
