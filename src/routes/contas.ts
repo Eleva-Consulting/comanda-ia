@@ -392,6 +392,18 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
     getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
 
+    await prisma.logAuditoria.create({
+      data: {
+        acao:         'item:transferido',
+        entidadeTipo: 'ItemComanda',
+        entidadeId:   id,
+        dadosAntes:   { comandaId: item.comanda.id },
+        dadosDepois:  { comandaId },
+        estabelecimentoId: estabelecimentoId!,
+        usuarioId:    request.user.userId,
+      },
+    });
+
     if (atualizado.setorId) {
       const itemParaProducao = await prisma.itemComanda.findUnique({
         where:   { id: atualizado.id },
