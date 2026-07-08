@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
@@ -21,6 +22,12 @@ const RegistrarPagamentoSchema = Type.Object({
   ]),
   itensComandaIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1 })),
   valor: Type.Optional(Type.Number({ minimum: 0.01 })),
+});
+
+const AplicarDescontoSchema = Type.Object({
+  valor:  Type.Number({ minimum: 0.01 }),
+  motivo: Type.String({ minLength: 1, maxLength: 200 }),
+  senha:  Type.String({ minLength: 1 }),
 });
 
 const CONTA_INCLUDE_RESUMO = {
@@ -152,5 +159,47 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     await emitirContaAtualizada(estabelecimentoId!, id);
     const atualizada = await buscarContaComResumo(estabelecimentoId!, id);
     return reply.status(201).send({ contaId: id, status: atualizada!.conta.status, ...atualizada!.resumo });
+  });
+
+  // ── POST /contas/:id/desconto ────────────────────────────────────────────────
+  // Substitui qualquer desconto anterior nesta conta (não é cumulativo). Exige a
+  // senha de supervisor (mesma senha de reabertura de pedido, reusada por design).
+  fastify.post('/contas/:id/desconto', {
+    onRequest: [autenticar, temPermissao('caixa'), moduloAtivo('mesas')],
+    schema: { params: ContaParamsSchema, body: AplicarDescontoSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { valor, motivo, senha } = request.body as { valor: number; motivo: string; senha: string };
+    const { estabelecimentoId, userId } = request.user;
+
+    const conta = await prisma.conta.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
+    if (conta.status !== 'aberta' && conta.status !== 'aguardando_pagamento') {
+      return reply.status(422).send({ erro: 'Conta não está aberta' });
+    }
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+    if (!estabelecimento?.senhaReabrirPedido) {
+      return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de aplicar descontos' });
+    }
+    const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
+    if (!senhaCorreta) return reply.status(403).send({ erro: 'Senha incorreta' });
+
+    await prisma.conta.update({ where: { id }, data: { descontoValor: valor, descontoMotivo: motivo } });
+    await prisma.logAuditoria.create({
+      data: {
+        acao:         'conta:desconto',
+        entidadeTipo: 'Conta',
+        entidadeId:   id,
+        motivo,
+        dadosDepois:  { valor },
+        estabelecimentoId: estabelecimentoId!,
+        usuarioId:    userId,
+      },
+    });
+
+    await emitirContaAtualizada(estabelecimentoId!, id);
+    const atualizada = await buscarContaComResumo(estabelecimentoId!, id);
+    return { contaId: id, status: atualizada!.conta.status, ...atualizada!.resumo };
   });
 }
