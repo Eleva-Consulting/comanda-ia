@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet } from 'lucide-react'
+import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet, ShieldCheck } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
@@ -150,6 +150,14 @@ export default function Layout({ children, headerExtra }: Props) {
                 </span>
               </NavLink>
             )}
+            {isDono && (
+              <NavLink to="/auditoria" className={linkClass}>
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Auditoria
+                </span>
+              </NavLink>
+            )}
             {podeHistorico && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
             {podeConfiguracoes && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
           </nav>
@@ -209,6 +217,14 @@ export default function Layout({ children, headerExtra }: Props) {
               <span className="flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5" />
                 Operadores
+              </span>
+            </NavLink>
+          )}
+          {isDono && (
+            <NavLink to="/auditoria" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Auditoria
               </span>
             </NavLink>
           )}
