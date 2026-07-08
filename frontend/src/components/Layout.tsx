@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList } from 'lucide-react'
+import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
@@ -96,6 +96,8 @@ export default function Layout({ children, headerExtra }: Props) {
   }, [token])
 
   const mostrarMesas = podeMesas && modulosAtivos.includes('mesas')
+  const podeCaixa = isDono || temPermissao('caixa')
+  const mostrarCaixa = podeCaixa && modulosAtivos.includes('mesas')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
 
   return (
@@ -127,6 +129,14 @@ export default function Layout({ children, headerExtra }: Props) {
                 <span className="flex items-center gap-1.5">
                   <ClipboardList className="h-3.5 w-3.5" />
                   Produção
+                </span>
+              </NavLink>
+            )}
+            {mostrarCaixa && (
+              <NavLink to="/caixa" className={linkClass}>
+                <span className="flex items-center gap-1.5">
+                  <Wallet className="h-3.5 w-3.5" />
+                  Caixa
                 </span>
               </NavLink>
             )}
@@ -181,6 +191,14 @@ export default function Layout({ children, headerExtra }: Props) {
               <span className="flex items-center gap-1.5">
                 <ClipboardList className="h-3.5 w-3.5" />
                 Produção
+              </span>
+            </NavLink>
+          )}
+          {mostrarCaixa && (
+            <NavLink to="/caixa" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5" />
+                Caixa
               </span>
             </NavLink>
           )}
