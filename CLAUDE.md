@@ -200,6 +200,17 @@ VITE_API_URL=http://localhost:3000
 - **Módulo de Mesas — Fase 1a implementada e em produção (`fdaed53`)** — schema Prisma completo (Mesa, Setor, Conta, Comanda, ItemComanda, ItemComandaRateio, Pagamento, PagamentoItem, LogAuditoria), migration com backfill de setor padrão, módulos habilitáveis por estabelecimento (`Estabelecimento.modulosAtivos`) com toggle no Super Admin, permissões `mesas`/`caixa` no backend. Implementado via subagent-driven-development (7 tarefas + 1 correção pós-revisão final: `DELETE /admin/estabelecimentos` quebrava por causa das novas FKs `RESTRICT`). Primeira infraestrutura de teste automatizado do projeto (Vitest). Migration já rodada em produção via Railway, verificado sem quebra pros estabelecimentos reais existentes.
 - **Módulo de Mesas — Fase 1b mesclada no main (`30c88c8`) e em produção** — backend completo de Mesas/Contas/Comandas: middleware `moduloAtivo` (a Fase 1a só tinha o toggle, faltava a rota de fato bloquear quem não contratou), CRUD de Setor (base, sem exigir módulo) e Mesa (exige módulo), abrir mesa (Conta + Comanda "Geral" automática), criar/renomear comanda, adicionar item (com snapshot de setor), avançar status de produção (bloqueando cancelamento pós-pronto, que exige senha de supervisor ainda não construída), transferir item entre comandas. 9 tarefas via subagent-driven-development + 2 correções pós-revisão: uma corrida real (duas Contas abertas na mesma mesa, corrigida com índice único parcial no Postgres + tratamento do erro de constraint) e uma inconsistência de serialização (Decimal vs Number). Migration do índice único já rodada em produção via Railway.
 
+### 2026-07-07 (continuação)
+- **Módulo de Mesas — Fase 1e mesclada no main (`c3db6b3`) e em produção** — tela de Caixa
+  (`/caixa`, nova permissão `caixa`): fechar conta dividindo por comanda/igualmente/itens
+  específicos/valor livre, desconto e estorno de pagamento com senha de supervisor (reusa
+  `senhaReabrirPedido`), primeira escrita real em `LogAuditoria`. 11 tarefas via
+  subagent-driven-development + revisão final de todo o branch (opus) + 2 correções
+  Importantes pós-revisão (loop de redirecionamento em `RotaPermissao.tsx` pra operador só
+  com `caixa`; estorno podia derrubar a request com 500 numa corrida rara de mesa reaberta).
+  Migration (`Conta.descontoValor`/`descontoMotivo`) aplicada automaticamente pelo Railway.
+  Ver detalhes completos na seção da Fase 1e do roadmap acima.
+
 ### 2026-07-07
 - **Módulo de Mesas — Fase 1c mesclada no main (`896ec49`) e enviada pro GitHub** — primeira tela do módulo: link "Mesas" no menu (permissão + módulo ativo, checagens independentes), grade de mesas por status, abrir mesa e ver comandas/itens, modal de adicionar item, criar/renomear comanda, transferir item entre comandas, cancelar mesa, tudo com atualização em tempo real via Socket.IO. 8 tarefas via subagent-driven-development + revisão final de todo o branch (aprovada sem ressalvas bloqueantes). Sem migration nova (fase 100% frontend). Achados: um bug real de serialização (`preco` chega como string do backend, não number — corrigido na Task 4) e duas quebras de infraestrutura de subagente sem relação com o código (Task 7 caiu por erro de rede com o código já correto; Tasks 6/7/8 não tinham acesso à extensão do Chrome no ambiente do subagente, então a verificação visual/tempo-real foi completada pelo controller diretamente).
 - **Módulo de Mesas — Fase 1d mesclada no main (`d11fcf9`) e em produção** — Kanban de produção multi-setor: `Usuario.setorId` (operador fixo num setor, opcional), `GET /producao/itens` filtrado por setor do usuário logado (DONO/sem setor vê tudo), salas de Socket.IO por setor (opt-in via `contexto: 'producao'` na conexão — só a tela nova usa, resto do app continua na sala ampla de sempre), tela `/producao` com 3 colunas e cronômetro colorido por `tempoAlvoMinutos`. 10 tarefas via subagent-driven-development + revisão final de todo o branch. Migration aplicada automaticamente pelo Railway no deploy (confirmado: o release process já roda `prisma migrate deploy` antes de subir o servidor — não precisei rodar manual dessa vez). Achados: a spec do plano tinha um bug real (`Conta.mesa` assumido não-nulo, mas é `Mesa?` no schema) pego pelo implementador da Task 5; a verificação de isolamento entre setores (ponto mais arriscado da fase) foi feita manualmente com dois operadores de teste em abas separadas, confirmando que eventos de um setor não vazam pra conexões de outro setor.
@@ -274,8 +285,33 @@ VITE_API_URL=http://localhost:3000
    ponto mais arriscado da fase) foi feita manualmente pelo controller com dois operadores de teste
    em abas separadas, confirmando que um operador do setor "Bar" não recebe eventos de itens do
    setor "Cozinha" em tempo real, e vice-versa recebe corretamente os do próprio setor.
-5. [ ] Fase 1e — Fechamento de conta (dividir por comanda/igual/parcial, sem gateway ainda) ← próxima
-6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis)
+5. [x] **Fase 1e — Fechamento de conta** — `docs/superpowers/plans/2026-07-07-modulo-mesas-fase1e.md`.
+   Tela `/caixa` (nova permissão `caixa`, separada de `mesas`): fechar a conta de uma mesa
+   dividindo por comanda, igualmente por N pessoas, por itens específicos, ou valor livre;
+   aplicar desconto e estornar pagamento (ambos exigem a senha de supervisor já existente —
+   `Estabelecimento.senhaReabrirPedido`, reusada por design) — primeira vez que o projeto
+   escreve de fato em `LogAuditoria` (tabela existia desde a Fase 1a, nunca usada). Fechar só
+   é permitido com saldo devedor zerado; estornar um pagamento numa conta já fechada reabre
+   ela automaticamente se voltar a dever. **Fora do escopo, por decisão explícita:** rateio de
+   item entre comandas (`ItemComandaRateio`, cenário "duas pessoas dividem uma pizza") fica pra
+   uma fase futura; "baixa manual" (cenário G da spec) não precisou de rota própria — dá pra
+   fazer aplicando um desconto igual ao saldo devedor, mesmo mecanismo com senha e auditoria.
+   Implementado via subagent-driven-development (11 tarefas + revisão final de todo o branch).
+   **Mesclado no main (`c3db6b3`), enviado pro GitHub e em produção** — migration
+   (`Conta.descontoValor`/`descontoMotivo`, ambos nullable) aplicada automaticamente pelo
+   Railway no deploy. Achados de interesse: a Task 3 pegou um bug real de tipagem — o código do
+   plano passava `Decimal` do Prisma direto pra função pura de cálculo (que espera
+   `number | string`), quebrando `tsc --noEmit` em modo estrito; corrigido com um adaptador
+   isolado no arquivo novo, sem tocar a função pura da Task 2. A revisão final do branch (opus)
+   encontrou dois problemas Importantes, ambos corrigidos antes do merge: (1) o mesmo loop de
+   redirecionamento que o Login.tsx corrigia também existia em `RotaPermissao.tsx` — um
+   operador só com `caixa` (sem `cozinha`) caía num loop ao navegar pra qualquer rota sem
+   permissão, não só no login; resolvido centralizando a lógica em `lib/permissoes.ts`; (2)
+   estornar um pagamento que reabriria uma conta fechada podia derrubar a request com 500 se a
+   mesa da conta já tivesse sido reaberta com uma Conta nova nesse meio tempo (corrida rara,
+   pega pelo índice único parcial) — corrigido com o mesmo padrão de tratamento de P2002 já
+   usado em `POST /contas`.
+6. [ ] Fase 1f — Auditoria básica (`LogAuditoria` nas ações sensíveis) ← próxima
 
 **Decisão-chave da spec:** módulos habilitáveis por estabelecimento
 (`Estabelecimento.modulosAtivos: String[]`, mesmo padrão de `Usuario.permissoes`) — mesas e estoque
