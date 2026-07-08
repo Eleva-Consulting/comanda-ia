@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router'
-import { temPermissao, type Permissao } from '../lib/permissoes'
+import { temPermissao, primeiraRotaPermitida, type Permissao } from '../lib/permissoes'
 import { getRole } from '../lib/auth'
 
 interface Props {
@@ -14,7 +14,7 @@ export default function RotaPermissao({ permissao, children }: Props) {
   const role = getRole()
   if (role === 'SUPER_ADMIN') return <Navigate to="/admin" replace />
 
-  if (!temPermissao(permissao)) return <Navigate to="/cozinha" replace />
+  if (!temPermissao(permissao)) return <Navigate to={primeiraRotaPermitida()} replace />
 
   return <>{children}</>
 }

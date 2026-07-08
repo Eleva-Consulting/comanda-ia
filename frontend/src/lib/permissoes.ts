@@ -30,3 +30,18 @@ export function getPermissoes(): Permissao[] {
 export function temPermissao(permissao: Permissao): boolean {
   return getPermissoes().includes(permissao)
 }
+
+const ROTA_POR_PERMISSAO: { permissao: Permissao; rota: string }[] = [
+  { permissao: 'cozinha', rota: '/cozinha' },
+  { permissao: 'mesas', rota: '/mesas' },
+  { permissao: 'caixa', rota: '/caixa' },
+  { permissao: 'cardapio', rota: '/cardapio' },
+  { permissao: 'historico', rota: '/historico' },
+  { permissao: 'configuracoes', rota: '/configuracoes' },
+]
+
+export function primeiraRotaPermitida(): string {
+  const permissoes = getPermissoes()
+  const encontrada = ROTA_POR_PERMISSAO.find((r) => permissoes.includes(r.permissao))
+  return encontrada?.rota ?? '/cozinha'
+}
