@@ -3,6 +3,22 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router'
 import { ChefHat, Mail, Lock, Loader2 } from 'lucide-react'
 import { API_URL } from '../lib/api'
+import { getPermissoes, type Permissao } from '../lib/permissoes'
+
+const ROTA_POR_PERMISSAO: { permissao: Permissao; rota: string }[] = [
+  { permissao: 'cozinha', rota: '/cozinha' },
+  { permissao: 'mesas', rota: '/mesas' },
+  { permissao: 'caixa', rota: '/caixa' },
+  { permissao: 'cardapio', rota: '/cardapio' },
+  { permissao: 'historico', rota: '/historico' },
+  { permissao: 'configuracoes', rota: '/configuracoes' },
+]
+
+function primeiraRotaPermitida(): string {
+  const permissoes = getPermissoes()
+  const encontrada = ROTA_POR_PERMISSAO.find((r) => permissoes.includes(r.permissao))
+  return encontrada?.rota ?? '/cozinha'
+}
 
 export default function Login() {
   const navigate = useNavigate()
@@ -37,7 +53,7 @@ export default function Login() {
       if (dados.usuario.role === 'SUPER_ADMIN') {
         navigate('/admin')
       } else if (dados.usuario.role === 'OPERADOR') {
-        navigate('/cozinha')
+        navigate(primeiraRotaPermitida())
       } else {
         navigate('/dashboard')
       }
