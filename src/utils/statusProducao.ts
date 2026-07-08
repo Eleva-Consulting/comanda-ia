@@ -15,9 +15,9 @@ export function transicaoProducaoValida(de: StatusProducao, para: StatusProducao
   return transicoesProducaoPermitidas[de].includes(para);
 }
 
-// Cancelamento de item pronto/entregue exige senha de supervisor — feature ainda não construída
-// (fica pra quando a Fase 2 da spec adicionar isso). Por enquanto essa função é o gate que bloqueia
-// cancelar item já pronto/entregue nesta rota.
+// Cancelamento de item pronto/entregue exige senha de supervisor — feature já construída
+// (ver PATCH /itens-comanda/:id/status em src/routes/contas.ts, que usa senhaReabrirPedido
+// do estabelecimento). Esta função é o gate que decide quando essa exigência se aplica.
 export function podeCancelarLivremente(status: StatusProducao): boolean {
   return status === 'recebido' || status === 'em_preparo';
 }

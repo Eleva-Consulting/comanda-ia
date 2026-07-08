@@ -298,6 +298,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
     const item = await prisma.itemComanda.findFirst({
       where: { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+      include: { comanda: { include: { conta: true } } },
     });
     if (!item) return reply.status(404).send({ erro: 'Item não encontrado' });
 
@@ -305,7 +306,21 @@ export async function contasRoutes(fastify: FastifyInstance) {
       return reply.status(422).send({ erro: 'Transição de status não permitida' });
     }
 
+    if (
+      status === 'cancelado' &&
+      item.comanda.conta.status !== 'aberta' &&
+      item.comanda.conta.status !== 'aguardando_pagamento'
+    ) {
+      return reply.status(422).send({ erro: 'Não é possível cancelar item de uma conta fechada ou cancelada' });
+    }
+
     if (status === 'cancelado') {
+      // Só cobre pagamentos vinculados a itens específicos (via PagamentoItem) — um
+      // pagamento em "valor livre" (POST /contas/:id/pagamentos sem itensComandaIds) não
+      // fica rastreado por item, então não bloqueia o cancelamento por essa via. Aceito
+      // como limitação conhecida: a guarda de conta.status (ver acima) já reduz bastante
+      // a janela real de risco, e cobrir o caso valor-livre exigiria redesenhar como esse
+      // modo de pagamento rastreia cobertura por item.
       const pagamentoConfirmado = await prisma.pagamentoItem.findFirst({
         where: { itemComandaId: id, pagamento: { status: 'confirmado' } },
       });

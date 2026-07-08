@@ -41,7 +41,7 @@ describe('podeCancelarLivremente', () => {
     expect(podeCancelarLivremente('em_preparo')).toBe(true);
   });
 
-  it('bloqueia cancelamento livre em pronto e entregue (exige senha de supervisor — feature futura)', () => {
+  it('bloqueia cancelamento livre em pronto e entregue (exige senha de supervisor)', () => {
     expect(podeCancelarLivremente('pronto')).toBe(false);
     expect(podeCancelarLivremente('entregue')).toBe(false);
   });
