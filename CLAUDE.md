@@ -151,6 +151,132 @@ npm run dev
 - **Socket.IO transports: ['websocket']** — Railway bloqueia XHR long-polling; nunca usar polling
 - **Resend** para emails — Railway bloqueia SMTP (portas 465 e 587); nunca usar nodemailer com SMTP
 
+## Metodologia de trabalho e skills do Claude Code
+
+> Este projeto é desenvolvido com Claude Code usando um fluxo específico (plugins de skills +
+> agentes). Se você é um colaborador novo, instale os plugins abaixo pra o seu Claude operar do
+> mesmo jeito que o resto do time.
+
+### Setup dos plugins
+
+```
+/plugin marketplace add anthropics/claude-plugins-official
+/plugin install superpowers
+
+/plugin marketplace add WorldFlowAI/everything-claude-code
+/plugin install everything-claude-code
+```
+
+- **superpowers** (marketplace oficial da Anthropic) — dá o fluxo de trabalho (skills de processo:
+  brainstorming, planos, TDD, revisão, etc.)
+- **everything-claude-code** — dá os agentes especializados (planner, code-reviewer, tdd-guide etc.)
+  e skills complementares de padrões de código (backend/frontend patterns, security-review)
+
+### Fluxo de trabalho (feature nova ou mudança não-trivial)
+
+Sempre nessa ordem, cada etapa é uma skill do superpowers:
+
+1. **brainstorming** — explorar intenção/requisitos e desenhar a abordagem com o usuário antes de
+   decidir qualquer coisa
+2. **writing-plans** — spec de design em `docs/superpowers/specs/` e plano de implementação em
+   `docs/superpowers/plans/`, escritos e aprovados pelo usuário antes de tocar em código
+3. **subagent-driven-development** — o plano é quebrado em tarefas menores, cada uma executada por
+   um subagente isolado, com o controller revisando o resultado de cada tarefa antes de seguir pra
+   próxima
+4. **test-driven-development** — dentro de cada tarefa: teste primeiro (RED) → implementação mínima
+   pra passar (GREEN) → refactor
+5. **requesting-code-review** — revisão final de todo o branch (não só da última tarefa) antes de
+   mesclar
+6. **verification-before-completion** — nunca declarar algo como "funcionando" ou "corrigido" sem
+   antes rodar a verificação (teste, build, ou checagem manual) e ver o resultado
+7. **finishing-a-development-branch** — ao final, decidir merge direto / PR / descarte de forma
+   estruturada, não só sair commitando
+
+Outras skills do superpowers usadas quando o caso pede: **systematic-debugging** (investigar bug
+antes de propor fix), **using-git-worktrees** (isolar trabalho paralelo), **dispatching-parallel-agents**
+(tarefas independentes em paralelo).
+
+Esse é o fluxo usado em toda a iniciativa do Módulo de Mesas (ver `docs/superpowers/specs/` e
+`docs/superpowers/plans/` — cada fase tem spec+plano próprios, e o histórico de "Log de mudanças"
+abaixo registra o que cada subagente/revisão encontrou).
+
+### Agentes usados
+
+| Agente | Quando usar |
+|---|---|
+| `planner` | Planejamento de features complexas / refactors |
+| `architect` | Decisões de arquitetura / design de sistema |
+| `tdd-guide` | Toda feature nova ou bugfix — força escrever teste antes |
+| `code-reviewer` | Sempre logo após escrever/alterar código |
+| `security-reviewer` | Antes de commit em código que mexe com auth, input de usuário, secrets |
+| `build-error-resolver` | Quando o build quebra ou dá erro de tipo |
+| `e2e-runner` | Testes de fluxo crítico com Playwright |
+| `refactor-cleaner` | Limpeza de código morto/duplicado |
+| `doc-updater` | Atualizar codemaps/documentação |
+
+### Padrões de código
+
+- **Imutabilidade** — nunca mutar objeto/array recebido, sempre retornar cópia nova (`{...obj, campo}`)
+- **Arquivos pequenos e focados** — 200-400 linhas típico, 800 no máximo; organizar por
+  feature/domínio, não por tipo
+- **Funções pequenas** (<50 linhas), sem aninhamento profundo (>4 níveis)
+- **Erros sempre tratados** — try/catch com mensagem clara pro usuário, nunca engolir silenciosamente
+- **Validação de input com zod** em toda rota que recebe dado de fora
+- **TypeScript strict** — sem `any` implícito, sem `@ts-ignore`
+- **Sem `console.log`** em código commitado
+
+### Testes
+
+- Cobertura mínima de **80%**, cobrindo unit + integration + E2E (Playwright)
+- **TDD obrigatório**: teste falhando (RED) → implementação mínima (GREEN) → refactor
+- Se um teste falha: investigar a implementação primeiro — só mexer no teste se ele estiver
+  genuinamente errado
+
+### Git / commits / PRs
+
+- Commits no padrão conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`,
+  `perf:`, `ci:`
+- Só commitar/pushar quando a tarefa estiver verificada (build/testes passando) — não é preciso
+  perguntar timing de commit a cada vez, mas sempre confirmar que passou antes de declarar pronto
+- Ao abrir PR: analisar o histórico completo de commits do branch (não só o último), gerar o diff
+  com `git diff [base]...HEAD`, escrever plano de teste com checklist
+- **REGRA: `git pull` sempre antes de `git push`** — o projeto é trabalhado por mais de uma pessoa
+  em paralelo (ex: alguém na Fase 2 do Módulo de Mesas enquanto outro está na Fase 3). Pushar sem
+  puxar antes cria divergência entre local e remoto e pode sobrescrever/quebrar trabalho do outro
+  no deploy. Antes de qualquer `git push`: rodar `git pull` (ou `git pull --rebase` se o repo local
+  tiver commits ainda não enviados) e resolver qualquer conflito localmente antes de pushar. Nunca
+  usar `git push --force` em branch compartilhada (`main`) sem confirmar com o time antes.
+
+## Trabalho em equipe
+
+> Regras obrigatórias porque o projeto passou a ser trabalhado por mais de uma pessoa (e mais de um
+> Claude Code) em paralelo. Válidas pra qualquer sessão, independente de quem está operando.
+
+- **Migration do Prisma é o ponto mais perigoso em paralelo.** Antes de mexer em `schema.prisma`,
+  avisar o time. Depois de mesclar/puxar mudanças do `main`, rodar `npx prisma migrate dev` de novo
+  localmente antes de continuar, pra garantir que a migration gerada é consistente com o que já
+  existe (evita duas migrations concorrentes brigando pela mesma tabela).
+- **Nunca dois `git push` pro `main` ao mesmo tempo.** Como o Railway roda `prisma migrate deploy`
+  automático a cada push, um segundo push chegando no meio do deploy do primeiro pode rodar contra
+  schema intermediário. Confirmar no log do Railway que o deploy anterior terminou antes do próximo
+  push que tenha migration nova.
+- **Fases do Módulo de Mesas (`docs/superpowers/specs/` e `docs/superpowers/plans/`) foram
+  desenhadas sequenciais** (1a→1b→1c→1d→...). Antes de paralelizar duas fases entre pessoas
+  diferentes, checar se a fase de trás depende de schema/rota que a de frente ainda não tem — combinar
+  isso explicitamente, não só confiar no `git pull` pra resolver.
+- **Eventos do Socket.IO são contrato implícito entre back e front.** Mudança em payload de evento
+  existente (`item-comanda:novo`, `conta:atualizada` etc.) pode quebrar quem está em outro branch
+  esperando o formato antigo. Preferir mudança aditiva (campo novo opcional) a alterar formato
+  existente.
+- **Segredos (`.env`) nunca vão pro git.** R2, Resend, VAPID, `DATABASE_URL` do Railway — compartilhar
+  entre o time por canal seguro (gerenciador de senhas), nunca em texto puro por chat.
+- **Atualizar o "Log de mudanças" deste arquivo ao final de cada sessão de trabalho**, com resumo do
+  que foi feito (baseado em `git log` + o que ficou em andamento). É a forma de qualquer pessoa (ou
+  Claude) do time saber rapidamente "o que já foi feito" sem vasculhar o histórico do zero.
+- **Preferir branch por feature + PR** em vez de commitar direto no `main`, quando o trabalho for em
+  paralelo com outra pessoa mexendo em área relacionada (ex: mesas/produção) — revisão via PR pega
+  conflito de lógica antes do merge, não só conflito de texto do git.
+
 ## Variáveis de ambiente
 
 **Backend (.env / Railway):**
