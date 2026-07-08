@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, ChefHat } from 'lucide-react'
+import { Loader2, ChefHat, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocketProducao } from '../hooks/useSocketProducao'
@@ -64,6 +64,12 @@ export default function Producao() {
   const [avancandoId, setAvancandoId] = useState<string | null>(null)
   const [agora, setAgora] = useState(Date.now())
 
+  const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
+  const [motivoCancelamento, setMotivoCancelamento] = useState('')
+  const [senhaCancelamento, setSenhaCancelamento] = useState('')
+  const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
+  const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
+
   function carregarItens() {
     fetch(`${API_URL}/producao/itens`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
@@ -78,6 +84,45 @@ export default function Producao() {
       const aindaAtivo = item.status === 'recebido' || item.status === 'em_preparo' || item.status === 'pronto'
       return aindaAtivo ? [...semEsseItem, item] : semEsseItem
     })
+  }
+
+  function podeCancelarLivre(status: StatusProducao): boolean {
+    return status === 'recebido' || status === 'em_preparo'
+  }
+
+  function abrirCancelamentoItem(item: ItemProducao) {
+    setItemCancelamento(item)
+    setMotivoCancelamento('')
+    setSenhaCancelamento('')
+    setErroCancelamento(null)
+  }
+
+  async function confirmarCancelamentoItem() {
+    if (!itemCancelamento) return
+    const precisaSenha = !podeCancelarLivre(itemCancelamento.status)
+    if (precisaSenha && (!motivoCancelamento || !senhaCancelamento)) return
+
+    setErroCancelamento(null)
+    setEnviandoCancelamento(true)
+    try {
+      const resp = await fetch(`${API_URL}/itens-comanda/${itemCancelamento.id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelado',
+          ...(motivoCancelamento ? { motivo: motivoCancelamento } : {}),
+          ...(precisaSenha ? { senha: senhaCancelamento } : {}),
+        }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroCancelamento(data.erro ?? 'Não foi possível cancelar o item'); return }
+      atualizarItemLocal({ ...itemCancelamento, status: data.status })
+      setItemCancelamento(null)
+    } catch {
+      setErroCancelamento('Falha de conexão')
+    } finally {
+      setEnviandoCancelamento(false)
+    }
   }
 
   async function avancarStatus(item: ItemProducao) {
@@ -197,6 +242,52 @@ export default function Producao() {
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 : <ChefHat className="h-3.5 w-3.5" />}
                               {labelAvancar[item.status]}
+                            </button>
+                          )}
+
+                          {itemCancelamento?.id === item.id ? (
+                            <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
+                              <input
+                                value={motivoCancelamento}
+                                onChange={(e) => setMotivoCancelamento(e.target.value)}
+                                placeholder={podeCancelarLivre(item.status) ? 'Motivo (opcional)' : 'Motivo (obrigatório)'}
+                                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                              />
+                              {!podeCancelarLivre(item.status) && (
+                                <input
+                                  type="password"
+                                  value={senhaCancelamento}
+                                  onChange={(e) => setSenhaCancelamento(e.target.value)}
+                                  placeholder="Senha de supervisor"
+                                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                                />
+                              )}
+                              {erroCancelamento && <p className="text-xs text-red-400">{erroCancelamento}</p>}
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={confirmarCancelamentoItem}
+                                  disabled={
+                                    enviandoCancelamento ||
+                                    (!podeCancelarLivre(item.status) && (!motivoCancelamento || !senhaCancelamento))
+                                  }
+                                  className="flex-1 rounded bg-red-500 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                                >
+                                  Confirmar
+                                </button>
+                                <button
+                                  onClick={() => setItemCancelamento(null)}
+                                  className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => abrirCancelamentoItem(item)}
+                              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-medium text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
+                            >
+                              Cancelar item
                             </button>
                           )}
                         </div>
