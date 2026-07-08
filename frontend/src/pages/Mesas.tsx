@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Loader2, Plus, Search, X, ArrowRightLeft } from 'lucide-react'
+import { Loader2, Plus, Search, X, ArrowRightLeft, Trash2 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
@@ -104,6 +104,12 @@ export default function Mesas() {
   const [nomeRenomeacao, setNomeRenomeacao] = useState('')
   const [transferindoItemId, setTransferindoItemId] = useState<string | null>(null)
   const [cancelandoConta, setCancelandoConta] = useState(false)
+
+  const [itemCancelamento, setItemCancelamento] = useState<ItemComanda | null>(null)
+  const [motivoCancelamento, setMotivoCancelamento] = useState('')
+  const [senhaCancelamento, setSenhaCancelamento] = useState('')
+  const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
+  const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
 
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
@@ -260,6 +266,45 @@ export default function Mesas() {
       console.error(err)
     } finally {
       setTransferindoItemId(null)
+    }
+  }
+
+  function podeCancelarLivre(status: StatusProducao): boolean {
+    return status === 'recebido' || status === 'em_preparo'
+  }
+
+  function abrirCancelamentoItem(item: ItemComanda) {
+    setItemCancelamento(item)
+    setMotivoCancelamento('')
+    setSenhaCancelamento('')
+    setErroCancelamento(null)
+  }
+
+  async function confirmarCancelamentoItem() {
+    if (!itemCancelamento) return
+    const precisaSenha = !podeCancelarLivre(itemCancelamento.status)
+    if (precisaSenha && (!motivoCancelamento || !senhaCancelamento)) return
+
+    setErroCancelamento(null)
+    setEnviandoCancelamento(true)
+    try {
+      const resp = await fetch(`${API_URL}/itens-comanda/${itemCancelamento.id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelado',
+          ...(motivoCancelamento ? { motivo: motivoCancelamento } : {}),
+          ...(precisaSenha ? { senha: senhaCancelamento } : {}),
+        }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroCancelamento(data.erro ?? 'Não foi possível cancelar o item'); return }
+      await recarregarContaAtual()
+      setItemCancelamento(null)
+    } catch {
+      setErroCancelamento('Falha de conexão')
+    } finally {
+      setEnviandoCancelamento(false)
     }
   }
 
@@ -430,13 +475,22 @@ export default function Mesas() {
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corStatusItem[item.status]}`}>
                             {labelStatusItem[item.status]}
                           </span>
-                          {contaSelecionada.comandas.length > 1 && (
+                          {item.status !== 'cancelado' && contaSelecionada.comandas.length > 1 && (
                             <button
                               onClick={() => setTransferindoItemId(item.id)}
                               className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
                               title="Transferir pra outra comanda"
                             >
                               <ArrowRightLeft className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {item.status !== 'cancelado' && (
+                            <button
+                              onClick={() => abrirCancelamentoItem(item)}
+                              className="rounded p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-400"
+                              title="Cancelar item"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
                         </div>
@@ -530,6 +584,52 @@ export default function Mesas() {
                   </li>
                 ))}
             </ul>
+          </div>
+        </div>
+      )}
+
+      {itemCancelamento && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setItemCancelamento(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Cancelar {itemCancelamento.nomeItem}?</h3>
+            {!podeCancelarLivre(itemCancelamento.status) && (
+              <p className="mb-3 text-xs text-zinc-400">
+                Este item já está {labelStatusItem[itemCancelamento.status].toLowerCase()} — cancelar exige motivo e senha de supervisor.
+              </p>
+            )}
+            <div className="space-y-2">
+              <input
+                value={motivoCancelamento}
+                onChange={(e) => setMotivoCancelamento(e.target.value)}
+                placeholder={podeCancelarLivre(itemCancelamento.status) ? 'Motivo (opcional)' : 'Motivo (obrigatório)'}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+              />
+              {!podeCancelarLivre(itemCancelamento.status) && (
+                <input
+                  type="password"
+                  value={senhaCancelamento}
+                  onChange={(e) => setSenhaCancelamento(e.target.value)}
+                  placeholder="Senha de supervisor"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                />
+              )}
+            </div>
+            {erroCancelamento && <p className="mt-2 text-sm text-red-400">{erroCancelamento}</p>}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={confirmarCancelamentoItem}
+                disabled={
+                  enviandoCancelamento ||
+                  (!podeCancelarLivre(itemCancelamento.status) && (!motivoCancelamento || !senhaCancelamento))
+                }
+                className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                Confirmar cancelamento
+              </button>
+              <button onClick={() => setItemCancelamento(null)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
+                Voltar
+              </button>
+            </div>
           </div>
         </div>
       )}
