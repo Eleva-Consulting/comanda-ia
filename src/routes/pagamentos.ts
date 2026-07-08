@@ -255,4 +255,32 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     const atualizada = await buscarContaComResumo(estabelecimentoId!, contaId);
     return { contaId, status: atualizada!.conta.status, ...atualizada!.resumo };
   });
+
+  // ── POST /contas/:id/fechar ───────────────────────────────────────────────────
+  // Só fecha quando o saldo devedor chega a zero (ou fica negativo por troco).
+  // A mesa volta a aparecer como "livre" automaticamente — GET /mesas já filtra
+  // por status aberta/aguardando_pagamento, então fechada cai fora dessa contagem.
+  fastify.post('/contas/:id/fechar', {
+    onRequest: [autenticar, temPermissao('caixa'), moduloAtivo('mesas')],
+    schema: { params: ContaParamsSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { estabelecimentoId } = request.user;
+
+    const encontrada = await buscarContaComResumo(estabelecimentoId!, id);
+    if (!encontrada) return reply.status(404).send({ erro: 'Conta não encontrada' });
+    const { conta, resumo } = encontrada;
+
+    if (conta.status !== 'aberta' && conta.status !== 'aguardando_pagamento') {
+      return reply.status(422).send({ erro: 'Conta não está aberta' });
+    }
+    if (!resumo.podeFechar) {
+      return reply.status(422).send({ erro: 'Saldo devedor pendente', saldoDevedor: resumo.saldoDevedor });
+    }
+
+    await prisma.conta.update({ where: { id }, data: { status: 'fechada', fechadaEm: new Date() } });
+    await emitirContaAtualizada(estabelecimentoId!, id);
+
+    return { contaId: id, status: 'fechada', ...resumo };
+  });
 }
