@@ -30,6 +30,11 @@ const AplicarDescontoSchema = Type.Object({
   senha:  Type.String({ minLength: 1 }),
 });
 
+const EstornarPagamentoSchema = Type.Object({
+  motivo: Type.String({ minLength: 1, maxLength: 200 }),
+  senha:  Type.String({ minLength: 1 }),
+});
+
 const CONTA_INCLUDE_RESUMO = {
   comandas: { include: { itens: true } },
   pagamentos: { include: { itens: true }, orderBy: { criadoEm: 'asc' as const } },
@@ -201,5 +206,53 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     await emitirContaAtualizada(estabelecimentoId!, id);
     const atualizada = await buscarContaComResumo(estabelecimentoId!, id);
     return { contaId: id, status: atualizada!.conta.status, ...atualizada!.resumo };
+  });
+
+  // ── PATCH /pagamentos/:id/estornar ───────────────────────────────────────────
+  // Nunca apaga o pagamento original — só marca status=estornado (mantém histórico).
+  // Se a conta já estava fechada e o estorno reabre saldo devedor, reabre a conta.
+  fastify.patch('/pagamentos/:id/estornar', {
+    onRequest: [autenticar, temPermissao('caixa'), moduloAtivo('mesas')],
+    schema: { params: PagamentoParamsSchema, body: EstornarPagamentoSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { motivo, senha } = request.body as { motivo: string; senha: string };
+    const { estabelecimentoId, userId } = request.user;
+
+    const pagamento = await prisma.pagamento.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!pagamento) return reply.status(404).send({ erro: 'Pagamento não encontrado' });
+    if (pagamento.status !== 'confirmado') {
+      return reply.status(422).send({ erro: 'Só é possível estornar pagamentos confirmados' });
+    }
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+    if (!estabelecimento?.senhaReabrirPedido) {
+      return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de estornar pagamentos' });
+    }
+    const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
+    if (!senhaCorreta) return reply.status(403).send({ erro: 'Senha incorreta' });
+
+    await prisma.pagamento.update({ where: { id }, data: { status: 'estornado' } });
+    await prisma.logAuditoria.create({
+      data: {
+        acao:         'pagamento:estorno',
+        entidadeTipo: 'Pagamento',
+        entidadeId:   id,
+        motivo,
+        dadosAntes:   { valor: Number(pagamento.valor), status: pagamento.status },
+        estabelecimentoId: estabelecimentoId!,
+        usuarioId:    userId,
+      },
+    });
+
+    const contaId = pagamento.contaId;
+    const posEstorno = await buscarContaComResumo(estabelecimentoId!, contaId);
+    if (posEstorno && posEstorno.conta.status === 'fechada' && !posEstorno.resumo.podeFechar) {
+      await prisma.conta.update({ where: { id: contaId }, data: { status: 'aguardando_pagamento', fechadaEm: null } });
+    }
+
+    await emitirContaAtualizada(estabelecimentoId!, contaId);
+    const atualizada = await buscarContaComResumo(estabelecimentoId!, contaId);
+    return { contaId, status: atualizada!.conta.status, ...atualizada!.resumo };
   });
 }
