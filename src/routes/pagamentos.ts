@@ -8,7 +8,7 @@ import { serializarConta } from './contas.js';
 import { calcularResumoConta, validarItensParaPagamento } from '../utils/fechamentoConta.js';
 import type { ContaParaResumo } from '../utils/fechamentoConta.js';
 import type { FormaPagamento } from '../generated/prisma/enums.js';
-import type { Prisma } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 
 const ContaParamsSchema = Type.Object({ id: Type.String() });
 const PagamentoParamsSchema = Type.Object({ id: Type.String() });
@@ -248,7 +248,18 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     const contaId = pagamento.contaId;
     const posEstorno = await buscarContaComResumo(estabelecimentoId!, contaId);
     if (posEstorno && posEstorno.conta.status === 'fechada' && !posEstorno.resumo.podeFechar) {
-      await prisma.conta.update({ where: { id: contaId }, data: { status: 'aguardando_pagamento', fechadaEm: null } });
+      try {
+        await prisma.conta.update({ where: { id: contaId }, data: { status: 'aguardando_pagamento', fechadaEm: null } });
+      } catch (err) {
+        // Safety net para a janela de corrida em que a mesa desta conta já foi
+        // reaberta com uma NOVA Conta antes deste estorno terminar: o índice único
+        // parcial `contas_mesa_aberta_unica` barra esta reabertura. Nesse caso a
+        // conta simplesmente permanece fechada (a mesa já pertence a outra conta
+        // agora, então reabri-la seria incorreto de qualquer forma).
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+          throw err;
+        }
+      }
     }
 
     await emitirContaAtualizada(estabelecimentoId!, contaId);
