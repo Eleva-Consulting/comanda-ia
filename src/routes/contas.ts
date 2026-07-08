@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
@@ -40,6 +41,8 @@ const AtualizarStatusItemComandaSchema = Type.Object({
     Type.Literal('entregue'),
     Type.Literal('cancelado'),
   ]),
+  motivo: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  senha: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const TransferirItemComandaSchema = Type.Object({
@@ -290,8 +293,8 @@ export async function contasRoutes(fastify: FastifyInstance) {
     schema: { params: ItemComandaParamsSchema, body: AtualizarStatusItemComandaSchema },
   }, async (request, reply) => {
     const { id }     = request.params as { id: string };
-    const { status } = request.body as { status: StatusProducao };
-    const { estabelecimentoId } = request.user;
+    const { status, motivo, senha } = request.body as { status: StatusProducao; motivo?: string; senha?: string };
+    const { estabelecimentoId, userId } = request.user;
 
     const item = await prisma.itemComanda.findFirst({
       where: { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
@@ -301,8 +304,26 @@ export async function contasRoutes(fastify: FastifyInstance) {
     if (!transicaoProducaoValida(item.status, status)) {
       return reply.status(422).send({ erro: 'Transição de status não permitida' });
     }
-    if (status === 'cancelado' && !podeCancelarLivremente(item.status)) {
-      return reply.status(422).send({ erro: 'Cancelamento de item pronto/entregue ainda não disponível nesta versão' });
+
+    if (status === 'cancelado') {
+      const pagamentoConfirmado = await prisma.pagamentoItem.findFirst({
+        where: { itemComandaId: id, pagamento: { status: 'confirmado' } },
+      });
+      if (pagamentoConfirmado) {
+        return reply.status(422).send({ erro: 'Item já foi pago — estorne o pagamento antes de cancelar' });
+      }
+
+      if (!podeCancelarLivremente(item.status)) {
+        if (!motivo) return reply.status(400).send({ erro: 'Motivo é obrigatório para cancelar item pronto/entregue' });
+        if (!senha) return reply.status(400).send({ erro: 'Senha de supervisor é obrigatória para cancelar item pronto/entregue' });
+
+        const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+        if (!estabelecimento?.senhaReabrirPedido) {
+          return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de cancelar itens prontos/entregues' });
+        }
+        const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
+        if (!senhaCorreta) return reply.status(403).send({ erro: 'Senha incorreta' });
+      }
     }
 
     const timestamps: { prontoEm?: Date; entregueEm?: Date; canceladoEm?: Date } = {};
@@ -313,6 +334,21 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const atualizado = await prisma.itemComanda.update({ where: { id }, data: { status, ...timestamps } });
     const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
     getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+
+    if (status === 'cancelado') {
+      await prisma.logAuditoria.create({
+        data: {
+          acao:         'item:cancelado',
+          entidadeTipo: 'ItemComanda',
+          entidadeId:   id,
+          motivo:       motivo ?? null,
+          dadosAntes:   { status: item.status },
+          dadosDepois:  { status: 'cancelado' },
+          estabelecimentoId: estabelecimentoId!,
+          usuarioId:    userId,
+        },
+      });
+    }
 
     if (atualizado.setorId) {
       const itemParaProducao = await prisma.itemComanda.findUnique({
