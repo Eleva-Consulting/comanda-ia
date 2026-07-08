@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Wallet, Users, CheckCircle2 } from 'lucide-react'
+import { Loader2, Wallet, Users, CheckCircle2, Percent, Undo2, Lock } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
@@ -76,6 +76,22 @@ export default function Caixa() {
 
   const [itensSelecionados, setItensSelecionados] = useState<Set<string>>(new Set())
   const [valorLivre, setValorLivre] = useState('')
+
+  const [descontoAberto, setDescontoAberto] = useState(false)
+  const [valorDesconto, setValorDesconto] = useState('')
+  const [motivoDesconto, setMotivoDesconto] = useState('')
+  const [senhaDesconto, setSenhaDesconto] = useState('')
+  const [enviandoDesconto, setEnviandoDesconto] = useState(false)
+  const [erroDesconto, setErroDesconto] = useState<string | null>(null)
+
+  const [estornandoId, setEstornandoId] = useState<string | null>(null)
+  const [motivoEstorno, setMotivoEstorno] = useState('')
+  const [senhaEstorno, setSenhaEstorno] = useState('')
+  const [enviandoEstorno, setEnviandoEstorno] = useState(false)
+  const [erroEstorno, setErroEstorno] = useState<string | null>(null)
+
+  const [fechandoConta, setFechandoConta] = useState(false)
+  const [erroFechar, setErroFechar] = useState<string | null>(null)
 
   async function carregarContas() {
     setCarregandoContas(true)
@@ -154,6 +170,84 @@ export default function Caixa() {
     if (!resumo || numeroPessoas < 1) return
     const parcela = Math.round((resumo.saldoDevedor / numeroPessoas) * 100) / 100
     if (parcela > 0) registrarPagamento({ valor: parcela })
+  }
+
+  function abrirFormDesconto() {
+    setDescontoAberto(true)
+    setValorDesconto('')
+    setMotivoDesconto('')
+    setSenhaDesconto('')
+    setErroDesconto(null)
+  }
+
+  async function aplicarDesconto() {
+    if (!contaSelecionada) return
+    const valor = Number(valorDesconto)
+    if (!(valor > 0) || !motivoDesconto || !senhaDesconto) return
+    setErroDesconto(null)
+    setEnviandoDesconto(true)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/desconto`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor, motivo: motivoDesconto, senha: senhaDesconto }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroDesconto(data.erro ?? 'Não foi possível aplicar o desconto'); return }
+      setResumo(data)
+      setDescontoAberto(false)
+    } catch {
+      setErroDesconto('Falha de conexão')
+    } finally {
+      setEnviandoDesconto(false)
+    }
+  }
+
+  function abrirFormEstorno(pagamentoId: string) {
+    setEstornandoId(pagamentoId)
+    setMotivoEstorno('')
+    setSenhaEstorno('')
+    setErroEstorno(null)
+  }
+
+  async function confirmarEstorno() {
+    if (!estornandoId || !motivoEstorno || !senhaEstorno) return
+    setErroEstorno(null)
+    setEnviandoEstorno(true)
+    try {
+      const resp = await fetch(`${API_URL}/pagamentos/${estornandoId}/estornar`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: motivoEstorno, senha: senhaEstorno }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroEstorno(data.erro ?? 'Não foi possível estornar'); return }
+      setResumo(data)
+      setEstornandoId(null)
+    } catch {
+      setErroEstorno('Falha de conexão')
+    } finally {
+      setEnviandoEstorno(false)
+    }
+  }
+
+  async function fecharConta() {
+    if (!contaSelecionada) return
+    setErroFechar(null)
+    setFechandoConta(true)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/fechar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroFechar(data.erro ?? 'Não foi possível fechar a conta'); return }
+      fecharDetalhe()
+    } catch {
+      setErroFechar('Falha de conexão')
+    } finally {
+      setFechandoConta(false)
+    }
   }
 
   function fecharDetalhe() {
@@ -356,16 +450,118 @@ export default function Caixa() {
               {resumo.pagamentos.length > 0 && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                   <h3 className="mb-2 font-semibold">Pagamentos registrados</h3>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {resumo.pagamentos.map((pagamento) => (
-                      <div key={pagamento.id} className={`flex justify-between text-sm ${pagamento.status === 'estornado' ? 'text-zinc-600 line-through' : 'text-zinc-200'}`}>
-                        <span>{labelFormaPagamento[pagamento.formaPagamento]}</span>
-                        <span>R$ {pagamento.valor.toFixed(2)}</span>
+                      <div key={pagamento.id} className="flex items-center justify-between text-sm">
+                        <span className={pagamento.status === 'estornado' ? 'text-zinc-600 line-through' : 'text-zinc-200'}>
+                          {labelFormaPagamento[pagamento.formaPagamento]} · R$ {pagamento.valor.toFixed(2)}
+                        </span>
+                        {pagamento.status === 'confirmado' && (
+                          <button
+                            onClick={() => abrirFormEstorno(pagamento.id)}
+                            className="flex items-center gap-1 rounded-lg p-1.5 text-xs text-red-400 hover:bg-red-500/10"
+                            title="Estornar pagamento"
+                          >
+                            <Undo2 className="h-3.5 w-3.5" /> Estornar
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
+
+                  {estornandoId && (
+                    <div className="mt-3 space-y-2 rounded-xl border border-red-500/30 bg-red-500/5 p-3">
+                      <p className="text-xs text-zinc-400">Motivo e senha de supervisor para estornar</p>
+                      <input
+                        value={motivoEstorno}
+                        onChange={(e) => setMotivoEstorno(e.target.value)}
+                        placeholder="Motivo do estorno"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                      />
+                      <input
+                        type="password"
+                        value={senhaEstorno}
+                        onChange={(e) => setSenhaEstorno(e.target.value)}
+                        placeholder="Senha de supervisor"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                      />
+                      {erroEstorno && <p className="text-sm text-red-400">{erroEstorno}</p>}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={confirmarEstorno}
+                          disabled={enviandoEstorno || !motivoEstorno || !senhaEstorno}
+                          className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                        >
+                          Confirmar estorno
+                        </button>
+                        <button onClick={() => setEstornandoId(null)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={abrirFormDesconto}
+                    className="flex items-center gap-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <Percent className="h-4 w-4" /> Aplicar desconto
+                  </button>
+                  <button
+                    onClick={fecharConta}
+                    disabled={!resumo.podeFechar || fechandoConta}
+                    className="flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-40"
+                    title={resumo.podeFechar ? 'Fechar conta' : 'Saldo devedor pendente'}
+                  >
+                    <Lock className="h-4 w-4" /> Fechar conta
+                  </button>
+                </div>
+                {erroFechar && <p className="mt-2 text-sm text-red-400">{erroFechar}</p>}
+
+                {descontoAberto && (
+                  <div className="mt-3 space-y-2 rounded-xl border border-zinc-700 bg-zinc-800/50 p-3">
+                    <input
+                      type="number"
+                      min={0.01}
+                      step="0.01"
+                      value={valorDesconto}
+                      onChange={(e) => setValorDesconto(e.target.value)}
+                      placeholder="Valor do desconto"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      value={motivoDesconto}
+                      onChange={(e) => setMotivoDesconto(e.target.value)}
+                      placeholder="Motivo do desconto"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="password"
+                      value={senhaDesconto}
+                      onChange={(e) => setSenhaDesconto(e.target.value)}
+                      placeholder="Senha de supervisor"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                    />
+                    {erroDesconto && <p className="text-sm text-red-400">{erroDesconto}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={aplicarDesconto}
+                        disabled={enviandoDesconto || !valorDesconto || !motivoDesconto || !senhaDesconto}
+                        className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                      >
+                        Confirmar desconto
+                      </button>
+                      <button onClick={() => setDescontoAberto(false)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
