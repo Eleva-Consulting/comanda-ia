@@ -146,7 +146,7 @@ export default function Caixa() {
   }
 
   function pagarValorLivre() {
-    const valor = Number(valorLivre)
+    const valor = Math.round(Number(valorLivre) * 100) / 100
     if (valor > 0) registrarPagamento({ valor })
   }
 
