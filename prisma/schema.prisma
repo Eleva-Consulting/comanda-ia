@@ -86,6 +86,21 @@ enum StatusPagamento {
   estornado
 }
 
+enum UnidadeMedida {
+  g
+  kg
+  ml
+  l
+  un
+}
+
+enum TipoMovimentacaoEstoque {
+  entrada
+  saida_perda
+  ajuste
+  consumo_diario
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -119,6 +134,8 @@ model Estabelecimento {
   logsAuditoria    LogAuditoria[]
   pagamentos       Pagamento[]
   pagamentoItens   PagamentoItem[]
+  insumos          Insumo[]
+  movimentacoesEstoque MovimentacaoEstoque[]
 
   @@map("estabelecimentos")
 }
@@ -159,6 +176,7 @@ model Usuario {
   itensComandaCriados ItemComanda[]
   pagamentosRegistrados Pagamento[]
   logsAuditoria         LogAuditoria[]
+  movimentacoesEstoque  MovimentacaoEstoque[]
 
   @@map("usuarios")
 }
@@ -462,4 +480,49 @@ model LogAuditoria {
 
   @@index([estabelecimentoId, criadoEm])
   @@map("log_auditoria")
+}
+
+// ============================================================================
+// ESTOQUE AVANÇADO (Fase 4a) — modelo manual: sem ficha técnica, sem baixa
+// automática por venda. Ver docs/superpowers/specs/2026-07-08-estoque-avancado-fase4a-design.md
+// ============================================================================
+
+model Insumo {
+  id            String        @id @default(uuid())
+  nome          String
+  unidade       UnidadeMedida
+  custoUnitario Decimal       @db.Decimal(10, 4)
+  estoqueAtual  Decimal       @default(0) @db.Decimal(10, 3)
+  criadoEm      DateTime      @default(now())
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  movimentacoes MovimentacaoEstoque[]
+
+  @@unique([estabelecimentoId, nome])
+  @@map("insumos")
+}
+
+model MovimentacaoEstoque {
+  id                    String                  @id @default(uuid())
+  tipo                  TipoMovimentacaoEstoque
+  quantidade            Decimal                 @db.Decimal(10, 3)
+  custoUnitarioSnapshot Decimal                  @db.Decimal(10, 4)
+  data                  DateTime                @db.Date
+  motivo                String?
+  criadoEm              DateTime                @default(now())
+
+  insumoId String
+  insumo   Insumo @relation(fields: [insumoId], references: [id])
+
+  estabelecimentoId String
+  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([estabelecimentoId, data])
+  @@index([estabelecimentoId, tipo, data])
+  @@map("movimentacoes_estoque")
 }
