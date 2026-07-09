@@ -1,6 +1,6 @@
 import { getRole } from './auth'
 
-export type Permissao = 'cozinha' | 'cardapio' | 'historico' | 'pedido_manual' | 'configuracoes' | 'mesas' | 'caixa'
+export type Permissao = 'cozinha' | 'cardapio' | 'historico' | 'pedido_manual' | 'configuracoes' | 'mesas' | 'caixa' | 'estoque'
 
 export const TODAS_PERMISSOES: { id: Permissao; label: string }[] = [
   { id: 'cozinha',       label: 'Cozinha — ver e atualizar pedidos' },
@@ -10,6 +10,7 @@ export const TODAS_PERMISSOES: { id: Permissao; label: string }[] = [
   { id: 'configuracoes', label: 'Configurações do estabelecimento' },
   { id: 'mesas',         label: 'Mesas — abrir mesas e lançar pedidos' },
   { id: 'caixa',         label: 'Caixa — fechar contas e processar pagamentos' },
+  { id: 'estoque',       label: 'Estoque — insumos e lançamento de consumo diário' },
 ]
 
 export function getPermissoes(): Permissao[] {
@@ -38,6 +39,7 @@ const ROTA_POR_PERMISSAO: { permissao: Permissao; rota: string }[] = [
   { permissao: 'cardapio', rota: '/cardapio' },
   { permissao: 'historico', rota: '/historico' },
   { permissao: 'configuracoes', rota: '/configuracoes' },
+  { permissao: 'estoque', rota: '/insumos' },
 ]
 
 export function primeiraRotaPermitida(): string {
