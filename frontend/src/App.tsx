@@ -21,6 +21,8 @@ import RedefinirSenha from './pages/RedefinirSenha'
 import DefinirSenha from './pages/DefinirSenha'
 import Operadores from './pages/Operadores'
 import Auditoria from './pages/Auditoria'
+import Insumos from './pages/Insumos'
+import Estoque from './pages/Estoque'
 import Historico from './pages/Historico'
 import ImprimirComanda from './pages/ImprimirComanda'
 import Configuracoes from './pages/Configuracoes'
@@ -47,6 +49,8 @@ function App() {
       <Route path="/cardapio"  element={<RotaPermissao permissao="cardapio"><Cardapio /></RotaPermissao>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
       <Route path="/auditoria" element={<RotaDono><Auditoria /></RotaDono>} />
+      <Route path="/insumos" element={<RotaPermissao permissao="estoque"><Insumos /></RotaPermissao>} />
+      <Route path="/estoque" element={<RotaPermissao permissao="estoque"><Estoque /></RotaPermissao>} />
       <Route path="/historico"      element={<RotaPermissao permissao="historico"><Historico /></RotaPermissao>} />
       <Route path="/configuracoes"  element={<RotaPermissao permissao="configuracoes"><Configuracoes /></RotaPermissao>} />
       <Route path="/imprimir/:pedidoId" element={<RotaProtegida><ImprimirComanda /></RotaProtegida>} />
