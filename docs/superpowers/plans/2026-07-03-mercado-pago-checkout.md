@@ -6,7 +6,7 @@
 
 **Architecture:** Modelo de split de pagamentos (Mercado Pago para Plataformas). Uma aplicação Mercado Pago única (Client ID/Secret da plataforma) permite que cada `Estabelecimento` autorize via OAuth; o token resultante é salvo por tenant e usado para criar pagamentos Pix em nome dele. Confirmação é 100% via webhook (nunca confiando no payload sem checar a API do MP), e o pedido só aparece na Cozinha depois de `pagamento_confirmado`.
 
-**Tech Stack:** Fastify 5 + TypeBox + Prisma 7 (backend), React 19 + Vite (frontend), `fetch` nativo para chamar a API do Mercado Pago (sem SDK novo), `node:test` (built-in, via `tsx`) para os testes do módulo `mercadopago.ts` — não há test runner no projeto hoje, então este plano introduz o mínimo necessário sem adicionar dependências novas.
+**Tech Stack:** Fastify 5 + TypeBox + Prisma 7 (backend), React 19 + Vite (frontend), `fetch` nativo para chamar a API do Mercado Pago (sem SDK novo), Vitest para os testes do módulo `mercadopago.ts`. **Nota de atualização (2026-07-10):** este plano foi escrito em 2026-07-03, antes do projeto adotar Vitest (chegou na Fase 1a do módulo de mesas, 2026-07-06) — a versão original deste plano previa `node:test` via `tsx --test` porque "não havia test runner no projeto ainda". Isso não é mais verdade: `npm test` já roda `vitest run` hoje, com vários arquivos `*.test.ts` existentes (`src/utils/*.test.ts`, `src/plugins/auth.test.ts`). A Task 2 abaixo já foi corrigida para usar Vitest (`describe`/`it`/`expect`/`vi.stubGlobal`) em vez do `node:test` original, e **não** mexe no script `"test"` do `package.json` — ele já está certo.
 
 ## Global Constraints
 
@@ -86,7 +86,6 @@ git commit -m "feat: campos de conexão Mercado Pago em Estabelecimento e Pedido
 **Files:**
 - Create: `src/mercadopago.ts`
 - Create: `src/mercadopago.test.ts`
-- Modify: `package.json` (adicionar script de teste)
 
 **Interfaces:**
 - Consumes: nada (módulo isolado, só variáveis de ambiente `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI`).
@@ -100,46 +99,45 @@ git commit -m "feat: campos de conexão Mercado Pago em Estabelecimento e Pedido
   - `interface PagamentoPixCriado { id: string; qrCode: string; qrCodeBase64: string }`
   - `interface PagamentoConsultado { status: string; externalReference: string | null }`
 
-- [ ] **Step 1: Adicionar script de teste no `package.json`**
+**Nota:** o projeto já usa Vitest (`npm test` → `vitest run`) — não mexer no script `"test"` do
+`package.json`, ele já está correto. Os testes abaixo usam `describe`/`it`/`expect`/`vi.stubGlobal`
+do Vitest, seguindo o mesmo padrão de `src/utils/fechamentoConta.test.ts` e
+`src/utils/pixBrCode.test.ts`.
 
-Em `package.json`, dentro de `"scripts"`:
-
-```json
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "test": "tsx --test src/**/*.test.ts",
-    "start": "npx prisma migrate deploy && node dist/index.js",
-```
-
-- [ ] **Step 2: Escrever o teste de `montarUrlAutorizacao` (falhando)**
+- [ ] **Step 1: Escrever o teste de `montarUrlAutorizacao` (falhando)**
 
 Criar `src/mercadopago.test.ts`:
 
 ```ts
-import { test, before } from 'node:test'
-import assert from 'node:assert/strict'
-import { montarUrlAutorizacao } from './mercadopago.js'
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { montarUrlAutorizacao } from './mercadopago.js';
 
-before(() => {
-  process.env.MP_CLIENT_ID = 'client-123'
-  process.env.MP_CLIENT_SECRET = 'secret-456'
-  process.env.MP_REDIRECT_URI = 'https://api.comanda-ia.dev/mercadopago/callback'
-})
+beforeAll(() => {
+  process.env.MP_CLIENT_ID = 'client-123';
+  process.env.MP_CLIENT_SECRET = 'secret-456';
+  process.env.MP_REDIRECT_URI = 'https://api.comanda-ia.dev/mercadopago/callback';
+});
 
-test('montarUrlAutorizacao inclui client_id, redirect_uri e state', () => {
-  const url = montarUrlAutorizacao('estado-teste')
-  assert.match(url, /^https:\/\/auth\.mercadopago\.com\.br\/authorization\?/)
-  assert.match(url, /client_id=client-123/)
-  assert.match(url, /state=estado-teste/)
-})
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('montarUrlAutorizacao', () => {
+  it('inclui client_id, redirect_uri e state', () => {
+    const url = montarUrlAutorizacao('estado-teste');
+    expect(url).toMatch(/^https:\/\/auth\.mercadopago\.com\.br\/authorization\?/);
+    expect(url).toMatch(/client_id=client-123/);
+    expect(url).toMatch(/state=estado-teste/);
+  });
+});
 ```
 
-- [ ] **Step 3: Rodar o teste e confirmar que falha**
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
 
-Run: `npm test`
+Run: `npx vitest run src/mercadopago.test.ts`
 Expected: FAIL — `Cannot find module './mercadopago.js'` (arquivo ainda não existe)
 
-- [ ] **Step 4: Criar `src/mercadopago.ts` com `montarUrlAutorizacao`**
+- [ ] **Step 3: Criar `src/mercadopago.ts` com `montarUrlAutorizacao`**
 
 ```ts
 function configOAuth() {
@@ -165,40 +163,45 @@ export function montarUrlAutorizacao(state: string): string {
 }
 ```
 
-- [ ] **Step 5: Rodar o teste e confirmar que passa**
+- [ ] **Step 4: Rodar o teste e confirmar que passa**
 
-Run: `npm test`
+Run: `npx vitest run src/mercadopago.test.ts`
 Expected: PASS — 1 teste passando
 
-- [ ] **Step 6: Escrever teste de `trocarCodePorToken` (falhando)**
+- [ ] **Step 5: Escrever teste de `trocarCodePorToken` (falhando)**
 
-Adicionar em `src/mercadopago.test.ts`:
+Adicionar em `src/mercadopago.test.ts`, dentro do mesmo arquivo (novo `describe` bloco, e
+importar `trocarCodePorToken` junto de `montarUrlAutorizacao` no topo):
 
 ```ts
-import { trocarCodePorToken } from './mercadopago.js'
+import { montarUrlAutorizacao, trocarCodePorToken } from './mercadopago.js';
 
-test('trocarCodePorToken retorna tokens a partir da resposta da API', async (t) => {
-  t.mock.method(global, 'fetch', async () => new Response(JSON.stringify({
-    access_token:  'access-abc',
-    refresh_token: 'refresh-xyz',
-    user_id:       999,
-    expires_in:    15552000,
-  }), { status: 200 }))
+// ... (describe('montarUrlAutorizacao', ...) continua como está)
 
-  const tokens = await trocarCodePorToken('code-123')
-  assert.equal(tokens.accessToken, 'access-abc')
-  assert.equal(tokens.refreshToken, 'refresh-xyz')
-  assert.equal(tokens.userId, '999')
-  assert.ok(tokens.expiraEm instanceof Date)
-})
+describe('trocarCodePorToken', () => {
+  it('retorna tokens a partir da resposta da API', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      access_token:  'access-abc',
+      refresh_token: 'refresh-xyz',
+      user_id:       999,
+      expires_in:    15552000,
+    }), { status: 200 })));
+
+    const tokens = await trocarCodePorToken('code-123');
+    expect(tokens.accessToken).toBe('access-abc');
+    expect(tokens.refreshToken).toBe('refresh-xyz');
+    expect(tokens.userId).toBe('999');
+    expect(tokens.expiraEm).toBeInstanceOf(Date);
+  });
+});
 ```
 
-- [ ] **Step 7: Rodar e confirmar que falha**
+- [ ] **Step 6: Rodar e confirmar que falha**
 
-Run: `npm test`
+Run: `npx vitest run src/mercadopago.test.ts`
 Expected: FAIL — `trocarCodePorToken is not a function` ou `is not exported`
 
-- [ ] **Step 8: Implementar `trocarCodePorToken` e `renovarToken`**
+- [ ] **Step 7: Implementar `trocarCodePorToken` e `renovarToken`**
 
 Adicionar em `src/mercadopago.ts`:
 
@@ -255,63 +258,67 @@ export async function renovarToken(refreshToken: string): Promise<MercadoPagoTok
 }
 ```
 
-- [ ] **Step 9: Rodar e confirmar que passa**
+- [ ] **Step 8: Rodar e confirmar que passa**
 
-Run: `npm test`
+Run: `npx vitest run src/mercadopago.test.ts`
 Expected: PASS — 2 testes passando
 
-- [ ] **Step 10: Escrever testes de `criarPagamentoPix` e `buscarPagamento` (falhando)**
+- [ ] **Step 9: Escrever testes de `criarPagamentoPix` e `buscarPagamento` (falhando)**
 
-Adicionar em `src/mercadopago.test.ts`:
+Adicionar em `src/mercadopago.test.ts` (import ampliado no topo, novos `describe` blocos):
 
 ```ts
-import { criarPagamentoPix, buscarPagamento } from './mercadopago.js'
+import { montarUrlAutorizacao, trocarCodePorToken, criarPagamentoPix, buscarPagamento } from './mercadopago.js';
 
-test('criarPagamentoPix retorna id, qrCode e qrCodeBase64', async (t) => {
-  t.mock.method(global, 'fetch', async () => new Response(JSON.stringify({
-    id: 555,
-    point_of_interaction: {
-      transaction_data: { qr_code: '000201copiaecola', qr_code_base64: 'aGVsbG8=' },
-    },
-  }), { status: 201 }))
+describe('criarPagamentoPix', () => {
+  it('retorna id, qrCode e qrCodeBase64', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 555,
+      point_of_interaction: {
+        transaction_data: { qr_code: '000201copiaecola', qr_code_base64: 'aGVsbG8=' },
+      },
+    }), { status: 201 })));
 
-  const pagamento = await criarPagamentoPix({
-    accessToken:       'token-abc',
-    valor:             49.9,
-    descricao:         'Pedido #123',
-    externalReference: 'pedido-123',
-    payerEmail:        'cliente@comanda-ia.dev',
-  })
-  assert.equal(pagamento.id, '555')
-  assert.equal(pagamento.qrCode, '000201copiaecola')
-  assert.equal(pagamento.qrCodeBase64, 'aGVsbG8=')
-})
+    const pagamento = await criarPagamentoPix({
+      accessToken:       'token-abc',
+      valor:             49.9,
+      descricao:         'Pedido #123',
+      externalReference: 'pedido-123',
+      payerEmail:        'cliente@comanda-ia.dev',
+    });
+    expect(pagamento.id).toBe('555');
+    expect(pagamento.qrCode).toBe('000201copiaecola');
+    expect(pagamento.qrCodeBase64).toBe('aGVsbG8=');
+  });
 
-test('criarPagamentoPix lança erro quando a API responde com falha', async (t) => {
-  t.mock.method(global, 'fetch', async () => new Response('erro', { status: 400 }))
-  await assert.rejects(() => criarPagamentoPix({
-    accessToken: 'token-abc', valor: 10, descricao: 'x',
-    externalReference: 'y', payerEmail: 'a@b.com',
-  }))
-})
+  it('lança erro quando a API responde com falha', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('erro', { status: 400 })));
+    await expect(criarPagamentoPix({
+      accessToken: 'token-abc', valor: 10, descricao: 'x',
+      externalReference: 'y', payerEmail: 'a@b.com',
+    })).rejects.toThrow();
+  });
+});
 
-test('buscarPagamento retorna status e external_reference', async (t) => {
-  t.mock.method(global, 'fetch', async () => new Response(JSON.stringify({
-    status: 'approved', external_reference: 'pedido-123',
-  }), { status: 200 }))
+describe('buscarPagamento', () => {
+  it('retorna status e external_reference', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: 'approved', external_reference: 'pedido-123',
+    }), { status: 200 })));
 
-  const resultado = await buscarPagamento('token-abc', '555')
-  assert.equal(resultado.status, 'approved')
-  assert.equal(resultado.externalReference, 'pedido-123')
-})
+    const resultado = await buscarPagamento('token-abc', '555');
+    expect(resultado.status).toBe('approved');
+    expect(resultado.externalReference).toBe('pedido-123');
+  });
+});
 ```
 
-- [ ] **Step 11: Rodar e confirmar que falha**
+- [ ] **Step 10: Rodar e confirmar que falha**
 
-Run: `npm test`
+Run: `npx vitest run src/mercadopago.test.ts`
 Expected: FAIL — `criarPagamentoPix is not a function`
 
-- [ ] **Step 12: Implementar `criarPagamentoPix` e `buscarPagamento`**
+- [ ] **Step 11: Implementar `criarPagamentoPix` e `buscarPagamento`**
 
 Adicionar em `src/mercadopago.ts`:
 
@@ -369,12 +376,12 @@ export async function buscarPagamento(accessToken: string, paymentId: string): P
 }
 ```
 
-- [ ] **Step 13: Rodar todos os testes e confirmar que passam**
+- [ ] **Step 12: Rodar todos os testes e confirmar que passam**
 
-Run: `npm test`
+Run: `npx vitest run src/mercadopago.test.ts`
 Expected: PASS — 5 testes passando
 
-- [ ] **Step 14: Implementar `obterAccessTokenValido` (renova o token automaticamente antes de expirar)**
+- [ ] **Step 13: Implementar `obterAccessTokenValido` (renova o token automaticamente antes de expirar)**
 
 `renovarToken` (Step 8) fica sem nenhum lugar que o chame se pararmos aqui — o token de acesso do Mercado Pago expira em ~180 dias, e sem essa checagem o estabelecimento ficaria bloqueado até reconectar manualmente. Adicionar em `src/mercadopago.ts`:
 
@@ -410,15 +417,17 @@ export async function obterAccessTokenValido(estabelecimento: {
 }
 ```
 
-- [ ] **Step 15: Verificar manualmente que o token não expirado não é renovado**
+- [ ] **Step 14: Verificar manualmente que o token não expirado não é renovado**
 
-Run: `npm test` (os testes existentes de `renovarToken`/`trocarCodePorToken` continuam cobrindo a lógica de troca; `obterAccessTokenValido` é uma fina camada de orquestração em cima delas, verificada nas Tasks 5 e 6 via uso real).
-Expected: PASS — nenhum teste quebrado.
+Run: `npm test` (roda a suíte inteira via Vitest — os testes existentes de `renovarToken`/
+`trocarCodePorToken` continuam cobrindo a lógica de troca; `obterAccessTokenValido` é uma fina
+camada de orquestração em cima delas, verificada nas Tasks 5 e 6 via uso real).
+Expected: PASS — nenhum teste quebrado (os 45 testes já existentes + os 5 novos deste arquivo).
 
-- [ ] **Step 16: Commit**
+- [ ] **Step 15: Commit**
 
 ```bash
-git add src/mercadopago.ts src/mercadopago.test.ts package.json
+git add src/mercadopago.ts src/mercadopago.test.ts
 git commit -m "feat: cliente Mercado Pago (OAuth + Pix) com testes"
 ```
 
