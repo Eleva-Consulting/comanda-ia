@@ -12,6 +12,7 @@ interface Estabelecimento {
   status:           string
   aceitandoPedidos: boolean
   chavePix:         string | null
+  cidade:           string | null
   taxaEntrega:      number | null
   senhaReabrirPedidoConfigurada: boolean
 }
@@ -40,6 +41,7 @@ export default function Configuracoes() {
   const [nome, setNome]               = useState('')
   const [telefone, setTelefone]       = useState('')
   const [chavePix, setChavePix]       = useState('')
+  const [cidade, setCidade]           = useState('')
   const [taxaEntrega, setTaxaEntrega] = useState('')
   const [wpStatus, setWpStatus]     = useState<WhatsAppStatus | null>(null)
   const [qrCode, setQrCode]         = useState<string | null>(null)
@@ -90,6 +92,7 @@ export default function Configuracoes() {
         setNome(est.nome)
         setTelefone(est.telefone)
         setChavePix(est.chavePix ?? '')
+        setCidade(est.cidade ?? '')
         setTaxaEntrega(est.taxaEntrega != null ? String(est.taxaEntrega) : '')
         setSenhaReabrirConfigurada(est.senhaReabrirPedidoConfigurada)
         verificarStatus()
@@ -210,6 +213,7 @@ export default function Configuracoes() {
           nome,
           telefone,
           chavePix:    chavePix.trim() || null,
+          cidade:      cidade.trim() || null,
           taxaEntrega: taxaNum,
         }),
       })
@@ -374,6 +378,16 @@ export default function Configuracoes() {
               className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
             />
             <p className="mt-1 text-xs text-zinc-600">Exibida para o cliente ao escolher PIX como pagamento</p>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-zinc-400">Cidade</span>
+            <input
+              type="text" value={cidade} onChange={(e) => setCidade(e.target.value)}
+              placeholder="Ex: Fortaleza"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+            <p className="mt-1 text-xs text-zinc-600">Usada no QR code Pix gerado na tela de Caixa (mesa).</p>
           </label>
 
           <label className="block">

@@ -10,6 +10,7 @@ const AtualizarEstabelecimentoSchema = Type.Object({
   nome:             Type.Optional(Type.String({ minLength: 2, maxLength: 100 })),
   telefone:         Type.Optional(Type.String({ minLength: 8, maxLength: 20 })),
   chavePix:         Type.Optional(Type.Union([Type.String({ maxLength: 100 }), Type.Null()])),
+  cidade:           Type.Optional(Type.Union([Type.String({ maxLength: 100 }), Type.Null()])),
   taxaEntrega:      Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
   evolutionUrl:     Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
   evolutionToken:   Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()])),
@@ -43,6 +44,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       nome?:             string;
       telefone?:         string;
       chavePix?:         string | null;
+      cidade?:           string | null;
     };
 
     const atualizado = await prisma.estabelecimento.update({
