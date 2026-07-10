@@ -9,6 +9,7 @@ interface ItemComandaParaProducao {
   nomeItem: string;
   quantidade: number;
   observacao: string | null;
+  acompanhamento: string | null;
   status: StatusProducao;
   recebidoEm: Date;
   setorId: string | null;
@@ -22,6 +23,7 @@ export function serializarItemProducao(item: ItemComandaParaProducao) {
     nomeItem:         item.nomeItem,
     quantidade:       item.quantidade,
     observacao:       item.observacao,
+    acompanhamento:   item.acompanhamento,
     status:           item.status,
     recebidoEm:       item.recebidoEm,
     setorId:          item.setorId,
