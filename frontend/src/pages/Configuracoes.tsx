@@ -50,6 +50,23 @@ export default function Configuracoes() {
   const [erroWp, setErroWp]              = useState<string | null>(null)
   const [verificandoStatus, setVerificandoStatus] = useState(false)
 
+  const [mpStatus, setMpStatus]           = useState<{ conectado: boolean } | null>(null)
+  const [conectandoMp, setConectandoMp]   = useState(false)
+  const [desconectandoMp, setDesconectandoMp] = useState(false)
+  const [erroMp, setErroMp]               = useState<string | null>(null)
+  const [avisoMp, setAvisoMp]             = useState<string | null>(null)
+
+  const verificarStatusMp = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_URL}/meu-estabelecimento/mercadopago/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (r.ok) setMpStatus(await r.json())
+    } catch {
+      // silencioso
+    }
+  }, [token])
+
   // Senha de reabertura de pedido
   const [senhaReabrirConfigurada, setSenhaReabrirConfigurada] = useState(false)
   const [novaSenhaReabrir, setNovaSenhaReabrir]                 = useState('')
@@ -96,10 +113,23 @@ export default function Configuracoes() {
         setTaxaEntrega(est.taxaEntrega != null ? String(est.taxaEntrega) : '')
         setSenhaReabrirConfigurada(est.senhaReabrirPedidoConfigurada)
         verificarStatus()
+        verificarStatusMp()
       })
       .catch(() => null)
       .finally(() => setCarregando(false))
-  }, [token, verificarStatus])
+  }, [token, verificarStatus, verificarStatusMp])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const resultado = params.get('mercadopago')
+    if (resultado === 'conectado') {
+      setAvisoMp('Mercado Pago conectado com sucesso!')
+      verificarStatusMp()
+    } else if (resultado === 'erro') {
+      setErroMp('Não foi possível conectar o Mercado Pago. Tente novamente.')
+    }
+    if (resultado) window.history.replaceState({}, '', window.location.pathname)
+  }, [verificarStatusMp])
 
   useEffect(() => {
     fetch(`${API_URL}/bairros`, { headers: { Authorization: `Bearer ${token}` } })
@@ -271,6 +301,38 @@ export default function Configuracoes() {
       setErroWp('Falha ao desconectar')
     } finally {
       setDesconectando(false)
+    }
+  }
+
+  async function conectarMercadoPago() {
+    setErroMp(null)
+    setConectandoMp(true)
+    try {
+      const r = await fetch(`${API_URL}/meu-estabelecimento/mercadopago/conectar`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await r.json()
+      if (!r.ok) { setErroMp(data.erro ?? 'Erro ao gerar link de conexão'); setConectandoMp(false); return }
+      window.location.href = data.url
+    } catch {
+      setErroMp('Falha ao conectar')
+      setConectandoMp(false)
+    }
+  }
+
+  async function desconectarMercadoPago() {
+    if (!window.confirm('Desconectar o Mercado Pago? Pedidos por Pix ficam indisponíveis até reconectar.')) return
+    setDesconectandoMp(true)
+    try {
+      await fetch(`${API_URL}/meu-estabelecimento/mercadopago/desconectar`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setMpStatus({ conectado: false })
+    } catch {
+      setErroMp('Falha ao desconectar')
+    } finally {
+      setDesconectandoMp(false)
     }
   }
 
@@ -620,6 +682,59 @@ export default function Configuracoes() {
               }
             </button>
           </div>
+        </div>
+
+        {/* Mercado Pago */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-zinc-200">Mercado Pago</h2>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Conecte sua conta para receber pagamentos Pix diretamente, com confirmação automática.
+              </p>
+            </div>
+            {mpStatus && (
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                mpStatus.conectado
+                  ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30'
+                  : 'bg-zinc-700 text-zinc-400 ring-zinc-600'
+              }`}>
+                {mpStatus.conectado ? 'Conectado' : 'Não conectado'}
+              </span>
+            )}
+          </div>
+
+          {avisoMp && (
+            <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400 ring-1 ring-emerald-500/30">
+              {avisoMp}
+            </p>
+          )}
+          {erroMp && (
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+              {erroMp}
+            </p>
+          )}
+
+          {mpStatus?.conectado ? (
+            <button
+              type="button"
+              onClick={desconectarMercadoPago}
+              disabled={desconectandoMp}
+              className="flex items-center gap-1.5 rounded-xl border border-red-800 bg-red-950 px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-900 disabled:opacity-50"
+            >
+              {desconectandoMp ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Desconectar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={conectarMercadoPago}
+              disabled={conectandoMp}
+              className="flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {conectandoMp ? <><Loader2 className="h-4 w-4 animate-spin" /> Redirecionando...</> : 'Conectar Mercado Pago'}
+            </button>
+          )}
         </div>
 
         {/* Senha de reabertura de pedido */}
