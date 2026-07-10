@@ -3,6 +3,11 @@ import { useParams } from 'react-router'
 import { ChefHat, Plus, Minus, ShoppingBag, X, Loader2, CheckCircle2, Phone, User, MapPin, Star } from 'lucide-react'
 import { API_URL } from '../lib/api'
 
+interface OpcaoAcompanhamento {
+  nome: string
+  precoAdicional: number
+}
+
 interface ItemPublico {
   id: string
   nome: string
@@ -10,6 +15,17 @@ interface ItemPublico {
   preco: number
   foto: string | null
   categoria: { id: string; nome: string; ordem: number } | null
+  opcoesAcompanhamento: OpcaoAcompanhamento[]
+}
+
+interface CarrinhoEntry {
+  itemId: string
+  quantidade: number
+  acompanhamento: string | null
+}
+
+function chaveCarrinho(itemId: string, acompanhamento: string | null): string {
+  return `${itemId}::${acompanhamento ?? ''}`
 }
 
 interface CardapioData {
@@ -55,7 +71,7 @@ export default function CardapioPublico() {
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState(false)
 
-  const [carrinho, setCarrinho] = useState<Record<string, number>>({})
+  const [carrinho, setCarrinho] = useState<Record<string, CarrinhoEntry>>({})
   const [checkoutAberto, setCheckoutAberto] = useState(false)
   const [pedidoConfirmado, setPedidoConfirmado] = useState<PedidoConfirmado | null>(null)
   const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
@@ -79,25 +95,35 @@ export default function CardapioPublico() {
       .catch(() => null)
   }, [slug])
 
-  function adicionar(id: string) {
-    setCarrinho((p) => ({ ...p, [id]: (p[id] ?? 0) + 1 }))
+  function adicionar(id: string, acompanhamento: string | null = null) {
+    const chave = chaveCarrinho(id, acompanhamento)
+    setCarrinho((p) => ({
+      ...p,
+      [chave]: { itemId: id, acompanhamento, quantidade: (p[chave]?.quantidade ?? 0) + 1 },
+    }))
   }
 
-  function remover(id: string) {
+  function remover(id: string, acompanhamento: string | null = null) {
+    const chave = chaveCarrinho(id, acompanhamento)
     setCarrinho((p) => {
       const novo = { ...p }
-      const valor = (novo[id] ?? 0) - 1
-      if (valor <= 0) delete novo[id]
-      else novo[id] = valor
+      const valor = (novo[chave]?.quantidade ?? 0) - 1
+      if (valor <= 0) delete novo[chave]
+      else novo[chave] = { ...novo[chave], quantidade: valor }
       return novo
     })
   }
 
-  const totalItens = Object.values(carrinho).reduce((s, q) => s + q, 0)
+  function precoComAcompanhamento(item: ItemPublico, acompanhamento: string | null): number {
+    const opcao = item.opcoesAcompanhamento.find((o) => o.nome === acompanhamento)
+    return item.preco + (opcao?.precoAdicional ?? 0)
+  }
+
+  const totalItens = Object.values(carrinho).reduce((s, e) => s + e.quantidade, 0)
   const subtotalReais = dados
-    ? Object.entries(carrinho).reduce((soma, [id, qtd]) => {
-        const item = dados.cardapio.find((i) => i.id === id)
-        return soma + (item ? item.preco * qtd : 0)
+    ? Object.values(carrinho).reduce((soma, entry) => {
+        const item = dados.cardapio.find((i) => i.id === entry.itemId)
+        return soma + (item ? precoComAcompanhamento(item, entry.acompanhamento) * entry.quantidade : 0)
       }, 0)
     : 0
 
@@ -226,9 +252,9 @@ function GruposCardapio({
   cardapio, carrinho, onAdicionar, onRemover,
 }: {
   cardapio: ItemPublico[]
-  carrinho: Record<string, number>
-  onAdicionar: (id: string) => void
-  onRemover: (id: string) => void
+  carrinho: Record<string, CarrinhoEntry>
+  onAdicionar: (id: string, acompanhamento?: string | null) => void
+  onRemover: (id: string, acompanhamento?: string | null) => void
 }) {
   const grupos = (() => {
     const mapa = new Map<string, { nome: string; ordem: number; itens: ItemPublico[] }>()
@@ -266,9 +292,9 @@ function GruposCardapio({
               <ItemCard
                 key={item.id}
                 item={item}
-                quantidade={carrinho[item.id] ?? 0}
-                onAdicionar={() => onAdicionar(item.id)}
-                onRemover={() => onRemover(item.id)}
+                variantes={Object.values(carrinho).filter((e) => e.itemId === item.id)}
+                onAdicionar={(acompanhamento) => onAdicionar(item.id, acompanhamento)}
+                onRemover={(acompanhamento) => onRemover(item.id, acompanhamento)}
               />
             ))}
           </div>
@@ -279,13 +305,27 @@ function GruposCardapio({
 }
 
 function ItemCard({
-  item, quantidade, onAdicionar, onRemover,
+  item, variantes, onAdicionar, onRemover,
 }: {
   item: ItemPublico
-  quantidade: number
-  onAdicionar: () => void
-  onRemover: () => void
+  variantes: CarrinhoEntry[]
+  onAdicionar: (acompanhamento: string | null) => void
+  onRemover: (acompanhamento: string | null) => void
 }) {
+  const [escolhendo, setEscolhendo] = useState(false)
+  const pedeAcompanhamento = item.opcoesAcompanhamento.length > 0
+  const quantidadeTotal = variantes.reduce((s, v) => s + v.quantidade, 0)
+
+  function clicarAdicionar() {
+    if (pedeAcompanhamento) setEscolhendo(true)
+    else onAdicionar(null)
+  }
+
+  function escolherOpcao(nomeOpcao: string) {
+    onAdicionar(nomeOpcao)
+    setEscolhendo(false)
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
       {item.foto && (
@@ -303,35 +343,75 @@ function ItemCard({
         )}
         <p className="mt-2 font-extrabold text-orange-400">{formatarBRL(item.preco)}</p>
 
+        {/* Variantes já no carrinho (uma linha por acompanhamento escolhido) */}
+        {variantes.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {variantes.map((v) => (
+              <div key={v.acompanhamento ?? ''} className="flex items-center justify-between rounded-xl bg-zinc-800 px-1 py-1">
+                {v.acompanhamento && (
+                  <span className="ml-2 flex-1 truncate text-xs text-zinc-400">{v.acompanhamento}</span>
+                )}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onRemover(v.acompanhamento)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
+                    aria-label="Remover um"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="min-w-5 text-center text-sm font-bold">{v.quantidade}</span>
+                  <button
+                    onClick={() => onAdicionar(v.acompanhamento)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
+                    aria-label="Adicionar mais um"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Escolha de acompanhamento (item pede e o cliente clicou em adicionar/adicionar outro) */}
+        {escolhendo && (
+          <div className="mt-2 space-y-1 rounded-xl border border-zinc-700 bg-zinc-950 p-2">
+            <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
+            {item.opcoesAcompanhamento.map((op) => (
+              <button
+                key={op.nome}
+                onClick={() => escolherOpcao(op.nome)}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-800"
+              >
+                <span>{op.nome}</span>
+                {op.precoAdicional > 0 && <span className="text-orange-400">+{formatarBRL(op.precoAdicional)}</span>}
+              </button>
+            ))}
+            <button onClick={() => setEscolhendo(false)} className="mt-1 w-full text-center text-xs text-zinc-500 hover:text-zinc-300">
+              Cancelar
+            </button>
+          </div>
+        )}
+
         <div className="mt-auto pt-3">
-          {quantidade === 0 ? (
+          {quantidadeTotal === 0 && !escolhendo ? (
             <button
-              onClick={onAdicionar}
+              onClick={clicarAdicionar}
               className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-orange-500 text-sm font-semibold text-white transition hover:bg-orange-600"
               aria-label="Adicionar"
             >
               <Plus className="h-4 w-4" />
               Adicionar
             </button>
-          ) : (
-            <div className="flex items-center justify-between rounded-xl bg-zinc-800 px-1 py-1">
-              <button
-                onClick={onRemover}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
-                aria-label="Remover um"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="min-w-6 text-center font-bold">{quantidade}</span>
-              <button
-                onClick={onAdicionar}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-orange-400 transition hover:bg-zinc-700"
-                aria-label="Adicionar mais um"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          ) : pedeAcompanhamento && !escolhendo ? (
+            <button
+              onClick={clicarAdicionar}
+              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-medium text-orange-400 hover:bg-zinc-800"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Adicionar outro acompanhamento
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -378,7 +458,7 @@ function ModalCheckout({
   slug, carrinho, cardapio, subtotal, totalItens, chavePix, taxaEntrega, bairros, onFechar, onSucesso,
 }: {
   slug: string
-  carrinho: Record<string, number>
+  carrinho: Record<string, CarrinhoEntry>
   cardapio: ItemPublico[]
   subtotal: number
   totalItens: number
@@ -425,9 +505,10 @@ function ModalCheckout({
         trocoPara: formaPagamento === 'dinheiro' && precisaTroco
           ? parseFloat(trocoPara.replace(',', '.'))
           : undefined,
-        itens: Object.entries(carrinho).map(([itemCardapioId, quantidade]) => ({
-          itemCardapioId,
-          quantidade,
+        itens: Object.values(carrinho).map((entry) => ({
+          itemCardapioId: entry.itemId,
+          quantidade: entry.quantidade,
+          ...(entry.acompanhamento ? { acompanhamento: entry.acompanhamento } : {}),
         })),
       }
 
@@ -680,13 +761,18 @@ function ModalCheckout({
             <p className="mb-4 text-sm text-zinc-400 text-center">Revise antes de enviar pra cozinha</p>
 
             <div className="mb-4 space-y-1 rounded-xl bg-zinc-950 p-3 text-sm">
-              {Object.entries(carrinho).map(([itemId, quantidade]) => {
-                const item = cardapio.find((i) => i.id === itemId)
+              {Object.entries(carrinho).map(([chave, entry]) => {
+                const item = cardapio.find((i) => i.id === entry.itemId)
                 if (!item) return null
+                const opcao = item.opcoesAcompanhamento.find((o) => o.nome === entry.acompanhamento)
+                const precoUnit = item.preco + (opcao?.precoAdicional ?? 0)
                 return (
-                  <div key={itemId} className="flex justify-between text-zinc-300">
-                    <span>{quantidade}x {item.nome}</span>
-                    <span>{formatarBRL(item.preco * quantidade)}</span>
+                  <div key={chave} className="flex justify-between text-zinc-300">
+                    <span>
+                      {entry.quantidade}x {item.nome}
+                      {entry.acompanhamento && <span className="text-zinc-500"> ({entry.acompanhamento})</span>}
+                    </span>
+                    <span>{formatarBRL(precoUnit * entry.quantidade)}</span>
                   </div>
                 )
               })}
