@@ -45,6 +45,13 @@ const categoriaSelect = { select: { id: true, nome: true, ordem: true, opcoesAco
 
 type OpcaoAcompanhamento = { nome: string; precoAdicional: number };
 
+// preco é Decimal no Postgres — sem essa conversão, o Fastify serializa como
+// string ("20") em vez de número, quebrando qualquer conta feita no frontend
+// (ex: "20" + 3 vira concatenação "203", não soma 23).
+function serializarItem<T extends { preco: unknown }>(item: T) {
+  return { ...item, preco: Number(item.preco) };
+}
+
 export async function cardapioRoutes(fastify: FastifyInstance) {
   // ── GET /cardapio/categorias ──────────────────────────────────────────────
   fastify.get('/cardapio/categorias', {
@@ -120,11 +127,12 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar],
   }, async (request) => {
     const { estabelecimentoId } = request.user;
-    return prisma.itemCardapio.findMany({
+    const itens = await prisma.itemCardapio.findMany({
       where:   { estabelecimentoId: estabelecimentoId! },
       orderBy: { nome: 'asc' },
       include: { categoria: categoriaSelect },
     });
+    return itens.map(serializarItem);
   });
 
   // ── GET /cardapio/:id ─────────────────────────────────────────────────────
@@ -140,7 +148,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
       include: { categoria: categoriaSelect },
     });
     if (!item) return reply.status(404).send({ erro: 'Item não encontrado' });
-    return item;
+    return serializarItem(item);
   });
 
   // ── POST /cardapio ────────────────────────────────────────────────────────
@@ -157,7 +165,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
       data:    { ...dados, estabelecimentoId: estabelecimentoId! },
       include: { categoria: categoriaSelect },
     });
-    return reply.status(201).send(item);
+    return reply.status(201).send(serializarItem(item));
   });
 
   // ── PATCH /cardapio/:id ───────────────────────────────────────────────────
@@ -178,7 +186,8 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     if (resultado.count === 0) {
       return reply.status(404).send({ erro: 'Item não encontrado' });
     }
-    return prisma.itemCardapio.findUnique({ where: { id }, include: { categoria: categoriaSelect } });
+    const atualizado = await prisma.itemCardapio.findUnique({ where: { id }, include: { categoria: categoriaSelect } });
+    return serializarItem(atualizado!);
   });
 
   // ── DELETE /cardapio/:id ──────────────────────────────────────────────────
@@ -237,11 +246,12 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     if (item.foto) await deletarDeR2(item.foto).catch(() => {});
 
     const fotoUrl = await uploadParaR2(chave, buffer, data.mimetype);
-    return prisma.itemCardapio.update({
+    const atualizado = await prisma.itemCardapio.update({
       where:   { id },
       data:    { foto: fotoUrl },
       include: { categoria: categoriaSelect },
     });
+    return serializarItem(atualizado);
   });
 
   // ── DELETE /cardapio/:id/foto ─────────────────────────────────────────────
@@ -259,10 +269,11 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     if (!item.foto) return reply.status(404).send({ erro: 'Item não possui foto' });
 
     await deletarDeR2(item.foto).catch(() => {});
-    return prisma.itemCardapio.update({
+    const atualizado = await prisma.itemCardapio.update({
       where:   { id },
       data:    { foto: null },
       include: { categoria: categoriaSelect },
     });
+    return serializarItem(atualizado);
   });
 }

@@ -447,7 +447,7 @@ export default function Cozinha() {
     const sel = selecionados[item.id]
     if (!sel) return soma
     const opcao = item.categoria?.opcoesAcompanhamento?.find((o) => o.nome === sel.acompanhamento)
-    return soma + (item.preco + (opcao?.precoAdicional ?? 0)) * sel.quantidade
+    return soma + (Number(item.preco) + Number(opcao?.precoAdicional ?? 0)) * sel.quantidade
   }, 0)
   const totalManual = subtotalManual + taxaModal
   const itensFiltradosModal = cardapio.filter((item) =>
