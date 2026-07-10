@@ -202,7 +202,7 @@ class WhatsAppManager {
 
     // Busca pedidos PIX pendentes nas últimas 24h
     const pedidosPendentes = await prisma.pedido.findMany({
-      where:   { estabelecimentoId, status: 'recebido', formaPagamento: 'pix', criadoEm: { gte: ontemAtras } },
+      where:   { estabelecimentoId, status: 'recebido', formaPagamento: 'pix', mpPaymentId: null, criadoEm: { gte: ontemAtras } },
       orderBy: { criadoEm: 'desc' },
       include: { itens: true },
     })
