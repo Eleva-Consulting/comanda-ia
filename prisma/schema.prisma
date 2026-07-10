@@ -195,12 +195,13 @@ model PushSubscription {
 }
 
 model Categoria {
-  id                String          @id @default(uuid())
-  nome              String
-  ordem             Int             @default(0)
-  estabelecimentoId String
-  estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
-  itens             ItemCardapio[]
+  id                    String          @id @default(uuid())
+  nome                  String
+  ordem                 Int             @default(0)
+  opcoesAcompanhamento  String[]        @default([]) // vazio = item da categoria não pede acompanhamento
+  estabelecimentoId     String
+  estabelecimento       Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+  itens                 ItemCardapio[]
 
   @@map("categorias")
 }
@@ -255,11 +256,12 @@ model Pedido {
 }
 
 model ItemPedido {
-  id         String  @id @default(uuid())
-  nomeItem   String
-  quantidade Int
-  precoUnit  Decimal  @db.Decimal(10, 2)
-  observacao String?
+  id             String  @id @default(uuid())
+  nomeItem       String
+  quantidade     Int
+  precoUnit      Decimal  @db.Decimal(10, 2)
+  observacao     String?
+  acompanhamento String?
 
   pedidoId String
   pedido   Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
@@ -381,12 +383,13 @@ model Comanda {
 }
 
 model ItemComanda {
-  id          String         @id @default(uuid())
-  nomeItem    String
-  quantidade  Int
-  precoUnit   Decimal        @db.Decimal(10, 2)
-  observacao  String?
-  status      StatusProducao @default(recebido)
+  id             String         @id @default(uuid())
+  nomeItem       String
+  quantidade     Int
+  precoUnit      Decimal        @db.Decimal(10, 2)
+  observacao     String?
+  acompanhamento String?
+  status         StatusProducao @default(recebido)
   recebidoEm  DateTime       @default(now())
   prontoEm    DateTime?
   entregueEm  DateTime?
