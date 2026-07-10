@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 import { ChefHat, Plus, Minus, ShoppingBag, X, Loader2, CheckCircle2, Phone, User, MapPin, Star } from 'lucide-react'
 import { API_URL } from '../lib/api'
+import PixAguardandoPagamento from '../components/PixAguardandoPagamento'
 
 interface ItemPublico {
   id: string
@@ -18,6 +19,7 @@ interface CardapioData {
     slug: string
     aceitandoPedidos: boolean
     chavePix: string | null
+    mpConectado: boolean
     taxaEntrega: number | null
   }
   cardapio: ItemPublico[]
@@ -33,6 +35,8 @@ interface PedidoConfirmado {
   id: string
   total: number
   mensagem: string
+  pixCopiaCola?: string | null
+  pixQrCodeBase64?: string | null
 }
 
 type FormaPagamento = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
@@ -58,6 +62,7 @@ export default function CardapioPublico() {
   const [carrinho, setCarrinho] = useState<Record<string, number>>({})
   const [checkoutAberto, setCheckoutAberto] = useState(false)
   const [pedidoConfirmado, setPedidoConfirmado] = useState<PedidoConfirmado | null>(null)
+  const [pedidoAguardandoPix, setPedidoAguardandoPix] = useState<PedidoConfirmado | null>(null)
   const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [buscaItem, setBuscaItem] = useState('')
@@ -91,6 +96,17 @@ export default function CardapioPublico() {
       else novo[id] = valor
       return novo
     })
+  }
+
+  function handleSucessoPedido(pedido: PedidoConfirmado) {
+    setCarrinho({})
+    if (pedido.pixCopiaCola && pedido.pixQrCodeBase64) {
+      setPedidoAguardandoPix(pedido)
+      setCheckoutAberto(false)
+      return
+    }
+    setPedidoConfirmado(pedido)
+    setCheckoutAberto(false)
   }
 
   const totalItens = Object.values(carrinho).reduce((s, q) => s + q, 0)
@@ -207,14 +223,23 @@ export default function CardapioPublico() {
           cardapio={dados.cardapio}
           subtotal={subtotalReais}
           totalItens={totalItens}
-          chavePix={dados.estabelecimento.chavePix}
+          mpConectado={dados.estabelecimento.mpConectado}
           taxaEntrega={dados.estabelecimento.taxaEntrega}
           bairros={bairros}
           onFechar={() => setCheckoutAberto(false)}
-          onSucesso={(pedido) => {
-            setPedidoConfirmado(pedido)
-            setCheckoutAberto(false)
-            setCarrinho({})
+          onSucesso={handleSucessoPedido}
+        />
+      )}
+
+      {pedidoAguardandoPix?.pixCopiaCola && pedidoAguardandoPix?.pixQrCodeBase64 && (
+        <PixAguardandoPagamento
+          slug={slug!}
+          pedidoId={pedidoAguardandoPix.id}
+          pixCopiaCola={pedidoAguardandoPix.pixCopiaCola}
+          pixQrCodeBase64={pedidoAguardandoPix.pixQrCodeBase64}
+          onPago={() => {
+            setPedidoConfirmado(pedidoAguardandoPix)
+            setPedidoAguardandoPix(null)
           }}
         />
       )}
@@ -375,14 +400,14 @@ function BarraCarrinho({
 }
 
 function ModalCheckout({
-  slug, carrinho, cardapio, subtotal, totalItens, chavePix, taxaEntrega, bairros, onFechar, onSucesso,
+  slug, carrinho, cardapio, subtotal, totalItens, mpConectado, taxaEntrega, bairros, onFechar, onSucesso,
 }: {
   slug: string
   carrinho: Record<string, number>
   cardapio: ItemPublico[]
   subtotal: number
   totalItens: number
-  chavePix: string | null
+  mpConectado: boolean
   taxaEntrega: number | null
   bairros: Bairro[]
   onFechar: () => void
@@ -610,14 +635,18 @@ function ModalCheckout({
                   <button
                     key={valor}
                     type="button"
+                    disabled={valor === 'pix' && !mpConectado}
                     onClick={() => setFormaPagamento(valor)}
                     className={`rounded-xl py-2.5 text-sm font-semibold transition ${
                       formaPagamento === valor
                         ? 'bg-orange-500 text-white'
                         : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                    }`}
+                    } ${valor === 'pix' && !mpConectado ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {label}
+                    {valor === 'pix' && !mpConectado && (
+                      <span className="block text-[10px] text-zinc-500">Indisponível</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -714,26 +743,6 @@ function ModalCheckout({
               )}
             </div>
 
-            {formaPagamento === 'pix' && (
-              chavePix ? (
-                <div className="mb-4 rounded-xl bg-zinc-950 px-4 py-3 text-center">
-                  <p className="mb-1 text-xs text-zinc-500">Chave PIX</p>
-                  <p className="break-all font-mono text-sm font-semibold text-orange-400">{chavePix}</p>
-                  <button
-                    type="button"
-                    onClick={() => { navigator.clipboard.writeText(chavePix) }}
-                    className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
-                  >
-                    Copiar chave PIX
-                  </button>
-                </div>
-              ) : (
-                <p className="mb-4 text-center text-sm text-zinc-500">
-                  Entre em contato com o estabelecimento para obter a chave PIX.
-                </p>
-              )
-            )}
-
             {erro && (
               <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
                 {erro}
@@ -745,7 +754,7 @@ function ModalCheckout({
               disabled={enviando}
               className="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
             >
-              {enviando ? 'Enviando...' : formaPagamento === 'pix' ? 'Já paguei — Confirmar pedido' : 'Confirmar pedido'}
+              {enviando ? 'Enviando...' : 'Confirmar pedido'}
             </button>
             <button
               onClick={() => setEtapaResumoAberta(false)}
