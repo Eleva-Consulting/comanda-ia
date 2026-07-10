@@ -7,6 +7,7 @@ import { getIO } from '../socket.js';
 import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
 import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
+import { criarPagamentoPix, obterAccessTokenValido } from '../mercadopago.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -403,6 +404,11 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     );
 
     const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+
+    if (formaPagamentoFinal === 'pix' && !estabelecimento?.mpConectado) {
+      return reply.status(400).send({ erro: 'Pagamento via Pix indisponível — conecte o Mercado Pago em Configurações' });
+    }
+
     const resultadoTaxa = await resolverTaxaEntrega({
       estabelecimentoId: estabelecimentoId!,
       tipoEntrega: tipoEntregaFinal,
@@ -417,6 +423,29 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
     if (formaPagamentoFinal === 'dinheiro' && precisaTroco && trocoPara! < total) {
       return reply.status(400).send({ erro: 'O valor do troco precisa ser maior ou igual ao total do pedido' });
+    }
+
+    let dadosPix: { mpPaymentId: string; pixCopiaCola: string; pixQrCodeBase64: string } | null = null;
+    if (formaPagamentoFinal === 'pix') {
+      try {
+        const payerEmail = `cliente-${Date.now()}@${estabelecimento!.slug}.comanda-ia.dev`;
+        const accessToken = await obterAccessTokenValido(estabelecimento!);
+        const pagamento = await criarPagamentoPix({
+          accessToken,
+          valor:              total,
+          descricao:          `Pedido — ${estabelecimento!.nome}`,
+          externalReference:  crypto.randomUUID(),
+          payerEmail,
+        });
+        dadosPix = {
+          mpPaymentId:     pagamento.id,
+          pixCopiaCola:    pagamento.qrCode,
+          pixQrCodeBase64: pagamento.qrCodeBase64,
+        };
+      } catch (err) {
+        fastify.log.error({ err }, 'Falha ao criar pagamento Pix (pedido manual)');
+        return reply.status(502).send({ erro: 'Não foi possível gerar o pagamento Pix. Tente novamente.' });
+      }
     }
 
     const pedido = await prisma.pedido.create({
@@ -434,18 +463,18 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
         origem: 'balcao',
         estabelecimentoId: estabelecimentoId!,
         itens: { create: itensComSnapshot },
+        ...(dadosPix ? { ...dadosPix, aguardandoPagamento: true } : {}),
       },
       include: { itens: true },
     });
 
-    getIO().to(estabelecimentoId!).emit('pedido:novo', pedido);
+    if (!pedido.aguardandoPagamento) {
+      getIO().to(estabelecimentoId!).emit('pedido:novo', pedido);
 
-    // WhatsApp para o CLIENTE — resumo do pedido (fire-and-forget)
-    if (clienteFoneNormalizado) {
-      const estabWp = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
-      if (estabWp) {
+      // WhatsApp para o CLIENTE — resumo do pedido (fire-and-forget)
+      if (clienteFoneNormalizado) {
         const msgCliente = montarResumoWhatsApp({
-          nomeEstabelecimento: estabWp.nome,
+          nomeEstabelecimento: estabelecimento!.nome,
           clienteNome: clienteNomeFinal,
           itens: itensComSnapshot,
           subtotal,
@@ -457,7 +486,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
           precisaTroco: formaPagamentoFinal === 'dinheiro' ? !!precisaTroco : false,
           trocoPara: formaPagamentoFinal === 'dinheiro' && precisaTroco ? trocoPara ?? null : null,
           total,
-          chavePix: estabWp.chavePix,
+          chavePix: estabelecimento!.chavePix,
         });
         whatsApp.enviarMensagem(estabelecimentoId!, clienteFoneNormalizado, msgCliente)
           .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente (pedido manual)'));
