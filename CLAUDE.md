@@ -292,7 +292,10 @@ R2_ENDPOINT=...                    # Cloudflare R2 (fotos)
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 R2_BUCKET=comanda-ia-fotos
-R2_PUBLIC_URL=...
+R2_PUBLIC_URL=...                  # Cloudflare R2 (fotos)
+MP_CLIENT_ID=...                   # Mercado Pago — OAuth (split de pagamentos)
+MP_CLIENT_SECRET=...               # Mercado Pago — OAuth
+MP_REDIRECT_URI=...                # Mercado Pago — URL de callback OAuth
 ```
 
 **Frontend (frontend/.env.local):**
@@ -313,6 +316,9 @@ VITE_API_URL=http://localhost:3000
 ## Log de mudanças
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
+
+### 2026-07-10
+- **Checkout com Mercado Pago — Pix com split de pagamentos** — implementação completa do fluxo de integração OAuth com Mercado Pago, habilitando cada estabelecimento a receber pagamentos diretamente em sua própria conta. Pix real criado no checkout público e pedido manual do balcão; confirmação automática via webhook (sempre reconsulta API do MP, nunca confia no payload isolado). QR code estático Pix + polling no checkout do cliente. Correção de segurança: fluxo de comprovante por foto do WhatsApp (`handleComprovante`), código morto mas protegido contra manipulação. Implementado em 10 tarefas via subagent-driven-development + revisão final. **Integração de ponta a ponta depende de credenciais reais:** criar app no Mercado Pago (developers.mercadopago.com, tipo "Marketplace/Plataforma") e configurar `MP_CLIENT_ID`/`MP_CLIENT_SECRET`/`MP_REDIRECT_URI` em `.env`/Railway — sem isso, fluxo OAuth e pagamento não funcionam, embora todo código esteja pronto e testado conforme possível sem credenciais reais.
 
 ### 2026-07-09
 - **QR code Pix na tela de Caixa mesclado no main (`ae81a2a`) e em produção** — gera um QR
