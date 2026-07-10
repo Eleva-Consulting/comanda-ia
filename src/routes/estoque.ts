@@ -167,6 +167,12 @@ export async function estoqueRoutes(fastify: FastifyInstance) {
     const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, estabelecimentoId: estabelecimentoId! } });
     if (!insumo) return reply.status(404).send({ erro: 'Insumo não encontrado' });
 
+    if (quantidade > Number(insumo.estoqueAtual)) {
+      return reply.status(422).send({
+        erro: `Estoque insuficiente: você tem ${Number(insumo.estoqueAtual)} ${insumo.unidade} de ${insumo.nome}, mas tentou registrar ${quantidade} ${insumo.unidade}`,
+      });
+    }
+
     await prisma.$transaction([
       prisma.movimentacaoEstoque.create({
         data: {
@@ -194,6 +200,12 @@ export async function estoqueRoutes(fastify: FastifyInstance) {
 
     const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, estabelecimentoId: estabelecimentoId! } });
     if (!insumo) return reply.status(404).send({ erro: 'Insumo não encontrado' });
+
+    if (quantidade < 0 && Number(insumo.estoqueAtual) + quantidade < 0) {
+      return reply.status(422).send({
+        erro: `Estoque insuficiente: você tem ${Number(insumo.estoqueAtual)} ${insumo.unidade} de ${insumo.nome}, não é possível reduzir ${Math.abs(quantidade)} ${insumo.unidade}`,
+      });
+    }
 
     await prisma.$transaction([
       prisma.movimentacaoEstoque.create({
@@ -224,6 +236,19 @@ export async function estoqueRoutes(fastify: FastifyInstance) {
     });
     if (insumos.length !== new Set(insumoIds).size) {
       return reply.status(400).send({ erro: 'Um ou mais insumos não encontrados' });
+    }
+
+    const quantidadePorInsumo = new Map<string, number>();
+    for (const item of itens) {
+      quantidadePorInsumo.set(item.insumoId, (quantidadePorInsumo.get(item.insumoId) ?? 0) + item.quantidade);
+    }
+
+    const insuficientes = insumos.filter((insumo) => (quantidadePorInsumo.get(insumo.id) ?? 0) > Number(insumo.estoqueAtual));
+    if (insuficientes.length > 0) {
+      const detalhe = insuficientes
+        .map((i) => `${i.nome} (disponível ${Number(i.estoqueAtual)} ${i.unidade}, solicitado ${quantidadePorInsumo.get(i.id)} ${i.unidade})`)
+        .join('; ');
+      return reply.status(422).send({ erro: `Estoque insuficiente para: ${detalhe}` });
     }
 
     const dataAlvo = dataDoDia(data);
