@@ -314,6 +314,39 @@ VITE_API_URL=http://localhost:3000
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-10
+- **Estoque avançado — Fase 4a mesclada no main e em produção** — módulo `estoque_avancado`
+  (flag já existia desde a Fase 1a, sem uso). Brainstorming descartou ficha técnica por prato
+  (achado real do usuário: prato preparado tipo baião não pode "descozinhar" se o pedido for
+  cancelado, diferente de item revendável tal como está, ex. bebida lacrada) em favor de um
+  modelo manual: `Insumo` (cadastro simples com unidade/custo/estoque) + `MovimentacaoEstoque`
+  (ledger append-only: entrada/perda/ajuste/consumo_diario) + lançamento diário de consumo,
+  cruzado com faturamento confirmado do dia (`Pedido` não cancelado + `Pagamento` confirmado)
+  pra calcular lucro real. Nova permissão `estoque`, telas `/insumos` e `/estoque`. Spec e
+  plano em `docs/superpowers/specs/2026-07-08-estoque-avancado-fase4a-design.md` e
+  `docs/superpowers/plans/2026-07-08-estoque-avancado-fase4a.md`. Achados pós-implementação
+  (testados pelo usuário e corrigidos na hora): faltava validação de estoque insuficiente
+  (dava pra registrar consumo/perda maior que o disponível, inclusive negativo); `GET
+  /cardapio` devolvia `preco` como string (bug pré-existente, não desta fase) que só virou
+  problema visível quando a feature de acompanhamento (abaixo) passou a somar valores com
+  `+`; valores monetários/quantidade formatados com 4 casas decimais em vez de moeda BRL.
+- **Acompanhamento configurável por categoria, com preço adicional** — qualquer categoria do
+  cardápio pode ter uma lista de opções de acompanhamento (ex: categoria "PF" → Baião, Arroz,
+  Baião Cremoso), cada uma com preço adicional próprio (ex: +R$3,00). Desenho genérico por
+  categoria (não hardcoded pra uma categoria "PF" específica), decidido em brainstorming com o
+  usuário. `Categoria.opcoesAcompanhamento` (Json), `ItemPedido.acompanhamento` e
+  `ItemComanda.acompanhamento` (snapshot da escolha). Validado e com preço aplicado nas 3
+  origens de pedido (cardápio público, pedido manual/balcão, mesas) via utilitário
+  compartilhado `src/utils/acompanhamento.ts`; exibido na Produção (Kanban), comanda impressa
+  e Histórico, pra cozinha saber o que preparar. Cardápio público precisou de um pequeno
+  redesenho do modelo de carrinho (de `itemId → quantidade` pra suportar múltiplas variantes
+  do mesmo item com acompanhamentos diferentes no mesmo pedido).
+- **Merge com o trabalho em paralelo do QR code Pix** (`ad38d16`) — sem conflito de lógica,
+  só duas partes diferentes do `schema.prisma` mudando ao mesmo tempo (o campo `cidade` e as
+  tabelas novas de estoque). Sobrou um drift pequeno pós-merge (`opcoesAcompanhamento` sem
+  `NOT NULL` no banco — a migration manual da conversão pra Json não reafirmou a constraint),
+  corrigido com uma migration adicional antes do push.
+
 ### 2026-07-09
 - **QR code Pix na tela de Caixa mesclado no main (`ae81a2a`) e em produção** — gera um QR
   code de Pix estático (BR Code, padrão Banco Central) localmente, sem gateway/webhook/conta
@@ -528,10 +561,15 @@ originalmente desenhada** — decisão do usuário de não travar num fornecedor
 maquininha; o que essa fase realmente precisava (QR code de Pix + confirmação manual) já foi
 entregue acima, fora da numeração. Se no futuro fizer sentido reabrir a integração de verdade
 com maquininha, é uma escolha consciente de fornecedor único (app Android nativo), documentada
-como trade-off explícito, não uma continuação natural da Fase 3 original. Restam: Fase 4
-(estoque avançado — ficha técnica/CMV), Fase 5 (relatórios avançados + auditoria
-completa/dashboards/exportação). Visão futura já desenhada no documento — não implementar sem
-revisitar a spec primeiro.
+como trade-off explícito, não uma continuação natural da Fase 3 original. Fase 4 (estoque
+avançado) também não foi construída como originalmente desenhada — o brainstorming da Fase 4a
+(ver `docs/superpowers/specs/2026-07-08-estoque-avancado-fase4a-design.md`) descartou ficha
+técnica por prato/CMV automático (complexidade real: prato preparado não pode "descozinhar" se
+cancelado, diferente de item revendável tal como está) em favor de um modelo bem mais simples —
+lançamento manual diário de consumo de insumo, cruzado com o faturamento confirmado do dia pra
+calcular lucro real. Mesclada no main e em produção — ver entrada de 2026-07-10 no log abaixo.
+Resta: Fase 5 (relatórios avançados + auditoria completa/dashboards/exportação). Visão futura já
+desenhada no documento — não implementar sem revisitar a spec primeiro.
 
 ## Próximas features planejadas
 
