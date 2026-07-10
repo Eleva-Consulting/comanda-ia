@@ -314,6 +314,18 @@ VITE_API_URL=http://localhost:3000
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-09
+- **QR code Pix na tela de Caixa mesclado no main (`ae81a2a`) e em produção** — gera um QR
+  code de Pix estático (BR Code, padrão Banco Central) localmente, sem gateway/webhook/conta
+  em provedor, usando a chave Pix + cidade que o estabelecimento já cadastra. Surgiu de uma
+  conversa sobre integração com maquininha que revelou que o usuário não queria travar num
+  fornecedor específico — essa feature entrega o que realmente faltava (mostrar QR na mesa,
+  confirmação ainda manual) sem esse trade-off. 5 tarefas via subagent-driven-development +
+  revisão final (opus), que pegou 1 bug Importante (função de geração do payload TLV podia
+  corromper silenciosamente o código pra chaves Pix muito longas — agora lança erro tratado
+  como 400). Migration (`Estabelecimento.cidade`) aplicada automaticamente. Ver detalhes
+  completos na seção do roadmap do Módulo de Mesas acima.
+
 ### 2026-07-08
 - **Módulo de Mesas — Fase 1f mesclada no main (`1bb1c60`) e em produção** — auditoria básica:
   finalmente construiu cancelar item pronto/entregue com senha de supervisor (bloqueado desde
@@ -475,6 +487,34 @@ VITE_API_URL=http://localhost:3000
    real de risco); resolver de verdade exigiria redesenhar como pagamento em valor livre
    rastreia cobertura por item — fica pra uma fase futura se vira problema na prática.
 
+7. [x] **QR code Pix na tela de Caixa (fora da numeração de fases)** —
+   `docs/superpowers/plans/2026-07-09-pix-qrcode-caixa.md`. Surgiu de uma conversa sobre
+   "Fase 3" (gateway de pagamento) que revelou que o usuário não queria integração de
+   verdade com a maquininha (isso exigiria travar num fornecedor específico — PagBank, Stone
+   etc. — com app Android nativo rodando dentro da maquininha, incompatível com "funcionar
+   com qualquer maquininha"). O que realmente faltava era só: gerar um QR code de Pix
+   estático ("BR Code"/"Pix Copia e Cola", padrão do Banco Central) usando a chave Pix que o
+   estabelecimento já cadastra, pra mostrar na mesa sem precisar da maquininha — sem gateway,
+   sem conta em nenhum provedor, sem confirmação automática (o garçom/caixa ainda confirma
+   manualmente, exatamente como já fazia desde a Fase 1e). Novo campo
+   `Estabelecimento.cidade` (exigido pelo padrão BR Code, junto da `chavePix` que já
+   existia). Função pura `src/utils/pixBrCode.ts` gera o payload TLV+CRC16 localmente — é a
+   primeira vez que o projeto gera um formato financeiro padronizado do zero, sem nenhum
+   precedente no código pra copiar. Botão "Gerar QR code" novo na tela de Caixa,
+   desacoplado do fluxo de registrar pagamento (só mostra o código, quem registra o
+   pagamento em si continua sendo a mesma ação de sempre). Implementado via
+   subagent-driven-development (5 tarefas + revisão final de todo o branch). **Mesclado no
+   main (`ae81a2a`), enviado pro GitHub e em produção** — migration (`Estabelecimento.cidade`,
+   nullable) aplicada automaticamente pelo Railway. Achados de interesse: a Task 2 pegou um
+   bug real no teste do próprio plano (CRC16 recalculado com o campo `'6304'` duplicado,
+   corrigido só no teste, sem tocar no algoritmo) — o revisor da tarefa rodou o código de
+   verdade em Node e validou o CRC16 contra o vetor de teste padrão CRC-16/CCITT-FALSE
+   ("123456789" → "29B1") pra confirmar. A revisão final do branch (opus) encontrou 1
+   problema Importante: a função `tlv()` gerava um payload BR Code silenciosamente corrompido
+   pra valores com 100+ caracteres (ex: uma chave Pix artificialmente longa) — corrigido pra
+   lançar erro nesse caso, capturado pela rota e convertido num 400 limpo em vez de um 500
+   não tratado.
+
 **Decisão-chave da spec:** módulos habilitáveis por estabelecimento
 (`Estabelecimento.modulosAtivos: String[]`, mesmo padrão de `Usuario.permissoes`) — mesas e estoque
 avançado são add-ons pagos que não mudam nada pra quem não usa (ex: a galeteria, que é só
@@ -482,10 +522,16 @@ balcão/delivery).
 
 **Fases 2-5 da spec original** (numeração própria da spec, diferente das sub-fases 1a-1f acima):
 Fase 2 (papéis `mesas`/`caixa` + tela de Caixa + senha de supervisor generalizada) **já foi
-entregue** — saiu de graça dentro da Fase 1e. Restam: Fase 3 (pagamento via gateway,
-`TransacaoAdquirente`/Adapter, primeiro provedor PagBank), Fase 4 (estoque avançado —
-ficha técnica/CMV), Fase 5 (relatórios avançados + auditoria completa/dashboards/exportação).
-Todas visão futura já desenhada no documento — não implementar sem revisitar a spec primeiro.
+entregue** — saiu de graça dentro da Fase 1e. Fase 3 (pagamento via gateway de verdade —
+`TransacaoAdquirente`/Adapter, cobrança automática, webhook) **não vai ser construída como
+originalmente desenhada** — decisão do usuário de não travar num fornecedor específico de
+maquininha; o que essa fase realmente precisava (QR code de Pix + confirmação manual) já foi
+entregue acima, fora da numeração. Se no futuro fizer sentido reabrir a integração de verdade
+com maquininha, é uma escolha consciente de fornecedor único (app Android nativo), documentada
+como trade-off explícito, não uma continuação natural da Fase 3 original. Restam: Fase 4
+(estoque avançado — ficha técnica/CMV), Fase 5 (relatórios avançados + auditoria
+completa/dashboards/exportação). Visão futura já desenhada no documento — não implementar sem
+revisitar a spec primeiro.
 
 ## Próximas features planejadas
 

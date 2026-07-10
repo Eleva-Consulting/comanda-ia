@@ -1,7 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
+import QRCode from 'qrcode';
 import { prisma } from '../database.js';
+import { gerarPayloadPix } from '../utils/pixBrCode.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { serializarConta } from './contas.js';
@@ -12,6 +14,10 @@ import { Prisma } from '../generated/prisma/client.js';
 
 const ContaParamsSchema = Type.Object({ id: Type.String() });
 const PagamentoParamsSchema = Type.Object({ id: Type.String() });
+
+const PixQrCodeQuerySchema = Type.Object({
+  valor: Type.String(),
+});
 
 const RegistrarPagamentoSchema = Type.Object({
   formaPagamento: Type.Union([
@@ -293,5 +299,49 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     await emitirContaAtualizada(estabelecimentoId!, id);
 
     return { contaId: id, status: 'fechada', ...resumo };
+  });
+
+  // ── GET /contas/:id/pix-qrcode ───────────────────────────────────────────────
+  // Gera um QR code Pix estático (BR Code) local — sem gateway, sem conta em nenhum
+  // provedor. O garçom/caixa ainda confirma o pagamento manualmente depois, via
+  // POST /contas/:id/pagamentos, exatamente como hoje.
+  fastify.get('/contas/:id/pix-qrcode', {
+    onRequest: [autenticar, temPermissao('mesas', 'caixa'), moduloAtivo('mesas')],
+    schema: { params: ContaParamsSchema, querystring: PixQrCodeQuerySchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { valor: valorStr } = request.query as { valor: string };
+    const { estabelecimentoId } = request.user;
+
+    const valor = Number(valorStr);
+    if (!Number.isFinite(valor) || valor <= 0) return reply.status(400).send({ erro: 'Valor inválido' });
+
+    const conta = await prisma.conta.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
+    if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+    if (!estabelecimento?.chavePix) {
+      return reply.status(400).send({ erro: 'Configure a chave Pix em Configurações antes de gerar o QR code' });
+    }
+    if (!estabelecimento.cidade) {
+      return reply.status(400).send({ erro: 'Configure a cidade do estabelecimento em Configurações antes de gerar o QR code' });
+    }
+
+    let payload: string;
+    try {
+      payload = gerarPayloadPix({
+        chavePix: estabelecimento.chavePix,
+        nomeBeneficiario: estabelecimento.nome,
+        cidade: estabelecimento.cidade,
+        valor,
+        txid: id,
+      });
+    } catch {
+      return reply.status(400).send({ erro: 'Não foi possível gerar o QR code Pix — verifique a chave Pix cadastrada' });
+    }
+
+    const qrCodeBase64 = await QRCode.toDataURL(payload);
+
+    return { payload, qrCodeBase64 };
   });
 }
