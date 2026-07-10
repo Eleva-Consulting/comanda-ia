@@ -36,6 +36,7 @@ const FazerPedidoSchema = Type.Object({
     Type.Object({
       itemCardapioId: Type.String(),
       quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+      acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
     }),
     { minItems: 1 }
   ),
@@ -46,8 +47,16 @@ const AvaliarPedidoSchema = Type.Object({
   comentarioAvaliacao: Type.Optional(Type.String({ maxLength: 500 })),
 });
 
-type ItemPedidoInput  = { itemCardapioId: string; quantidade: number };
-type CategoriaRow = { id: string; nome: string; ordem: number } | null;
+type ItemPedidoInput  = { itemCardapioId: string; quantidade: number; acompanhamento?: string };
+type OpcaoAcompanhamento = { nome: string; precoAdicional: number };
+type CategoriaRow = { id: string; nome: string; ordem: number; opcoesAcompanhamento: unknown } | null;
+
+function paraOpcoesAcompanhamento(json: unknown): OpcaoAcompanhamento[] {
+  if (!Array.isArray(json)) return [];
+  return json.filter(
+    (o): o is OpcaoAcompanhamento => typeof o === 'object' && o !== null && typeof (o as OpcaoAcompanhamento).nome === 'string'
+  );
+}
 
 type ItemCardapioRow  = {
   id:         string;
@@ -72,7 +81,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         itens: {
           where:   { disponivel: true },
           orderBy: { nome: 'asc' },
-          include: { categoria: { select: { id: true, nome: true, ordem: true } } },
+          include: { categoria: { select: { id: true, nome: true, ordem: true, opcoesAcompanhamento: true } } },
         },
       },
     });
@@ -99,7 +108,10 @@ export async function publicoRoutes(fastify: FastifyInstance) {
           descricao: item.descricao ?? null,
           preco:     Number(item.preco),
           foto:      item.foto ?? null,
-          categoria: item.categoria ?? null,
+          categoria: item.categoria
+            ? { id: item.categoria.id, nome: item.categoria.nome, ordem: item.categoria.ordem }
+            : null,
+          opcoesAcompanhamento: paraOpcoesAcompanhamento(item.categoria?.opcoesAcompanhamento),
         })),
     };
   });
@@ -166,27 +178,41 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     const itemIds = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
     const itensCardapio: ItemCardapioRow[] = await prisma.itemCardapio.findMany({
-      where: { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
+      where:   { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
+      include: { categoria: { select: { id: true, nome: true, ordem: true, opcoesAcompanhamento: true } } },
     });
 
     if (itensCardapio.length !== itens.length) {
       return reply.status(400).send({ erro: 'Algum item do pedido não está mais disponível' });
     }
 
-    // Verificar estoque suficiente
+    // Verificar estoque suficiente e resolver acompanhamento (quando a categoria exige)
     for (const pedidoItem of itens) {
       const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
       if (ic.estoque !== null && ic.estoque !== undefined && ic.estoque < pedidoItem.quantidade) {
         return reply.status(400).send({ erro: `Estoque insuficiente para "${ic.nome}"` });
       }
+
+      const opcoes = paraOpcoesAcompanhamento(ic.categoria?.opcoesAcompanhamento);
+      if (opcoes.length > 0) {
+        if (!pedidoItem.acompanhamento) {
+          return reply.status(400).send({ erro: `Escolha o acompanhamento de "${ic.nome}"` });
+        }
+        if (!opcoes.some((o) => o.nome === pedidoItem.acompanhamento)) {
+          return reply.status(400).send({ erro: `Acompanhamento inválido para "${ic.nome}"` });
+        }
+      }
     }
 
     const itensComSnapshot = itens.map((pedidoItem: ItemPedidoInput) => {
       const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
+      const opcoes = paraOpcoesAcompanhamento(ic.categoria?.opcoesAcompanhamento);
+      const opcaoEscolhida = opcoes.find((o) => o.nome === pedidoItem.acompanhamento);
       return {
-        nomeItem:   ic.nome,
-        quantidade: pedidoItem.quantidade,
-        precoUnit:  Number(ic.preco),
+        nomeItem:       ic.nome,
+        quantidade:     pedidoItem.quantidade,
+        precoUnit:      Number(ic.preco) + (opcaoEscolhida?.precoAdicional ?? 0),
+        acompanhamento: pedidoItem.acompanhamento ?? null,
       };
     });
 

@@ -198,7 +198,7 @@ model Categoria {
   id                    String          @id @default(uuid())
   nome                  String
   ordem                 Int             @default(0)
-  opcoesAcompanhamento  String[]        @default([]) // vazio = item da categoria não pede acompanhamento
+  opcoesAcompanhamento  Json            @default("[]") // [{ nome, precoAdicional }] — vazio = item da categoria não pede acompanhamento
   estabelecimentoId     String
   estabelecimento       Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
   itens                 ItemCardapio[]

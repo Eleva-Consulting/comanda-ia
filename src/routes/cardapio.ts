@@ -6,14 +6,21 @@ import { r2Configurado, uploadParaR2, deletarDeR2 } from '../r2.js';
 
 const ItemParamsSchema = Type.Object({ id: Type.String() });
 
+const OpcaoAcompanhamentoSchema = Type.Object({
+  nome:           Type.String({ minLength: 1, maxLength: 60 }),
+  precoAdicional: Type.Number({ minimum: 0 }),
+});
+
 const CriarCategoriaSchema = Type.Object({
-  nome:  Type.String({ minLength: 1, maxLength: 100 }),
-  ordem: Type.Optional(Type.Integer({ minimum: 0 })),
+  nome:                 Type.String({ minLength: 1, maxLength: 100 }),
+  ordem:                Type.Optional(Type.Integer({ minimum: 0 })),
+  opcoesAcompanhamento: Type.Optional(Type.Array(OpcaoAcompanhamentoSchema)),
 });
 
 const AtualizarCategoriaSchema = Type.Object({
-  nome:  Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
-  ordem: Type.Optional(Type.Integer({ minimum: 0 })),
+  nome:                 Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  ordem:                Type.Optional(Type.Integer({ minimum: 0 })),
+  opcoesAcompanhamento: Type.Optional(Type.Array(OpcaoAcompanhamentoSchema)),
 });
 
 const CriarItemSchema = Type.Object({
@@ -34,7 +41,9 @@ const AtualizarItemSchema = Type.Object({
   estoque:     Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
 });
 
-const categoriaSelect = { select: { id: true, nome: true, ordem: true } } as const;
+const categoriaSelect = { select: { id: true, nome: true, ordem: true, opcoesAcompanhamento: true } } as const;
+
+type OpcaoAcompanhamento = { nome: string; precoAdicional: number };
 
 export async function cardapioRoutes(fastify: FastifyInstance) {
   // ── GET /cardapio/categorias ──────────────────────────────────────────────
@@ -53,11 +62,11 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar, temPermissao('cardapio')],
     schema: { body: CriarCategoriaSchema },
   }, async (request, reply) => {
-    const { nome, ordem } = request.body as { nome: string; ordem?: number };
+    const { nome, ordem, opcoesAcompanhamento } = request.body as { nome: string; ordem?: number; opcoesAcompanhamento?: OpcaoAcompanhamento[] };
     const { estabelecimentoId } = request.user;
 
     const categoria = await prisma.categoria.create({
-      data: { nome, ordem: ordem ?? 0, estabelecimentoId: estabelecimentoId! },
+      data: { nome, ordem: ordem ?? 0, opcoesAcompanhamento: opcoesAcompanhamento ?? [], estabelecimentoId: estabelecimentoId! },
     });
     return reply.status(201).send(categoria);
   });
@@ -68,7 +77,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     schema: { params: ItemParamsSchema, body: AtualizarCategoriaSchema },
   }, async (request, reply) => {
     const { id }    = request.params as { id: string };
-    const dados     = request.body as { nome?: string; ordem?: number };
+    const dados     = request.body as { nome?: string; ordem?: number; opcoesAcompanhamento?: OpcaoAcompanhamento[] };
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.categoria.updateMany({
