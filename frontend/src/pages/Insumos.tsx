@@ -13,6 +13,10 @@ function formatarBRL(valor: number): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function formatarQuantidade(valor: number): string {
+  return valor.toLocaleString('pt-BR', { maximumFractionDigits: 3 })
+}
+
 interface Insumo {
   id: string
   nome: string
@@ -184,7 +188,7 @@ export default function Insumos() {
                   <td className="px-4 py-3 font-medium">{insumo.nome}</td>
                   <td className="px-4 py-3 text-zinc-400">{LABEL_UNIDADE[insumo.unidade]}</td>
                   <td className="px-4 py-3 text-zinc-400">{formatarBRL(insumo.custoUnitario)}</td>
-                  <td className="px-4 py-3 text-zinc-400">{insumo.estoqueAtual.toFixed(3)} {LABEL_UNIDADE[insumo.unidade]}</td>
+                  <td className="px-4 py-3 text-zinc-400">{formatarQuantidade(insumo.estoqueAtual)} {LABEL_UNIDADE[insumo.unidade]}</td>
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => abrirMovimento(insumo)}
