@@ -48,30 +48,83 @@ function inicioFimDoDia(dataStr: string) {
   };
 }
 
-async function calcularLucroDia(estabelecimentoId: string, dataStr: string) {
+async function buscarDadosDoDia(estabelecimentoId: string, dataStr: string) {
   const { inicio, fim } = inicioFimDoDia(dataStr);
 
   const [pedidos, pagamentos, movimentacoes] = await Promise.all([
-    prisma.pedido.aggregate({
-      where: { estabelecimentoId, status: { not: 'cancelado' }, criadoEm: { gte: inicio, lte: fim } },
-      _sum:  { total: true },
+    prisma.pedido.findMany({
+      where:   { estabelecimentoId, status: { not: 'cancelado' }, criadoEm: { gte: inicio, lte: fim } },
+      select:  { id: true, clienteNome: true, tipoEntrega: true, formaPagamento: true, total: true, criadoEm: true },
+      orderBy: { criadoEm: 'asc' },
     }),
-    prisma.pagamento.aggregate({
-      where: { estabelecimentoId, status: 'confirmado', criadoEm: { gte: inicio, lte: fim } },
-      _sum:  { valor: true },
+    prisma.pagamento.findMany({
+      where:  { estabelecimentoId, status: 'confirmado', criadoEm: { gte: inicio, lte: fim } },
+      select: {
+        id: true, valor: true, formaPagamento: true, criadoEm: true,
+        conta: { select: { mesa: { select: { numero: true } } } },
+      },
+      orderBy: { criadoEm: 'asc' },
     }),
     prisma.movimentacaoEstoque.findMany({
-      where: { estabelecimentoId, tipo: 'consumo_diario', data: dataDoDia(dataStr) },
+      where:   { estabelecimentoId, tipo: 'consumo_diario', data: dataDoDia(dataStr) },
+      include: { insumo: { select: { nome: true, unidade: true } } },
     }),
   ]);
 
-  const faturamento  = Number(pedidos._sum.total ?? 0) + Number(pagamentos._sum.valor ?? 0);
-  const custoInsumos = movimentacoes.reduce(
+  return { pedidos, pagamentos, movimentacoes };
+}
+
+function montarResumo(dataStr: string, dados: Awaited<ReturnType<typeof buscarDadosDoDia>>) {
+  const faturamento = dados.pedidos.reduce((soma, p) => soma + Number(p.total), 0)
+    + dados.pagamentos.reduce((soma, pg) => soma + Number(pg.valor), 0);
+  const custoInsumos = dados.movimentacoes.reduce(
     (soma, m) => soma + Number(m.quantidade) * Number(m.custoUnitarioSnapshot),
     0
   );
 
   return { data: dataStr, faturamento, custoInsumos, lucro: faturamento - custoInsumos };
+}
+
+async function calcularLucroDia(estabelecimentoId: string, dataStr: string) {
+  const dados = await buscarDadosDoDia(estabelecimentoId, dataStr);
+  return montarResumo(dataStr, dados);
+}
+
+// Versão detalhada — inclui a descrição de cada venda (pedido/pagamento) e de
+// cada insumo consumido. Usada só nas rotas de dia único (lucro-dia,
+// consumo-diario); o histórico (múltiplos dias) usa a versão resumida acima
+// pra não buscar registro a registro de 30 dias de uma vez.
+async function detalharLucroDia(estabelecimentoId: string, dataStr: string) {
+  const dados  = await buscarDadosDoDia(estabelecimentoId, dataStr);
+  const resumo = montarResumo(dataStr, dados);
+
+  const vendas = [
+    ...dados.pedidos.map((p) => ({
+      tipo:           'pedido' as const,
+      id:             p.id,
+      descricao:      `Pedido de ${p.clienteNome} (${p.tipoEntrega === 'retirada' ? 'retirada' : 'entrega'})`,
+      formaPagamento: p.formaPagamento,
+      valor:          Number(p.total),
+    })),
+    ...dados.pagamentos.map((pg) => ({
+      tipo:           'pagamento' as const,
+      id:             pg.id,
+      descricao:      pg.conta.mesa ? `Pagamento — Mesa ${pg.conta.mesa.numero}` : 'Pagamento — conta sem mesa',
+      formaPagamento: pg.formaPagamento,
+      valor:          Number(pg.valor),
+    })),
+  ];
+
+  const insumos = dados.movimentacoes.map((m) => ({
+    insumoId:              m.insumoId,
+    nome:                  m.insumo.nome,
+    unidade:               m.insumo.unidade,
+    quantidade:            Number(m.quantidade),
+    custoUnitarioSnapshot: Number(m.custoUnitarioSnapshot),
+    custoTotal:            Number(m.quantidade) * Number(m.custoUnitarioSnapshot),
+  }));
+
+  return { ...resumo, vendas, insumos };
 }
 
 export async function estoqueRoutes(fastify: FastifyInstance) {
@@ -194,7 +247,7 @@ export async function estoqueRoutes(fastify: FastifyInstance) {
       })
     );
 
-    return reply.status(201).send(await calcularLucroDia(estabelecimentoId!, data));
+    return reply.status(201).send(await detalharLucroDia(estabelecimentoId!, data));
   });
 
   // ── GET /estoque/lucro-dia?data=YYYY-MM-DD ──────────────────────────────────
@@ -204,7 +257,7 @@ export async function estoqueRoutes(fastify: FastifyInstance) {
   }, async (request) => {
     const { data } = request.query as { data: string };
     const { estabelecimentoId } = request.user;
-    return calcularLucroDia(estabelecimentoId!, data);
+    return detalharLucroDia(estabelecimentoId!, data);
   });
 
   // ── GET /estoque/historico ──────────────────────────────────────────────────

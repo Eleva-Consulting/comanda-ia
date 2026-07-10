@@ -21,6 +21,35 @@ interface LucroDia {
   lucro: number
 }
 
+interface VendaDia {
+  tipo: 'pedido' | 'pagamento'
+  id: string
+  descricao: string
+  formaPagamento: string
+  valor: number
+}
+
+interface InsumoConsumidoDia {
+  insumoId: string
+  nome: string
+  unidade: string
+  quantidade: number
+  custoUnitarioSnapshot: number
+  custoTotal: number
+}
+
+interface LucroDiaDetalhado extends LucroDia {
+  vendas: VendaDia[]
+  insumos: InsumoConsumidoDia[]
+}
+
+const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
+  pix: 'Pix',
+  dinheiro: 'Dinheiro',
+  cartao_credito: 'Cartão de crédito',
+  cartao_debito: 'Cartão de débito',
+}
+
 function hojeISO() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -34,7 +63,7 @@ export default function Estoque() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
-  const [resultado, setResultado] = useState<LucroDia | null>(null)
+  const [resultado, setResultado] = useState<LucroDiaDetalhado | null>(null)
   const [carregandoResultado, setCarregandoResultado] = useState(false)
 
   const [historico, setHistorico] = useState<LucroDia[]>([])
@@ -194,6 +223,50 @@ export default function Estoque() {
             <p className={`text-xl font-bold ${resultado.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               R$ {resultado.lucro.toFixed(2)}
             </p>
+          </div>
+        </div>
+      )}
+
+      {resultado && (
+        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <h4 className="mb-3 text-sm font-bold text-zinc-300">Vendas do dia ({resultado.vendas.length})</h4>
+            {resultado.vendas.length === 0 ? (
+              <p className="text-sm text-zinc-500">Nenhuma venda confirmada nesse dia.</p>
+            ) : (
+              <ul className="space-y-2">
+                {resultado.vendas.map((venda) => (
+                  <li key={`${venda.tipo}-${venda.id}`} className="flex items-center justify-between border-b border-zinc-800 pb-2 text-sm last:border-0 last:pb-0">
+                    <div>
+                      <p className="text-zinc-200">{venda.descricao}</p>
+                      <p className="text-xs text-zinc-500">{LABEL_FORMA_PAGAMENTO[venda.formaPagamento] ?? venda.formaPagamento}</p>
+                    </div>
+                    <span className="font-medium text-zinc-100">R$ {venda.valor.toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <h4 className="mb-3 text-sm font-bold text-zinc-300">Insumos consumidos ({resultado.insumos.length})</h4>
+            {resultado.insumos.length === 0 ? (
+              <p className="text-sm text-zinc-500">Nenhum insumo lançado nesse dia.</p>
+            ) : (
+              <ul className="space-y-2">
+                {resultado.insumos.map((insumo, index) => (
+                  <li key={`${insumo.insumoId}-${index}`} className="flex items-center justify-between border-b border-zinc-800 pb-2 text-sm last:border-0 last:pb-0">
+                    <div>
+                      <p className="text-zinc-200">{insumo.nome}</p>
+                      <p className="text-xs text-zinc-500">
+                        {insumo.quantidade} {insumo.unidade} × R$ {insumo.custoUnitarioSnapshot.toFixed(4)}
+                      </p>
+                    </div>
+                    <span className="font-medium text-zinc-100">R$ {insumo.custoTotal.toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
