@@ -98,6 +98,7 @@ model Estabelecimento {
   status           StatusEstabelecimento @default(pendente)
   aceitandoPedidos Boolean               @default(true)
   chavePix         String?
+  cidade           String?
   taxaEntrega      Decimal?              @db.Decimal(10, 2)
   evolutionUrl     String?
   evolutionToken   String?
