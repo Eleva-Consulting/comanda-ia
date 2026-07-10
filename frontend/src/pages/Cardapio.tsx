@@ -620,7 +620,7 @@ function ModalForm({
 
           <label className="mb-6 flex items-center gap-3">
             <Toggle ativo={disponivel} carregando={false} onChange={() => onChangeDisponivel(!disponivel)} />
-            <span className="text-sm font-medium text-zinc-300">Disponível para o cliente</span>
+            <span className="text-sm font-medium text-zinc-300">Disponível</span>
           </label>
 
           <div className="flex gap-2">
