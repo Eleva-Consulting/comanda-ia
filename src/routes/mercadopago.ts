@@ -2,7 +2,11 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
-import { montarUrlAutorizacao, trocarCodePorToken } from '../mercadopago.js';
+import { montarUrlAutorizacao, trocarCodePorToken, buscarPagamento } from '../mercadopago.js';
+import { getIO } from '../socket.js';
+import { enviarPush } from '../push.js';
+import { whatsApp } from '../whatsapp.js';
+import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
 
 const CallbackQuerySchema = Type.Object({
   code:  Type.Optional(Type.String()),
@@ -83,5 +87,88 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
       fastify.log.error({ err }, 'Falha ao trocar code por token do Mercado Pago');
       return reply.redirect(`${frontendUrl}/configuracoes?mercadopago=erro`);
     }
+  });
+
+  // POST /webhooks/mercadopago — notificação de pagamento (sem auth)
+  fastify.post('/webhooks/mercadopago', async (request, reply) => {
+    const query = request.query as { 'data.id'?: string; id?: string; topic?: string; type?: string };
+    const body  = request.body as { data?: { id?: string }; type?: string } | undefined;
+
+    const paymentId = query['data.id'] ?? query.id ?? body?.data?.id;
+    const tipo       = query.topic ?? query.type ?? body?.type;
+
+    if (tipo !== 'payment' || !paymentId) {
+      return reply.status(200).send({ recebido: true });
+    }
+
+    const pedidoPendente = await prisma.pedido.findFirst({ where: { mpPaymentId: String(paymentId) } });
+    if (!pedidoPendente || !pedidoPendente.aguardandoPagamento) {
+      // Não é nosso pagamento, ou já foi processado antes (idempotência) — ignora sem erro.
+      return reply.status(200).send({ recebido: true });
+    }
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({
+      where: { id: pedidoPendente.estabelecimentoId },
+    });
+    if (!estabelecimento?.mpAccessToken) {
+      return reply.status(200).send({ recebido: true });
+    }
+
+    const pagamento = await buscarPagamento(estabelecimento.mpAccessToken, String(paymentId));
+    if (pagamento.status !== 'approved' || pagamento.externalReference !== pedidoPendente.id) {
+      return reply.status(200).send({ recebido: true });
+    }
+
+    const pedidoConfirmado = await prisma.pedido.update({
+      where:   { id: pedidoPendente.id },
+      data:    { status: 'pagamento_confirmado', aguardandoPagamento: false, pagoEm: new Date() },
+      include: { itens: true },
+    });
+
+    getIO().to(estabelecimento.id).emit('pedido:novo', pedidoConfirmado);
+
+    // Push notification pro DONO — fire-and-forget
+    prisma.pushSubscription.findMany({
+      where: { usuario: { estabelecimentoId: estabelecimento.id } },
+    }).then((subs) =>
+      Promise.allSettled(subs.map((s) => enviarPush(s, {
+        titulo: `Novo pedido — ${pedidoConfirmado.clienteNome}`,
+        corpo:  `R$ ${Number(pedidoConfirmado.total).toFixed(2)} · Pix confirmado`,
+        url:    '/cozinha',
+      })))
+    ).catch((err) => fastify.log.error({ err }, 'Falha push notifications (webhook MP)'));
+
+    // WhatsApp pro DONO — fire-and-forget
+    if (estabelecimento.telefone) {
+      whatsApp.enviarMensagem(
+        estabelecimento.id, estabelecimento.telefone,
+        `💰 Pix confirmado — *${pedidoConfirmado.clienteNome}*\nTotal: R$ ${Number(pedidoConfirmado.total).toFixed(2)}`,
+      ).catch((err) => fastify.log.error({ err }, 'Falha WhatsApp dono (webhook MP)'));
+    }
+
+    // Resumo pro CLIENTE — fire-and-forget (suspenso até aqui pra não vazar pedido não pago)
+    if (pedidoConfirmado.clienteFone) {
+      const msgCliente = montarResumoWhatsApp({
+        nomeEstabelecimento: estabelecimento.nome,
+        clienteNome:         pedidoConfirmado.clienteNome,
+        itens:               pedidoConfirmado.itens.map((i) => ({
+          nomeItem: i.nomeItem, quantidade: i.quantidade, precoUnit: Number(i.precoUnit),
+        })),
+        subtotal:            Number(pedidoConfirmado.total) - Number(pedidoConfirmado.taxaEntrega ?? 0),
+        taxaEntrega:         Number(pedidoConfirmado.taxaEntrega ?? 0),
+        bairroNome:          pedidoConfirmado.bairroNome,
+        enderecoEntrega:     pedidoConfirmado.enderecoEntrega,
+        tipoEntrega:         pedidoConfirmado.tipoEntrega,
+        formaPagamento:      pedidoConfirmado.formaPagamento,
+        precisaTroco:        false,
+        trocoPara:           null,
+        total:               Number(pedidoConfirmado.total),
+        chavePix:            null,
+      });
+      whatsApp.enviarMensagem(estabelecimento.id, pedidoConfirmado.clienteFone, msgCliente)
+        .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente (webhook MP)'));
+    }
+
+    return reply.status(200).send({ recebido: true });
   });
 }
