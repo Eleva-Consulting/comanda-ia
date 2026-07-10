@@ -10,6 +10,7 @@ import { cardapioRoutes } from './routes/cardapio.js';
 import { estabelecimentosRoutes } from './routes/estabelecimentos.js';
 import { authRoutes } from './routes/auth.js';
 import { webhookRoutes } from './routes/webhook.js';
+import { mercadoPagoRoutes } from './routes/mercadopago.js';
 import { publicoRoutes } from './routes/publico.js';
 import { adminRoutes } from './routes/admin.js';
 import { operadoresRoutes } from './routes/operadores.js';
@@ -66,6 +67,7 @@ export async function buildServer() {
   await fastify.register(authRoutes);
   await fastify.register(webhookRoutes);
   await fastify.register(publicoRoutes);
+  await fastify.register(mercadoPagoRoutes);
 
   // Rotas autenticadas (tenant)
   await fastify.register(pedidosRoutes);
