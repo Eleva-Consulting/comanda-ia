@@ -145,7 +145,7 @@ export default function Estoque() {
   return (
     <Layout>
       <h2 className="mb-6 flex items-center gap-2 text-2xl font-extrabold">
-        <TrendingUp className="h-6 w-6" /> Estoque — Consumo do dia
+        <TrendingUp className="h-6 w-6" /> Resultados — Consumo do dia
       </h2>
 
       <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">

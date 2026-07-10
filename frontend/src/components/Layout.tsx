@@ -146,7 +146,7 @@ export default function Layout({ children, headerExtra }: Props) {
               <NavLink to="/insumos" className={linkClass}>
                 <span className="flex items-center gap-1.5">
                   <Package className="h-3.5 w-3.5" />
-                  Insumos
+                  Estoque
                 </span>
               </NavLink>
             )}
@@ -232,7 +232,7 @@ export default function Layout({ children, headerExtra }: Props) {
             <NavLink to="/insumos" className={linkClass}>
               <span className="flex items-center gap-1.5">
                 <Package className="h-3.5 w-3.5" />
-                Insumos
+                Estoque
               </span>
             </NavLink>
           )}
@@ -240,7 +240,7 @@ export default function Layout({ children, headerExtra }: Props) {
             <NavLink to="/estoque" className={linkClass}>
               <span className="flex items-center gap-1.5">
                 <TrendingUp className="h-3.5 w-3.5" />
-                Estoque
+                Resultados
               </span>
             </NavLink>
           )}
