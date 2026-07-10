@@ -125,7 +125,11 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
       include: { itens: true },
     });
 
-    getIO().to(estabelecimento.id).emit('pedido:novo', pedidoConfirmado);
+    try {
+      getIO().to(estabelecimento.id).emit('pedido:novo', pedidoConfirmado);
+    } catch (err) {
+      fastify.log.error({ err }, 'Falha ao emitir pedido:novo via Socket.IO (webhook MP)');
+    }
 
     // Push notification pro DONO — fire-and-forget
     prisma.pushSubscription.findMany({
