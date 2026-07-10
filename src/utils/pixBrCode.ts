@@ -7,6 +7,9 @@ export interface DadosPixEstatico {
 }
 
 function tlv(id: string, valor: string): string {
+  if (valor.length > 99) {
+    throw new Error(`Campo Pix ${id} excede o tamanho máximo de 99 caracteres (chave Pix muito longa?)`);
+  }
   const tamanho = valor.length.toString().padStart(2, '0');
   return `${id}${tamanho}${valor}`;
 }

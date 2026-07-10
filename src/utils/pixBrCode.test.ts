@@ -97,4 +97,25 @@ describe('gerarPayloadPix', () => {
 
     expect(campos['54']).toBe('12.50');
   });
+
+  it('normaliza acentos no nome do beneficiário também, não só na cidade', () => {
+    const payload = gerarPayloadPix({ ...dadosBase, nomeBeneficiario: 'João da Silva Restaurante' });
+    const campos = parsearTlv(payload.slice(0, -4));
+
+    expect(campos['59']).toBe('JOAO DA SILVA RESTAURANTE');
+  });
+
+  it('usa "***" como txid quando o valor sanitizado fica vazio', () => {
+    const payload = gerarPayloadPix({ ...dadosBase, txid: '!!!---###' });
+    const campos = parsearTlv(payload.slice(0, -4));
+    const subcampos = parsearTlv(campos['62']);
+
+    expect(subcampos['05']).toBe('***');
+  });
+
+  it('lança erro quando a chave Pix é longa demais para o campo 26 (TLV > 99 caracteres)', () => {
+    const chavePixLonga = 'a'.repeat(82);
+
+    expect(() => gerarPayloadPix({ ...dadosBase, chavePix: chavePixLonga })).toThrow();
+  });
 });

@@ -314,7 +314,7 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     const { estabelecimentoId } = request.user;
 
     const valor = Number(valorStr);
-    if (!(valor > 0)) return reply.status(400).send({ erro: 'Valor inválido' });
+    if (!Number.isFinite(valor) || valor <= 0) return reply.status(400).send({ erro: 'Valor inválido' });
 
     const conta = await prisma.conta.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
     if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
@@ -327,13 +327,18 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ erro: 'Configure a cidade do estabelecimento em Configurações antes de gerar o QR code' });
     }
 
-    const payload = gerarPayloadPix({
-      chavePix: estabelecimento.chavePix,
-      nomeBeneficiario: estabelecimento.nome,
-      cidade: estabelecimento.cidade,
-      valor,
-      txid: id,
-    });
+    let payload: string;
+    try {
+      payload = gerarPayloadPix({
+        chavePix: estabelecimento.chavePix,
+        nomeBeneficiario: estabelecimento.nome,
+        cidade: estabelecimento.cidade,
+        valor,
+        txid: id,
+      });
+    } catch {
+      return reply.status(400).send({ erro: 'Não foi possível gerar o QR code Pix — verifique a chave Pix cadastrada' });
+    }
 
     const qrCodeBase64 = await QRCode.toDataURL(payload);
 
