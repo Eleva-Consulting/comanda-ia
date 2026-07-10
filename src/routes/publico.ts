@@ -7,6 +7,7 @@ import { enviarPush } from '../push.js';
 import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
 import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
+import { paraOpcoesAcompanhamento, resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
@@ -48,15 +49,7 @@ const AvaliarPedidoSchema = Type.Object({
 });
 
 type ItemPedidoInput  = { itemCardapioId: string; quantidade: number; acompanhamento?: string };
-type OpcaoAcompanhamento = { nome: string; precoAdicional: number };
 type CategoriaRow = { id: string; nome: string; ordem: number; opcoesAcompanhamento: unknown } | null;
-
-function paraOpcoesAcompanhamento(json: unknown): OpcaoAcompanhamento[] {
-  if (!Array.isArray(json)) return [];
-  return json.filter(
-    (o): o is OpcaoAcompanhamento => typeof o === 'object' && o !== null && typeof (o as OpcaoAcompanhamento).nome === 'string'
-  );
-}
 
 type ItemCardapioRow  = {
   id:         string;
@@ -193,25 +186,17 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ erro: `Estoque insuficiente para "${ic.nome}"` });
       }
 
-      const opcoes = paraOpcoesAcompanhamento(ic.categoria?.opcoesAcompanhamento);
-      if (opcoes.length > 0) {
-        if (!pedidoItem.acompanhamento) {
-          return reply.status(400).send({ erro: `Escolha o acompanhamento de "${ic.nome}"` });
-        }
-        if (!opcoes.some((o) => o.nome === pedidoItem.acompanhamento)) {
-          return reply.status(400).send({ erro: `Acompanhamento inválido para "${ic.nome}"` });
-        }
-      }
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
+      if (resultado.erro) return reply.status(400).send({ erro: resultado.erro });
     }
 
     const itensComSnapshot = itens.map((pedidoItem: ItemPedidoInput) => {
       const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
-      const opcoes = paraOpcoesAcompanhamento(ic.categoria?.opcoesAcompanhamento);
-      const opcaoEscolhida = opcoes.find((o) => o.nome === pedidoItem.acompanhamento);
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
       return {
         nomeItem:       ic.nome,
         quantidade:     pedidoItem.quantidade,
-        precoUnit:      Number(ic.preco) + (opcaoEscolhida?.precoAdicional ?? 0),
+        precoUnit:      Number(ic.preco) + (resultado.precoAdicional ?? 0),
         acompanhamento: pedidoItem.acompanhamento ?? null,
       };
     });
