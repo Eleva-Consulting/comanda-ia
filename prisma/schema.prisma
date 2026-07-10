@@ -102,6 +102,12 @@ model Estabelecimento {
   taxaEntrega      Decimal?              @db.Decimal(10, 2)
   evolutionUrl     String?
   evolutionToken   String?
+  mpAccessToken    String?
+  mpRefreshToken   String?
+  mpUserId         String?
+  mpTokenExpiraEm  DateTime?
+  mpConectado      Boolean               @default(false)
+  taxaPlataforma   Decimal?              @db.Decimal(5, 2)
   imprimirAutomaticoBalcao Boolean       @default(true)
   senhaReabrirPedido       String?
   modulosAtivos    String[]              @default([])
@@ -221,6 +227,11 @@ model Pedido {
   total               Decimal        @db.Decimal(10, 2)
   precisaTroco        Boolean        @default(false)
   trocoPara           Decimal?       @db.Decimal(10, 2)
+  mpPaymentId         String?
+  pixCopiaCola        String?        @db.Text
+  pixQrCodeBase64     String?        @db.Text
+  pagoEm              DateTime?
+  aguardandoPagamento Boolean        @default(false)
   status              StatusPedido   @default(recebido)
   formaPagamento      FormaPagamento @default(pix)
   tipoEntrega         TipoEntrega    @default(entrega)
