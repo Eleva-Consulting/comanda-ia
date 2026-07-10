@@ -6,6 +6,7 @@ import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
+import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { StatusConta, StatusProducao } from '../generated/prisma/enums.js';
 import { Prisma } from '../generated/prisma/client.js';
 
@@ -29,6 +30,7 @@ const AdicionarItemComandaSchema = Type.Object({
   itemCardapioId: Type.String({ minLength: 1 }),
   quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
   observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+  acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
 });
 
 const ItemComandaParamsSchema = Type.Object({ id: Type.String() });
@@ -241,8 +243,8 @@ export async function contasRoutes(fastify: FastifyInstance) {
     schema: { params: ComandaParamsSchema, body: AdicionarItemComandaSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { itemCardapioId, quantidade, observacao } = request.body as {
-      itemCardapioId: string; quantidade: number; observacao?: string;
+    const { itemCardapioId, quantidade, observacao, acompanhamento } = request.body as {
+      itemCardapioId: string; quantidade: number; observacao?: string; acompanhamento?: string;
     };
     const { estabelecimentoId, userId } = request.user;
 
@@ -252,9 +254,13 @@ export async function contasRoutes(fastify: FastifyInstance) {
     if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
 
     const itemCardapio = await prisma.itemCardapio.findFirst({
-      where: { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+      where:   { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+      include: { categoria: { select: { opcoesAcompanhamento: true } } },
     });
     if (!itemCardapio) return reply.status(400).send({ erro: 'Item não disponível ou não pertence a este estabelecimento' });
+
+    const resultadoAcompanhamento = resolverAcompanhamento(itemCardapio.categoria?.opcoesAcompanhamento, acompanhamento, itemCardapio.nome);
+    if (resultadoAcompanhamento.erro) return reply.status(400).send({ erro: resultadoAcompanhamento.erro });
 
     const itemComanda = await prisma.itemComanda.create({
       data: {
@@ -262,8 +268,9 @@ export async function contasRoutes(fastify: FastifyInstance) {
         itemCardapioId:     itemCardapio.id,
         nomeItem:           itemCardapio.nome,
         quantidade,
-        precoUnit:          itemCardapio.preco,
+        precoUnit:          Number(itemCardapio.preco) + (resultadoAcompanhamento.precoAdicional ?? 0),
         observacao:         observacao ?? null,
+        acompanhamento:     acompanhamento ?? null,
         setorId:            itemCardapio.setorId,
         criadoPorUsuarioId: userId,
       },
