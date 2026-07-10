@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Wallet, Users, CheckCircle2, Percent, Undo2, Lock } from 'lucide-react'
+import { Loader2, Wallet, Users, CheckCircle2, Percent, Undo2, Lock, QrCode } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
@@ -92,6 +92,12 @@ export default function Caixa() {
 
   const [fechandoConta, setFechandoConta] = useState(false)
   const [erroFechar, setErroFechar] = useState<string | null>(null)
+
+  const [valorQrCode, setValorQrCode] = useState('')
+  const [qrCodeGerado, setQrCodeGerado] = useState<{ payload: string; qrCodeBase64: string } | null>(null)
+  const [gerandoQrCode, setGerandoQrCode] = useState(false)
+  const [erroQrCode, setErroQrCode] = useState<string | null>(null)
+  const [copiadoQrCode, setCopiadoQrCode] = useState(false)
 
   async function carregarContas() {
     setCarregandoContas(true)
@@ -231,6 +237,35 @@ export default function Caixa() {
     }
   }
 
+  async function gerarQrCodePix() {
+    if (!contaSelecionada) return
+    const valor = Number(valorQrCode)
+    if (!(valor > 0)) return
+    setErroQrCode(null)
+    setGerandoQrCode(true)
+    setQrCodeGerado(null)
+    setCopiadoQrCode(false)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/pix-qrcode?valor=${valor}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroQrCode(data.erro ?? 'Não foi possível gerar o QR code'); return }
+      setQrCodeGerado(data)
+    } catch {
+      setErroQrCode('Falha de conexão')
+    } finally {
+      setGerandoQrCode(false)
+    }
+  }
+
+  function copiarPayloadPix() {
+    if (!qrCodeGerado) return
+    navigator.clipboard.writeText(qrCodeGerado.payload)
+    setCopiadoQrCode(true)
+    setTimeout(() => setCopiadoQrCode(false), 2000)
+  }
+
   async function fecharConta() {
     if (!contaSelecionada) return
     setErroFechar(null)
@@ -356,6 +391,46 @@ export default function Caixa() {
                   </div>
 
                   {erroPagamento && <p className="text-sm text-red-400">{erroPagamento}</p>}
+
+                  {/* QR code Pix — independente da forma de pagamento selecionada acima;
+                      só gera o código pra mostrar ao cliente, quem confirma o pagamento
+                      continua sendo o garçom/caixa manualmente, como sempre. */}
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-3">
+                    <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-zinc-400">
+                      <QrCode className="h-3.5 w-3.5" /> QR code Pix (sem maquininha)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0.01}
+                        step="0.01"
+                        value={valorQrCode}
+                        onChange={(e) => setValorQrCode(e.target.value)}
+                        placeholder={resumo.saldoDevedor.toFixed(2)}
+                        className="w-28 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                      />
+                      <button
+                        onClick={gerarQrCodePix}
+                        disabled={gerandoQrCode || !valorQrCode}
+                        className="rounded-lg bg-zinc-700 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-600 disabled:opacity-50"
+                      >
+                        Gerar QR code
+                      </button>
+                    </div>
+                    {erroQrCode && <p className="mt-2 text-sm text-red-400">{erroQrCode}</p>}
+                    {qrCodeGerado && (
+                      <div className="mt-3 flex flex-col items-center gap-2">
+                        <img src={qrCodeGerado.qrCodeBase64} alt="QR code Pix" className="h-48 w-48 rounded-lg bg-white p-2" />
+                        <button
+                          onClick={copiarPayloadPix}
+                          className="flex items-center gap-1.5 rounded-lg bg-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-600"
+                        >
+                          {copiadoQrCode ? <CheckCircle2 className="h-3.5 w-3.5" /> : <QrCode className="h-3.5 w-3.5" />}
+                          {copiadoQrCode ? 'Copiado!' : 'Copiar código Pix'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Dividir por comanda */}
                   <div>
