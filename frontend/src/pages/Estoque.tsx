@@ -259,7 +259,7 @@ export default function Estoque() {
                     <div>
                       <p className="text-zinc-200">{insumo.nome}</p>
                       <p className="text-xs text-zinc-500">
-                        {insumo.quantidade} {insumo.unidade} × R$ {insumo.custoUnitarioSnapshot.toFixed(4)}
+                        {insumo.quantidade} {insumo.unidade} × R$ {insumo.custoUnitarioSnapshot.toFixed(2)}
                       </p>
                     </div>
                     <span className="font-medium text-zinc-100">R$ {insumo.custoTotal.toFixed(2)}</span>

@@ -9,6 +9,10 @@ type TipoMovimento = 'entrada' | 'perda' | 'ajuste'
 
 const LABEL_UNIDADE: Record<Unidade, string> = { g: 'g', kg: 'kg', ml: 'ml', l: 'l', un: 'un' }
 
+function formatarBRL(valor: number): string {
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 interface Insumo {
   id: string
   nome: string
@@ -179,7 +183,7 @@ export default function Insumos() {
                 <tr key={insumo.id} className="hover:bg-zinc-900/50">
                   <td className="px-4 py-3 font-medium">{insumo.nome}</td>
                   <td className="px-4 py-3 text-zinc-400">{LABEL_UNIDADE[insumo.unidade]}</td>
-                  <td className="px-4 py-3 text-zinc-400">R$ {insumo.custoUnitario.toFixed(4)}</td>
+                  <td className="px-4 py-3 text-zinc-400">{formatarBRL(insumo.custoUnitario)}</td>
                   <td className="px-4 py-3 text-zinc-400">{insumo.estoqueAtual.toFixed(3)} {LABEL_UNIDADE[insumo.unidade]}</td>
                   <td className="px-4 py-3 text-right">
                     <button
