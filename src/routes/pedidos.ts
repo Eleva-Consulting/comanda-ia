@@ -146,6 +146,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
     const where = {
       estabelecimentoId: estabelecimentoId!,
+      aguardandoPagamento: false,
       ...(status    ? { status: { in: status } } : {}),
       ...(dataInicio || dataFim
         ? { criadoEm: { ...(dataInicio ? { gte: dataInicio } : {}), ...(dataFim ? { lte: dataFim } : {}) } }
