@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
-import { montarUrlAutorizacao, trocarCodePorToken, buscarPagamento } from '../mercadopago.js';
+import { montarUrlAutorizacao, trocarCodePorToken, buscarPagamento, obterAccessTokenValido } from '../mercadopago.js';
 import { getIO } from '../socket.js';
 import { enviarPush } from '../push.js';
 import { whatsApp } from '../whatsapp.js';
@@ -14,16 +14,26 @@ const CallbackQuerySchema = Type.Object({
   error: Type.Optional(Type.String()),
 });
 
+// Chave separada da sessão normal do app — usada só pra assinar/verificar o `state` do OAuth do MP.
+// Assim, mesmo que o `state` vaze (URL, Referer, logs do MP), ele nunca é aceito por `autenticar()`,
+// que sempre verifica com o segredo padrão configurado no plugin @fastify/jwt.
+const MP_OAUTH_STATE_KEY = `${process.env.JWT_SECRET}:mp-oauth-state`;
+
 export async function mercadoPagoRoutes(fastify: FastifyInstance) {
   // GET /meu-estabelecimento/mercadopago/conectar — gera a URL de autorização OAuth
   fastify.get('/meu-estabelecimento/mercadopago/conectar', {
     onRequest: [autenticar, temPermissao('configuracoes')],
   }, async (request) => {
     const { estabelecimentoId } = request.user;
-    // O payload do JWT global exige o shape completo de sessão (ver plugins/auth.ts);
-    // reaproveitamos request.user (já validado por `autenticar`) para o token de state,
-    // mas o callback só confia no campo `estabelecimentoId` ao verificar.
-    const state = fastify.jwt.sign(request.user, { expiresIn: '10m' });
+    // O payload do JWT global exige o shape completo de sessão (ver plugins/auth.ts), mas não
+    // reaproveitamos request.user de verdade nem o segredo padrão: isso assinaria a sessão real
+    // do usuário (role/permissoes reais) com a mesma chave usada por `autenticar()`, e o `state`
+    // passa por URL/Referer/logs do MP — um vazamento viraria replay de sessão válida. Assinamos
+    // um payload sem privilégio real (role não-DONO, sem permissões) com uma chave separada.
+    const state = fastify.jwt.sign(
+      { userId: 'mp-oauth-state', estabelecimentoId, role: 'OPERADOR', permissoes: [], setorId: null },
+      { expiresIn: '10m', key: MP_OAUTH_STATE_KEY },
+    );
     return { url: montarUrlAutorizacao(state) };
   });
 
@@ -64,7 +74,7 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
 
     let estabelecimentoId: string;
     try {
-      const payload = fastify.jwt.verify<{ estabelecimentoId: string }>(state);
+      const payload = fastify.jwt.verify<{ estabelecimentoId: string }>(state, { key: MP_OAUTH_STATE_KEY });
       estabelecimentoId = payload.estabelecimentoId;
     } catch {
       return reply.redirect(`${frontendUrl}/configuracoes?mercadopago=erro`);
@@ -114,16 +124,33 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ recebido: true });
     }
 
-    const pagamento = await buscarPagamento(estabelecimento.mpAccessToken, String(paymentId));
-    if (pagamento.status !== 'approved' || pagamento.externalReference !== pedidoPendente.id) {
+    let pedidoConfirmado;
+    try {
+      const accessToken = await obterAccessTokenValido(estabelecimento);
+      const pagamento = await buscarPagamento(accessToken, String(paymentId));
+      if (pagamento.status !== 'approved') {
+        return reply.status(200).send({ recebido: true });
+      }
+
+      // Update condicional e atômico: só confirma (e só dispara as notificações abaixo) se
+      // `aguardandoPagamento` ainda estava true no momento do write. Evita duplicar notificações
+      // quando o Mercado Pago reenvia o mesmo webhook concorrentemente (retry).
+      const { count } = await prisma.pedido.updateMany({
+        where: { id: pedidoPendente.id, aguardandoPagamento: true },
+        data:  { status: 'pagamento_confirmado', aguardandoPagamento: false, pagoEm: new Date() },
+      });
+      if (count === 0) {
+        return reply.status(200).send({ recebido: true });
+      }
+
+      pedidoConfirmado = await prisma.pedido.findUniqueOrThrow({
+        where:   { id: pedidoPendente.id },
+        include: { itens: true },
+      });
+    } catch (err) {
+      fastify.log.error({ err }, 'Falha ao consultar/confirmar pagamento (webhook MP)');
       return reply.status(200).send({ recebido: true });
     }
-
-    const pedidoConfirmado = await prisma.pedido.update({
-      where:   { id: pedidoPendente.id },
-      data:    { status: 'pagamento_confirmado', aguardandoPagamento: false, pagoEm: new Date() },
-      include: { itens: true },
-    });
 
     try {
       getIO().to(estabelecimento.id).emit('pedido:novo', pedidoConfirmado);
