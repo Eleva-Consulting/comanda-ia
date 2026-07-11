@@ -8,6 +8,7 @@ import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
 import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
 import { criarPagamentoPix, obterAccessTokenValido } from '../mercadopago.js';
+import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -20,6 +21,7 @@ const CriarPedidoSchema = Type.Object({
     Type.Object({
       itemCardapioId: Type.String({ minLength: 1 }),
       quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+      acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
     }),
     { minItems: 1 }
   ),
@@ -67,6 +69,7 @@ const ManualPedidoSchema = Type.Object({
       itemCardapioId: Type.String({ minLength: 1 }),
       quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
       observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+      acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
     }),
     { minItems: 1 }
   ),
@@ -85,6 +88,7 @@ const AdicionarItemSchema = Type.Object({
   itemCardapioId: Type.String({ minLength: 1 }),
   quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
   observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+  acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
 });
 
 const AtualizarQuantidadeItemSchema = Type.Object({
@@ -198,7 +202,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       clienteNome: string;
       clienteFone?: string;
       enderecoEntrega?: string;
-      itens: { itemCardapioId: string; quantidade: number }[];
+      itens: { itemCardapioId: string; quantidade: number; acompanhamento?: string }[];
     };
     const { estabelecimentoId } = request.user;
 
@@ -210,6 +214,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
         estabelecimentoId: estabelecimentoId!,
         disponivel:        true,
       },
+      include: { categoria: { select: { opcoesAcompanhamento: true } } },
     });
 
     if (itensCardapio.length !== itemIds.length) {
@@ -218,12 +223,20 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       });
     }
 
+    for (const pedidoItem of itens) {
+      const ic = itensCardapio.find((ic) => ic.id === pedidoItem.itemCardapioId)!;
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
+      if (resultado.erro) return reply.status(400).send({ erro: resultado.erro });
+    }
+
     const itensComSnapshot = itens.map((pedidoItem) => {
       const ic = itensCardapio.find((ic) => ic.id === pedidoItem.itemCardapioId)!;
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
       return {
-        nomeItem:  ic.nome,
-        quantidade: pedidoItem.quantidade,
-        precoUnit:  Number(ic.preco),
+        nomeItem:       ic.nome,
+        quantidade:     pedidoItem.quantidade,
+        precoUnit:      Number(ic.preco) + (resultado.precoAdicional ?? 0),
+        acompanhamento: pedidoItem.acompanhamento ?? null,
       };
     });
 
@@ -357,7 +370,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       formaPagamento?:  FormaPagamento;
       precisaTroco?:    boolean;
       trocoPara?:       number;
-      itens: { itemCardapioId: string; quantidade: number; observacao?: string }[];
+      itens: { itemCardapioId: string; quantidade: number; observacao?: string; acompanhamento?: string }[];
     };
     const { estabelecimentoId } = request.user;
     const tipoEntregaFinal = tipoEntrega ?? 'retirada';
@@ -381,6 +394,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
         estabelecimentoId: estabelecimentoId!,
         disponivel:        true,
       },
+      include: { categoria: { select: { opcoesAcompanhamento: true } } },
     });
 
     if (itensCardapio.length !== itemIds.length) {
@@ -389,13 +403,21 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
       });
     }
 
+    for (const pedidoItem of itens) {
+      const ic = itensCardapio.find((ic) => ic.id === pedidoItem.itemCardapioId)!;
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
+      if (resultado.erro) return reply.status(400).send({ erro: resultado.erro });
+    }
+
     const itensComSnapshot = itens.map((pedidoItem) => {
       const ic = itensCardapio.find((ic) => ic.id === pedidoItem.itemCardapioId)!;
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
       return {
-        nomeItem:   ic.nome,
-        quantidade: pedidoItem.quantidade,
-        precoUnit:  Number(ic.preco),
-        observacao: pedidoItem.observacao,
+        nomeItem:       ic.nome,
+        quantidade:     pedidoItem.quantidade,
+        precoUnit:      Number(ic.preco) + (resultado.precoAdicional ?? 0),
+        observacao:     pedidoItem.observacao,
+        acompanhamento: pedidoItem.acompanhamento ?? null,
       };
     });
 
@@ -522,8 +544,8 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     schema: { params: PedidoParamsSchema, body: AdicionarItemSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { itemCardapioId, quantidade, observacao } = request.body as {
-      itemCardapioId: string; quantidade: number; observacao?: string;
+    const { itemCardapioId, quantidade, observacao, acompanhamento } = request.body as {
+      itemCardapioId: string; quantidade: number; observacao?: string; acompanhamento?: string;
     };
     const { estabelecimentoId } = request.user;
 
@@ -534,17 +556,22 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     }
 
     const itemCardapio = await prisma.itemCardapio.findFirst({
-      where: { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+      where:   { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+      include: { categoria: { select: { opcoesAcompanhamento: true } } },
     });
     if (!itemCardapio) return reply.status(400).send({ erro: 'Item não disponível ou não pertence a este estabelecimento' });
 
+    const resultadoAcompanhamento = resolverAcompanhamento(itemCardapio.categoria?.opcoesAcompanhamento, acompanhamento, itemCardapio.nome);
+    if (resultadoAcompanhamento.erro) return reply.status(400).send({ erro: resultadoAcompanhamento.erro });
+
     await prisma.itemPedido.create({
       data: {
-        pedidoId:   id,
-        nomeItem:   itemCardapio.nome,
+        pedidoId:       id,
+        nomeItem:       itemCardapio.nome,
         quantidade,
-        precoUnit:  itemCardapio.preco,
-        observacao: observacao ?? null,
+        precoUnit:      Number(itemCardapio.preco) + (resultadoAcompanhamento.precoAdicional ?? 0),
+        observacao:     observacao ?? null,
+        acompanhamento: acompanhamento ?? null,
       },
     });
 

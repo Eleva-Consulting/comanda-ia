@@ -23,6 +23,7 @@ interface ItemComanda {
   quantidade: number
   precoUnit: number
   observacao: string | null
+  acompanhamento: string | null
   status: StatusProducao
   comandaId: string
 }
@@ -41,11 +42,17 @@ interface Conta {
   comandas: Comanda[]
 }
 
+interface OpcaoAcompanhamento {
+  nome: string
+  precoAdicional: number
+}
+
 interface ItemCardapio {
   id: string
   nome: string
   preco: number
   disponivel: boolean
+  categoria: { id: string; nome: string; opcoesAcompanhamento: OpcaoAcompanhamento[] } | null
 }
 
 // ── Helpers visuais ────────────────────────────────────────────────────────
@@ -95,6 +102,7 @@ export default function Mesas() {
   const [carregandoCardapio, setCarregandoCardapio] = useState(false)
   const [buscaItem, setBuscaItem] = useState('')
   const [adicionandoItemId, setAdicionandoItemId] = useState<string | null>(null)
+  const [escolhendoAcompanhamentoId, setEscolhendoAcompanhamentoId] = useState<string | null>(null)
 
   const [novaComandaAberta, setNovaComandaAberta] = useState(false)
   const [nomeNovaComanda, setNomeNovaComanda] = useState('')
@@ -188,14 +196,15 @@ export default function Mesas() {
     if (resp.ok) setContaSelecionada(await resp.json())
   }
 
-  async function adicionarItem(itemCardapioId: string) {
+  async function adicionarItem(itemCardapioId: string, acompanhamento?: string) {
     if (!modalItemAberto) return
     setAdicionandoItemId(itemCardapioId)
+    setEscolhendoAcompanhamentoId(null)
     try {
       const resp = await fetch(`${API_URL}/comandas/${modalItemAberto}/itens`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemCardapioId, quantidade: 1 }),
+        body: JSON.stringify({ itemCardapioId, quantidade: 1, ...(acompanhamento ? { acompanhamento } : {}) }),
       })
       if (resp.ok) await recarregarContaAtual()
     } catch (err) {
@@ -469,6 +478,7 @@ export default function Mesas() {
                       <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
                         <div>
                           <span className="font-medium">{item.quantidade}x {item.nomeItem}</span>
+                          {item.acompanhamento && <p className="text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>}
                           {item.observacao && <p className="text-xs text-zinc-500">{item.observacao}</p>}
                         </div>
                         <div className="flex items-center gap-2">
@@ -526,18 +536,42 @@ export default function Mesas() {
               <p className="text-sm text-zinc-500">Nenhum item encontrado.</p>
             ) : (
               <ul className="space-y-1">
-                {itensFiltrados.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      onClick={() => adicionarItem(item.id)}
-                      disabled={adicionandoItemId === item.id}
-                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
-                    >
-                      <span>{item.nome}</span>
-                      <span className="text-zinc-400">R$ {Number(item.preco).toFixed(2)}</span>
-                    </button>
-                  </li>
-                ))}
+                {itensFiltrados.map((item) => {
+                  const pedeAcompanhamento = (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0
+                  return (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => pedeAcompanhamento ? setEscolhendoAcompanhamentoId(item.id) : adicionarItem(item.id)}
+                        disabled={adicionandoItemId === item.id}
+                        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
+                      >
+                        <span>{item.nome}</span>
+                        <span className="text-zinc-400">R$ {Number(item.preco).toFixed(2)}</span>
+                      </button>
+                      {escolhendoAcompanhamentoId === item.id && (
+                        <div className="mb-1 space-y-1 rounded-lg border border-zinc-700 bg-zinc-800 p-2">
+                          <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
+                          {item.categoria!.opcoesAcompanhamento.map((op) => (
+                            <button
+                              key={op.nome}
+                              onClick={() => adicionarItem(item.id, op.nome)}
+                              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-700"
+                            >
+                              <span>{op.nome}</span>
+                              {op.precoAdicional > 0 && <span className="text-orange-400">+R$ {op.precoAdicional.toFixed(2)}</span>}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setEscolhendoAcompanhamentoId(null)}
+                            className="mt-1 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

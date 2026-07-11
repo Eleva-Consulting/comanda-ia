@@ -8,6 +8,7 @@ import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
 import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
 import { criarPagamentoPix, obterAccessTokenValido } from '../mercadopago.js';
+import { paraOpcoesAcompanhamento, resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
 const SlugParamsSchema = Type.Object({
@@ -37,6 +38,7 @@ const FazerPedidoSchema = Type.Object({
     Type.Object({
       itemCardapioId: Type.String(),
       quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+      acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
     }),
     { minItems: 1 }
   ),
@@ -47,8 +49,8 @@ const AvaliarPedidoSchema = Type.Object({
   comentarioAvaliacao: Type.Optional(Type.String({ maxLength: 500 })),
 });
 
-type ItemPedidoInput  = { itemCardapioId: string; quantidade: number };
-type CategoriaRow = { id: string; nome: string; ordem: number } | null;
+type ItemPedidoInput  = { itemCardapioId: string; quantidade: number; acompanhamento?: string };
+type CategoriaRow = { id: string; nome: string; ordem: number; opcoesAcompanhamento: unknown } | null;
 
 type ItemCardapioRow  = {
   id:         string;
@@ -73,7 +75,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         itens: {
           where:   { disponivel: true },
           orderBy: { nome: 'asc' },
-          include: { categoria: { select: { id: true, nome: true, ordem: true } } },
+          include: { categoria: { select: { id: true, nome: true, ordem: true, opcoesAcompanhamento: true } } },
         },
       },
     });
@@ -101,7 +103,10 @@ export async function publicoRoutes(fastify: FastifyInstance) {
           descricao: item.descricao ?? null,
           preco:     Number(item.preco),
           foto:      item.foto ?? null,
-          categoria: item.categoria ?? null,
+          categoria: item.categoria
+            ? { id: item.categoria.id, nome: item.categoria.nome, ordem: item.categoria.ordem }
+            : null,
+          opcoesAcompanhamento: paraOpcoesAcompanhamento(item.categoria?.opcoesAcompanhamento),
         })),
     };
   });
@@ -172,27 +177,33 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
     const itemIds = itens.map((i: ItemPedidoInput) => i.itemCardapioId);
     const itensCardapio: ItemCardapioRow[] = await prisma.itemCardapio.findMany({
-      where: { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
+      where:   { id: { in: itemIds }, estabelecimentoId: estabelecimento.id, disponivel: true },
+      include: { categoria: { select: { id: true, nome: true, ordem: true, opcoesAcompanhamento: true } } },
     });
 
     if (itensCardapio.length !== itens.length) {
       return reply.status(400).send({ erro: 'Algum item do pedido não está mais disponível' });
     }
 
-    // Verificar estoque suficiente
+    // Verificar estoque suficiente e resolver acompanhamento (quando a categoria exige)
     for (const pedidoItem of itens) {
       const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
       if (ic.estoque !== null && ic.estoque !== undefined && ic.estoque < pedidoItem.quantidade) {
         return reply.status(400).send({ erro: `Estoque insuficiente para "${ic.nome}"` });
       }
+
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
+      if (resultado.erro) return reply.status(400).send({ erro: resultado.erro });
     }
 
     const itensComSnapshot = itens.map((pedidoItem: ItemPedidoInput) => {
       const ic = itensCardapio.find((i: ItemCardapioRow) => i.id === pedidoItem.itemCardapioId)!;
+      const resultado = resolverAcompanhamento(ic.categoria?.opcoesAcompanhamento, pedidoItem.acompanhamento, ic.nome);
       return {
-        nomeItem:   ic.nome,
-        quantidade: pedidoItem.quantidade,
-        precoUnit:  Number(ic.preco),
+        nomeItem:       ic.nome,
+        quantidade:     pedidoItem.quantidade,
+        precoUnit:      Number(ic.preco) + (resultado.precoAdicional ?? 0),
+        acompanhamento: pedidoItem.acompanhamento ?? null,
       };
     });
 

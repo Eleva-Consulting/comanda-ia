@@ -3,10 +3,16 @@ import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed, Camera, ImageOff, Ta
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
+interface OpcaoAcompanhamento {
+  nome: string
+  precoAdicional: number
+}
+
 interface Categoria {
   id: string
   nome: string
   ordem: number
+  opcoesAcompanhamento: OpcaoAcompanhamento[]
 }
 
 interface ItemCardapio {
@@ -45,6 +51,7 @@ export default function Cardapio() {
   const [modalCategoriaAberto, setModalCategoriaAberto] = useState(false)
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null)
   const [nomeCategoria, setNomeCategoria] = useState('')
+  const [opcoesAcompanhamento, setOpcoesAcompanhamento] = useState<OpcaoAcompanhamento[]>([])
   const [salvandoCategoria, setSalvandoCategoria] = useState(false)
 
   const fotoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -230,12 +237,14 @@ export default function Cardapio() {
   function abrirModalNovaCategoria() {
     setEditandoCategoria(null)
     setNomeCategoria('')
+    setOpcoesAcompanhamento([])
     setModalCategoriaAberto(true)
   }
 
   function abrirModalEditarCategoria(cat: Categoria) {
     setEditandoCategoria(cat)
     setNomeCategoria(cat.nome)
+    setOpcoesAcompanhamento(cat.opcoesAcompanhamento ?? [])
     setModalCategoriaAberto(true)
   }
 
@@ -248,11 +257,16 @@ export default function Cardapio() {
         : `${API_URL}/cardapio/categorias`
       const method = editandoCategoria ? 'PATCH' : 'POST'
       const ordem  = editandoCategoria ? undefined : categorias.length
+      const opcoesValidas = opcoesAcompanhamento.filter((o) => o.nome.trim())
 
       const r = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ nome: nomeCategoria.trim(), ...(ordem !== undefined && { ordem }) }),
+        body: JSON.stringify({
+          nome: nomeCategoria.trim(),
+          opcoesAcompanhamento: opcoesValidas,
+          ...(ordem !== undefined && { ordem }),
+        }),
       })
       if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.erro ?? 'Erro') }
       const salva: Categoria = await r.json()
@@ -503,8 +517,10 @@ export default function Cardapio() {
         <ModalCategoria
           editando={editandoCategoria}
           nome={nomeCategoria}
+          opcoesAcompanhamento={opcoesAcompanhamento}
           salvando={salvandoCategoria}
           onChangeNome={setNomeCategoria}
+          onChangeOpcoesAcompanhamento={setOpcoesAcompanhamento}
           onFechar={() => { if (!salvandoCategoria) setModalCategoriaAberto(false) }}
           onSalvar={handleSalvarCategoria}
         />
@@ -620,7 +636,7 @@ function ModalForm({
 
           <label className="mb-6 flex items-center gap-3">
             <Toggle ativo={disponivel} carregando={false} onChange={() => onChangeDisponivel(!disponivel)} />
-            <span className="text-sm font-medium text-zinc-300">Disponível para o cliente</span>
+            <span className="text-sm font-medium text-zinc-300">Disponível</span>
           </label>
 
           <div className="flex gap-2">
@@ -644,20 +660,38 @@ function ModalForm({
 }
 
 function ModalCategoria({
-  editando, nome, salvando, onChangeNome, onFechar, onSalvar,
+  editando, nome, opcoesAcompanhamento, salvando, onChangeNome, onChangeOpcoesAcompanhamento, onFechar, onSalvar,
 }: {
   editando: Categoria | null
   nome: string
+  opcoesAcompanhamento: OpcaoAcompanhamento[]
   salvando: boolean
   onChangeNome: (v: string) => void
+  onChangeOpcoesAcompanhamento: (v: OpcaoAcompanhamento[]) => void
   onFechar: () => void
   onSalvar: (e: FormEvent) => void
 }) {
+  function adicionarOpcao() {
+    onChangeOpcoesAcompanhamento([...opcoesAcompanhamento, { nome: '', precoAdicional: 0 }])
+  }
+
+  function removerOpcao(index: number) {
+    onChangeOpcoesAcompanhamento(opcoesAcompanhamento.filter((_, i) => i !== index))
+  }
+
+  function atualizarOpcao(index: number, campo: keyof OpcaoAcompanhamento, valor: string) {
+    onChangeOpcoesAcompanhamento(
+      opcoesAcompanhamento.map((o, i) =>
+        i === index ? { ...o, [campo]: campo === 'precoAdicional' ? Number(valor) || 0 : valor } : o
+      )
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onFechar}>
       <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-lg font-bold">{editando ? 'Renomear categoria' : 'Nova categoria'}</h3>
+          <h3 className="text-lg font-bold">{editando ? 'Editar categoria' : 'Nova categoria'}</h3>
           <button onClick={onFechar} disabled={salvando} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 disabled:opacity-50">
             <X className="h-4 w-4" />
           </button>
@@ -672,6 +706,40 @@ function ModalCategoria({
               className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
             />
           </label>
+
+          <div className="mb-5">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">
+              Opções de acompanhamento <span className="font-normal text-zinc-500">(opcional)</span>
+            </span>
+            <p className="mb-2 text-xs text-zinc-500">
+              Se preenchido, todo item desta categoria vai pedir a escolha de um acompanhamento antes de ser adicionado ao pedido.
+            </p>
+            <div className="space-y-2">
+              {opcoesAcompanhamento.map((opcao, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text" value={opcao.nome} placeholder="ex: Baião Cremoso"
+                    onChange={(e) => atualizarOpcao(index, 'nome', e.target.value)}
+                    className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                  />
+                  <input
+                    type="number" step="0.01" min="0" value={opcao.precoAdicional} placeholder="+R$"
+                    onChange={(e) => atualizarOpcao(index, 'precoAdicional', e.target.value)}
+                    className="w-24 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+                  />
+                  <button type="button" onClick={() => removerOpcao(index)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-400">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button" onClick={adicionarOpcao}
+              className="mt-2 flex items-center gap-1.5 text-sm font-medium text-orange-400 hover:text-orange-300"
+            >
+              <Plus className="h-4 w-4" /> Adicionar opção
+            </button>
+          </div>
 
           <div className="flex gap-2">
             <button type="button" onClick={onFechar} disabled={salvando}

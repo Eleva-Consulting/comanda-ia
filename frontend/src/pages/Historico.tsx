@@ -31,11 +31,12 @@ const statusColor: Record<string, string> = {
 }
 
 interface ItemPedido {
-  id:         string
-  nomeItem:   string
-  quantidade: number
-  precoUnit:  number | string
-  observacao: string | null
+  id:             string
+  nomeItem:       string
+  quantidade:     number
+  precoUnit:      number | string
+  observacao:     string | null
+  acompanhamento: string | null
 }
 
 interface Pedido {
@@ -243,6 +244,9 @@ export default function Historico() {
                           <span>{item.quantidade}x {item.nomeItem}</span>
                           <span className="text-zinc-400">{fmt(Number(item.precoUnit) * item.quantidade)}</span>
                         </div>
+                        {item.acompanhamento && (
+                          <p className="ml-4 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
+                        )}
                         {item.observacao && (
                           <p className="ml-4 text-xs italic text-zinc-500">{item.observacao}</p>
                         )}

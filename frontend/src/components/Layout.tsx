@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet, ShieldCheck } from 'lucide-react'
+import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet, ShieldCheck, Package, TrendingUp } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
@@ -98,6 +98,8 @@ export default function Layout({ children, headerExtra }: Props) {
   const mostrarMesas = podeMesas && modulosAtivos.includes('mesas')
   const podeCaixa = isDono || temPermissao('caixa')
   const mostrarCaixa = podeCaixa && modulosAtivos.includes('mesas')
+  const podeEstoque = isDono || temPermissao('estoque')
+  const mostrarEstoque = podeEstoque && modulosAtivos.includes('estoque_avancado')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
 
   return (
@@ -137,6 +139,22 @@ export default function Layout({ children, headerExtra }: Props) {
                 <span className="flex items-center gap-1.5">
                   <Wallet className="h-3.5 w-3.5" />
                   Caixa
+                </span>
+              </NavLink>
+            )}
+            {mostrarEstoque && (
+              <NavLink to="/insumos" className={linkClass}>
+                <span className="flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5" />
+                  Estoque
+                </span>
+              </NavLink>
+            )}
+            {mostrarEstoque && (
+              <NavLink to="/estoque" className={linkClass}>
+                <span className="flex items-center gap-1.5">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Resultados
                 </span>
               </NavLink>
             )}
@@ -207,6 +225,22 @@ export default function Layout({ children, headerExtra }: Props) {
               <span className="flex items-center gap-1.5">
                 <Wallet className="h-3.5 w-3.5" />
                 Caixa
+              </span>
+            </NavLink>
+          )}
+          {mostrarEstoque && (
+            <NavLink to="/insumos" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5" />
+                Estoque
+              </span>
+            </NavLink>
+          )}
+          {mostrarEstoque && (
+            <NavLink to="/estoque" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5" />
+                Resultados
               </span>
             </NavLink>
           )}

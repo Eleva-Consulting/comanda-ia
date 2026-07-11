@@ -3,11 +3,12 @@ import { useParams }           from 'react-router'
 import { API_URL }             from '../lib/api'
 
 interface ItemPedido {
-  id:         string
-  nomeItem:   string
-  quantidade: number
-  precoUnit:  number
-  observacao: string | null
+  id:             string
+  nomeItem:       string
+  quantidade:     number
+  precoUnit:      number
+  observacao:     string | null
+  acompanhamento: string | null
 }
 
 interface Pedido {
@@ -123,6 +124,7 @@ export default function ImprimirComanda() {
             <span>{item.quantidade}x {item.nomeItem}</span>
             <span>R${(Number(item.precoUnit) * item.quantidade).toFixed(2)}</span>
           </div>
+          {item.acompanhamento && <p className="obs"><strong>Acompanhamento: {item.acompanhamento}</strong></p>}
           {item.observacao && <p className="obs">obs: {item.observacao}</p>}
         </div>
       ))}

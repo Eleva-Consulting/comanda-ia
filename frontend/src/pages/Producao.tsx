@@ -13,6 +13,7 @@ interface ItemProducao {
   nomeItem: string
   quantidade: number
   observacao: string | null
+  acompanhamento: string | null
   status: StatusProducao
   recebidoEm: string
   setorId: string | null
@@ -229,6 +230,9 @@ export default function Producao() {
                           <p className="text-xs text-zinc-500">
                             Mesa {item.mesaNumero} · {item.comandaNome}
                           </p>
+                          {item.acompanhamento && (
+                            <p className="mt-1 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
+                          )}
                           {item.observacao && (
                             <p className="mt-1 text-xs italic text-zinc-500">{item.observacao}</p>
                           )}

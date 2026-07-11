@@ -12,11 +12,12 @@ interface PedidosResponse {
 }
 
 interface ItemPedido {
-  id:         string
-  nomeItem:   string
-  quantidade: number
-  precoUnit:  number | string
-  observacao: string | null
+  id:             string
+  nomeItem:       string
+  quantidade:     number
+  precoUnit:      number | string
+  observacao:     string | null
+  acompanhamento: string | null
 }
 
 interface Pedido {
@@ -55,12 +56,17 @@ const tipoEntregaLabel: Record<string, string> = {
   retirada: '🏪 Retirada',
 }
 
+interface OpcaoAcompanhamento {
+  nome: string
+  precoAdicional: number
+}
+
 interface ItemCardapio {
   id:         string
   nome:       string
   preco:      number
   disponivel: boolean
-  categoria:  { id: string; nome: string; ordem: number } | null
+  categoria:  { id: string; nome: string; ordem: number; opcoesAcompanhamento: OpcaoAcompanhamento[] } | null
 }
 
 const statusConfig: Record<Status, { label: string; badge: string }> = {
@@ -143,7 +149,7 @@ export default function Cozinha() {
   const [carregandoMenu, setCarregandoMenu]     = useState(false)
   const [clienteNomeModal, setClienteNomeModal] = useState('')
   const [clienteFoneModal, setClienteFoneModal] = useState('')
-  const [selecionados, setSelecionados]         = useState<Record<string, { quantidade: number; observacao: string }>>({})
+  const [selecionados, setSelecionados]         = useState<Record<string, { quantidade: number; observacao: string; acompanhamento?: string }>>({})
   const [enviandoManual, setEnviandoManual]     = useState(false)
   const [erroModal, setErroModal]               = useState<string | null>(null)
   const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
@@ -159,6 +165,7 @@ export default function Cozinha() {
   const [edicaoItensPedido, setEdicaoItensPedido] = useState<Pedido | null>(null)
   const [salvandoItemId, setSalvandoItemId]       = useState<string | null>(null)
   const [erroEdicaoItens, setErroEdicaoItens]     = useState<string | null>(null)
+  const [escolhendoAcompanhamentoId, setEscolhendoAcompanhamentoId] = useState<string | null>(null)
   const [buscaItemEdicao, setBuscaItemEdicao]     = useState('')
 
   useEffect(() => {
@@ -338,15 +345,16 @@ export default function Cozinha() {
     await carregarCardapioSeNecessario()
   }
 
-  async function adicionarItemAoPedido(itemCardapioId: string) {
+  async function adicionarItemAoPedido(itemCardapioId: string, acompanhamento?: string) {
     if (!edicaoItensPedido) return
     setErroEdicaoItens(null)
     setSalvandoItemId(itemCardapioId)
+    setEscolhendoAcompanhamentoId(null)
     try {
       const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ itemCardapioId, quantidade: 1 }),
+        body:    JSON.stringify({ itemCardapioId, quantidade: 1, ...(acompanhamento ? { acompanhamento } : {}) }),
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroEdicaoItens(dados.erro ?? 'Erro ao adicionar item'); return }
@@ -412,8 +420,18 @@ export default function Cozinha() {
         const { [itemId]: _, ...resto } = prev
         return resto
       }
-      return { ...prev, [itemId]: { quantidade: nova, observacao: prev[itemId]?.observacao ?? '' } }
+      return {
+        ...prev,
+        [itemId]: { quantidade: nova, observacao: prev[itemId]?.observacao ?? '', acompanhamento: prev[itemId]?.acompanhamento },
+      }
     })
+  }
+
+  function alterarAcompanhamento(itemId: string, acompanhamento: string) {
+    setSelecionados((prev) => ({
+      ...prev,
+      [itemId]: { quantidade: prev[itemId]?.quantidade ?? 1, observacao: prev[itemId]?.observacao ?? '', acompanhamento },
+    }))
   }
 
   function alterarObs(itemId: string, observacao: string) {
@@ -427,7 +445,9 @@ export default function Cozinha() {
   const taxaModal = tipoEntregaModal === 'entrega' ? (bairroSelecionadoModal?.taxaEntrega ?? 0) : 0
   const subtotalManual = cardapio.reduce((soma, item) => {
     const sel = selecionados[item.id]
-    return soma + (sel ? item.preco * sel.quantidade : 0)
+    if (!sel) return soma
+    const opcao = item.categoria?.opcoesAcompanhamento?.find((o) => o.nome === sel.acompanhamento)
+    return soma + (Number(item.preco) + Number(opcao?.precoAdicional ?? 0)) * sel.quantidade
   }, 0)
   const totalManual = subtotalManual + taxaModal
   const itensFiltradosModal = cardapio.filter((item) =>
@@ -440,10 +460,22 @@ export default function Cozinha() {
   async function criarPedidoManual(e: FormEvent) {
     e.preventDefault()
     setErroModal(null)
-    const itens = Object.entries(selecionados).map(([itemCardapioId, { quantidade, observacao }]) => ({
+
+    const itemFaltandoAcompanhamento = Object.entries(selecionados).find(([itemCardapioId, sel]) => {
+      const item = cardapio.find((i) => i.id === itemCardapioId)
+      return (item?.categoria?.opcoesAcompanhamento?.length ?? 0) > 0 && !sel.acompanhamento
+    })
+    if (itemFaltandoAcompanhamento) {
+      const item = cardapio.find((i) => i.id === itemFaltandoAcompanhamento[0])
+      setErroModal(`Escolha o acompanhamento de "${item?.nome}"`)
+      return
+    }
+
+    const itens = Object.entries(selecionados).map(([itemCardapioId, { quantidade, observacao, acompanhamento }]) => ({
       itemCardapioId,
       quantidade,
       observacao: observacao || undefined,
+      acompanhamento: acompanhamento || undefined,
     }))
     if (itens.length === 0) {
       setErroModal('Selecione pelo menos um item')
@@ -609,6 +641,9 @@ export default function Cozinha() {
                         </span>
                         <span className="text-sm text-zinc-200">{item.nomeItem}</span>
                       </div>
+                      {item.acompanhamento && (
+                        <p className="ml-10 mt-0.5 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
+                      )}
                       {item.observacao && (
                         <p className="ml-10 mt-0.5 text-xs text-zinc-500 italic">{item.observacao}</p>
                       )}
@@ -837,6 +872,20 @@ export default function Cozinha() {
                                 </button>
                               )}
                             </div>
+                            {sel && (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0 && (
+                              <select
+                                value={sel.acompanhamento ?? ''}
+                                onChange={(e) => alterarAcompanhamento(item.id, e.target.value)}
+                                className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-orange-500"
+                              >
+                                <option value="">Escolha o acompanhamento...</option>
+                                {item.categoria!.opcoesAcompanhamento.map((op) => (
+                                  <option key={op.nome} value={op.nome}>
+                                    {op.nome}{op.precoAdicional > 0 ? ` (+R$ ${op.precoAdicional.toFixed(2)})` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                             {sel && (
                               <input
                                 value={sel.observacao}
@@ -932,6 +981,9 @@ export default function Cozinha() {
                           </button>
                         </div>
                       </div>
+                      {item.acompanhamento && (
+                        <p className="mt-1.5 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
+                      )}
                       {item.observacao && (
                         <p className="mt-1.5 text-xs italic text-zinc-500">obs: {item.observacao}</p>
                       )}
@@ -956,22 +1008,50 @@ export default function Cozinha() {
                   <p className="py-4 text-center text-sm text-zinc-500">Nenhum item encontrado.</p>
                 ) : (
                   <div className="space-y-2">
-                    {itensFiltradosEdicao.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{item.nome}</p>
-                          <p className="text-xs text-orange-400">R$ {Number(item.preco).toFixed(2)}</p>
+                    {itensFiltradosEdicao.map((item) => {
+                      const pedeAcompanhamento = (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0
+                      return (
+                        <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{item.nome}</p>
+                              <p className="text-xs text-orange-400">R$ {Number(item.preco).toFixed(2)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={salvandoItemId === item.id}
+                              onClick={() => pedeAcompanhamento ? setEscolhendoAcompanhamentoId(item.id) : adicionarItemAoPedido(item.id)}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+                            >
+                              {salvandoItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          {escolhendoAcompanhamentoId === item.id && (
+                            <div className="mt-2 space-y-1 rounded-lg border border-zinc-700 bg-zinc-900 p-2">
+                              <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
+                              {item.categoria!.opcoesAcompanhamento.map((op) => (
+                                <button
+                                  key={op.nome}
+                                  type="button"
+                                  onClick={() => adicionarItemAoPedido(item.id, op.nome)}
+                                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-800"
+                                >
+                                  <span>{op.nome}</span>
+                                  {op.precoAdicional > 0 && <span className="text-orange-400">+R$ {op.precoAdicional.toFixed(2)}</span>}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => setEscolhendoAcompanhamentoId(null)}
+                                className="mt-1 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          disabled={salvandoItemId === item.id}
-                          onClick={() => adicionarItemAoPedido(item.id)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
-                        >
-                          {salvandoItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
