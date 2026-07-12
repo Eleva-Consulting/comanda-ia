@@ -177,8 +177,15 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
       ).catch((err) => fastify.log.error({ err }, 'Falha WhatsApp dono (webhook MP)'));
     }
 
-    // Resumo pro CLIENTE — fire-and-forget (suspenso até aqui pra não vazar pedido não pago)
+    // WhatsApp pro CLIENTE — fire-and-forget (suspenso até aqui pra não vazar pedido não pago)
     if (pedidoConfirmado.clienteFone) {
+      // Mesma mensagem padrão de "pagamento_confirmado" usada em PATCH /pedidos/:id/status,
+      // pra manter consistência com as próximas mensagens de status (em_preparo, pronto etc).
+      whatsApp.enviarMensagem(
+        estabelecimento.id, pedidoConfirmado.clienteFone,
+        '💰 *Pagamento confirmado!* Seu pedido foi aceito e logo entra em preparo.',
+      ).catch((err) => fastify.log.error({ err }, 'Falha WhatsApp confirmação cliente (webhook MP)'));
+
       const msgCliente = montarResumoWhatsApp({
         nomeEstabelecimento: estabelecimento.nome,
         clienteNome:         pedidoConfirmado.clienteNome,
