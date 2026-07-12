@@ -7,7 +7,7 @@ import { getIO } from '../socket.js';
 import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
 import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
-import { criarPagamentoPix, obterAccessTokenValido } from '../mercadopago.js';
+import { criarPagamentoPix, obterAccessTokenValido, EXIGIR_MERCADO_PAGO_PARA_PIX } from '../mercadopago.js';
 import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { StatusPedido, FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
@@ -429,7 +429,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
     const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
 
-    if (formaPagamentoFinal === 'pix' && !estabelecimento?.mpConectado) {
+    if (EXIGIR_MERCADO_PAGO_PARA_PIX && formaPagamentoFinal === 'pix' && !estabelecimento?.mpConectado) {
       return reply.status(400).send({ erro: 'Pagamento via Pix indisponível — conecte o Mercado Pago em Configurações' });
     }
 
@@ -450,7 +450,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
     }
 
     let dadosPix: { mpPaymentId: string; pixCopiaCola: string; pixQrCodeBase64: string } | null = null;
-    if (formaPagamentoFinal === 'pix') {
+    if (EXIGIR_MERCADO_PAGO_PARA_PIX && formaPagamentoFinal === 'pix') {
       try {
         const payerEmail = `cliente-${Date.now()}@${estabelecimento!.slug}.comanda-ia.dev`;
         const accessToken = await obterAccessTokenValido(estabelecimento!);

@@ -7,7 +7,7 @@ import { enviarPush } from '../push.js';
 import { whatsApp } from '../whatsapp.js';
 import { resolverTaxaEntrega } from '../utils/entrega.js';
 import { montarResumoWhatsApp } from '../utils/resumoPedido.js';
-import { criarPagamentoPix, obterAccessTokenValido } from '../mercadopago.js';
+import { criarPagamentoPix, obterAccessTokenValido, EXIGIR_MERCADO_PAGO_PARA_PIX } from '../mercadopago.js';
 import { paraOpcoesAcompanhamento, resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { FormaPagamento, TipoEntrega } from '../generated/prisma/enums.js';
 
@@ -90,7 +90,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
         slug:             estabelecimento.slug,
         aceitandoPedidos: estabelecimento.aceitandoPedidos,
         chavePix:         estabelecimento.chavePix,
-        mpConectado:      estabelecimento.mpConectado,
+        mpConectado:      EXIGIR_MERCADO_PAGO_PARA_PIX ? estabelecimento.mpConectado : true,
         taxaEntrega:      estabelecimento.taxaEntrega !== null
           ? Number(estabelecimento.taxaEntrega)
           : null,
@@ -171,7 +171,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       return reply.status(503).send({ erro: 'Estabelecimento temporariamente fechado' });
     }
 
-    if (formaPagamento === 'pix' && !estabelecimento.mpConectado) {
+    if (EXIGIR_MERCADO_PAGO_PARA_PIX && formaPagamento === 'pix' && !estabelecimento.mpConectado) {
       return reply.status(400).send({ erro: 'Pagamento via Pix indisponível no momento' });
     }
 
@@ -230,7 +230,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
     }
 
     let dadosPix: { mpPaymentId: string; pixCopiaCola: string; pixQrCodeBase64: string } | null = null;
-    if (formaPagamento === 'pix') {
+    if (EXIGIR_MERCADO_PAGO_PARA_PIX && formaPagamento === 'pix') {
       try {
         const payerEmail = `cliente-${Date.now()}@${estabelecimento.slug}.comanda-ia.dev`;
         const accessToken = await obterAccessTokenValido(estabelecimento);
