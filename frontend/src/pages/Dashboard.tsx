@@ -132,7 +132,7 @@ export default function Dashboard() {
       .finally(() => setCarregando(false))
   }, [token, periodo])
 
-  if (carregando) {
+  if (carregando && !dados) {
     return (
       <Layout>
         <div className="flex min-h-[400px] items-center justify-center">
