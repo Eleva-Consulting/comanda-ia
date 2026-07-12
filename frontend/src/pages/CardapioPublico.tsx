@@ -29,6 +29,15 @@ function chaveCarrinho(itemId: string, acompanhamento: string | null): string {
   return `${itemId}::${acompanhamento ?? ''}`
 }
 
+function formatarTelefoneDaUrl(): string {
+  const params = new URLSearchParams(window.location.search)
+  const bruto = params.get('telefone')
+  if (!bruto) return ''
+  const digitos = bruto.replace(/\D/g, '').replace(/^55/, '')
+  if (digitos.length < 3) return digitos
+  return `${digitos.slice(0, 2)} ${digitos.slice(2)}`
+}
+
 interface CardapioData {
   estabelecimento: {
     nome: string
@@ -494,7 +503,7 @@ function ModalCheckout({
   onSucesso: (pedido: PedidoConfirmado) => void
 }) {
   const [clienteNome, setClienteNome] = useState('')
-  const [clienteFone, setClienteFone] = useState('')
+  const [clienteFone, setClienteFone] = useState(() => formatarTelefoneDaUrl())
   const [endereco, setEndereco] = useState('')
   const [bairroId, setBairroId] = useState('')
   const [enviando, setEnviando] = useState(false)
