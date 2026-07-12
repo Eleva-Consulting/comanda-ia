@@ -9,7 +9,6 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import QRCode from 'qrcode'
 import { prisma } from './database.js'
-import { getIO } from './socket.js'
 
 type ConnectionStatus = 'connecting' | 'open' | 'close'
 
@@ -94,7 +93,7 @@ class WhatsAppManager {
     return socket
   }
 
-private async handleMensagem(
+  private async handleMensagem(
     estabelecimentoId: string,
     socket: ReturnType<typeof makeWASocket>,
     msg: any,
