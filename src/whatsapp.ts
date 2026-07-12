@@ -275,10 +275,10 @@ class WhatsAppManager {
     const foneRaw = jid.replace('@s.whatsapp.net', '')
     const tipoMsg = msg.message ? Object.keys(msg.message)[0] : null
 
-    // Imagem = comprovante enviado pelo cliente (operador confirma manualmente no painel)
+    // Imagem recebida fora de qualquer fluxo de confirmação (pagamento confirma sozinho agora)
     if (tipoMsg === 'imageMessage') {
       await socket.sendMessage(jid, {
-        text: 'Comprovante recebido! 📋 Nosso operador irá verificar o pagamento e confirmar seu pedido em breve.',
+        text: 'Para fazer um pedido, é só usar o link do cardápio que te mandei por aqui! Se já pediu, a confirmação chega automaticamente assim que o pagamento é processado.',
       })
       return
     }
@@ -290,7 +290,7 @@ class WhatsAppManager {
     if (!estabelecimento) return
 
     const frontendUrl = process.env.FRONTEND_URL?.split(',')[0].trim() ?? 'https://comanda-ia.vercel.app'
-    const menuLink    = `${frontendUrl}/c/${estabelecimento.slug}`
+    const menuLink    = `${frontendUrl}/c/${estabelecimento.slug}?telefone=${foneRaw}`
     const primeiroNome = (msg.pushName as string | undefined)?.split(' ')[0]
     const saudacao     = primeiroNome ? `, ${primeiroNome}` : ''
 
@@ -307,7 +307,7 @@ class WhatsAppManager {
         data:  { status: 'ativa' }, // força @updatedAt para manter a sessão viva
       })
       await socket.sendMessage(jid, {
-        text: `Aqui está o link do cardápio:\n\n🛒 ${menuLink}\n\nSe já fez o pedido e pagou, envie o comprovante PIX aqui que confirmamos na hora! 😊`,
+        text: `Aqui está o link do cardápio:\n\n🛒 ${menuLink}\n\nDepois de fazer o pedido, você recebe a confirmação automaticamente por aqui! 😊`,
       })
       return
     }
@@ -329,12 +329,12 @@ class WhatsAppManager {
     if (conversaAnterior) {
       // Cliente que já comprou antes — nova visita
       await socket.sendMessage(jid, {
-        text: `Que bom ter você de volta${saudacao}! 😊\n\nVeja nosso cardápio e faça seu pedido:\n\n🛒 ${menuLink}\n\nApós o PIX, envie o comprovante aqui que confirmamos rapidinho!`,
+        text: `Que bom ter você de volta${saudacao}! 😊\n\nVeja nosso cardápio e faça seu pedido:\n\n🛒 ${menuLink}\n\nDepois de fazer o pedido, você recebe a confirmação automaticamente por aqui!`,
       })
     } else {
       // Novo cliente
       await socket.sendMessage(jid, {
-        text: `Olá${saudacao}! 👋 Bem-vindo(a) à *${estabelecimento.nome}*!\n\nVeja nosso cardápio e faça seu pedido pelo link:\n\n🛒 ${menuLink}\n\nApós realizar o pedido e efetuar o PIX, envie o comprovante aqui que confirmamos na hora! 😊`,
+        text: `Olá${saudacao}! 👋 Bem-vindo(a) à *${estabelecimento.nome}*!\n\nVeja nosso cardápio e faça seu pedido pelo link:\n\n🛒 ${menuLink}\n\nDepois de fazer o pedido, você recebe a confirmação automaticamente por aqui! 😊`,
       })
     }
   }
