@@ -22,6 +22,7 @@ const PixQrCodeQuerySchema = Type.Object({
 const RegistrarPagamentoSchema = Type.Object({
   formaPagamento: Type.Union([
     Type.Literal('pix'),
+    Type.Literal('pix_maquininha'),
     Type.Literal('dinheiro'),
     Type.Literal('cartao_credito'),
     Type.Literal('cartao_debito'),

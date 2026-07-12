@@ -45,6 +45,7 @@ interface LucroDiaDetalhado extends LucroDia {
 
 const LABEL_FORMA_PAGAMENTO: Record<string, string> = {
   pix: 'Pix',
+  pix_maquininha: 'Pix (maquininha)',
   dinheiro: 'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   cartao_debito: 'Cartão de débito',

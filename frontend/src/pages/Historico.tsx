@@ -234,7 +234,7 @@ export default function Historico() {
                       {pedido.tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏪 Retirada'}
                     </span>
                     <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                      {({ pix: 'PIX', dinheiro: 'Dinheiro', cartao_credito: 'Crédito', cartao_debito: 'Débito' } as Record<string, string>)[pedido.formaPagamento] ?? pedido.formaPagamento}
+                      {({ pix: 'PIX', pix_maquininha: 'Pix (maq.)', dinheiro: 'Dinheiro', cartao_credito: 'Crédito', cartao_debito: 'Débito' } as Record<string, string>)[pedido.formaPagamento] ?? pedido.formaPagamento}
                     </span>
                   </div>
                   <div className="space-y-1">

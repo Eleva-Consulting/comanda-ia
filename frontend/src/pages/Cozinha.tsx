@@ -33,7 +33,7 @@ interface Pedido {
   status:          Status
   criadoEm:        string
   itens:           ItemPedido[]
-  formaPagamento:  'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
+  formaPagamento:  'pix' | 'pix_maquininha' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
   tipoEntrega:     'entrega' | 'retirada'
   origem:          'balcao' | 'publico'
 }
@@ -46,6 +46,7 @@ interface Bairro {
 
 const formaPagamentoLabel: Record<string, string> = {
   pix:            'PIX',
+  pix_maquininha: 'Pix (maq.)',
   dinheiro:       'Dinheiro',
   cartao_credito: 'Crédito',
   cartao_debito:  'Débito',
@@ -152,7 +153,7 @@ export default function Cozinha() {
   const [selecionados, setSelecionados]         = useState<Record<string, { quantidade: number; observacao: string; acompanhamento?: string }>>({})
   const [enviandoManual, setEnviandoManual]     = useState(false)
   const [erroModal, setErroModal]               = useState<string | null>(null)
-  const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
+  const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'pix_maquininha' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
   const [tipoEntregaModal, setTipoEntregaModal]       = useState<'entrega' | 'retirada'>('retirada')
   const [precisaTrocoModal, setPrecisaTrocoModal]     = useState(false)
   const [trocoParaModal, setTrocoParaModal]           = useState('')
@@ -792,6 +793,7 @@ export default function Cozinha() {
                       { valor: 'cartao_debito',  label: 'Débito' },
                       { valor: 'cartao_credito', label: 'Crédito' },
                       { valor: 'pix',            label: 'PIX' },
+                      { valor: 'pix_maquininha', label: 'Pix (maquininha)' },
                     ] as const).map(({ valor, label }) => (
                       <button
                         key={valor}

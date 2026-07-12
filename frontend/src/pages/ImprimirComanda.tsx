@@ -19,7 +19,7 @@ interface Pedido {
   bairroNome:      string | null
   taxaEntrega:     number | null
   tipoEntrega:     'entrega' | 'retirada'
-  formaPagamento:  'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
+  formaPagamento:  'pix' | 'pix_maquininha' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
   precisaTroco:    boolean
   trocoPara:       number | null
   status:          string
@@ -30,6 +30,7 @@ interface Pedido {
 
 const formaPagamentoLabel: Record<string, string> = {
   pix:            'PIX',
+  pix_maquininha: 'Pix (maquininha)',
   dinheiro:       'Dinheiro',
   cartao_credito: 'Cartão de Crédito',
   cartao_debito:  'Cartão de Débito',

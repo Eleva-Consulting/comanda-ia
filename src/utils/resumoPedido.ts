@@ -1,5 +1,6 @@
 const formaPagamentoLabel: Record<string, string> = {
   pix:            'Pix',
+  pix_maquininha: 'Pix (maquininha)',
   dinheiro:       'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   cartao_debito:  'Cartão de débito',
@@ -7,6 +8,7 @@ const formaPagamentoLabel: Record<string, string> = {
 
 const formaPagamentoEmoji: Record<string, string> = {
   pix:            '💸',
+  pix_maquininha: '💸',
   dinheiro:       '💵',
   cartao_credito: '💳',
   cartao_debito:  '💳',

@@ -49,6 +49,7 @@ enum StatusPedido {
 
 enum FormaPagamento {
   pix
+  pix_maquininha
   dinheiro
   cartao_credito
   cartao_debito

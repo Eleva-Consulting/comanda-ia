@@ -58,6 +58,7 @@ const ManualPedidoSchema = Type.Object({
   tipoEntrega: Type.Optional(Type.Union([Type.Literal('entrega'), Type.Literal('retirada')])),
   formaPagamento: Type.Optional(Type.Union([
     Type.Literal('pix'),
+    Type.Literal('pix_maquininha'),
     Type.Literal('dinheiro'),
     Type.Literal('cartao_credito'),
     Type.Literal('cartao_debito'),

@@ -52,6 +52,7 @@ interface ResumoConta {
 
 const labelFormaPagamento: Record<string, string> = {
   pix: 'PIX',
+  pix_maquininha: 'Pix (maquininha)',
   dinheiro: 'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   cartao_debito: 'Cartão de débito',
@@ -68,7 +69,7 @@ export default function Caixa() {
   const [resumo, setResumo] = useState<ResumoConta | null>(null)
   const [carregandoResumo, setCarregandoResumo] = useState(false)
 
-  const [formaPagamento, setFormaPagamento] = useState<'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('pix')
+  const [formaPagamento, setFormaPagamento] = useState<'pix' | 'pix_maquininha' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('pix')
   const [registrandoPagamento, setRegistrandoPagamento] = useState(false)
   const [erroPagamento, setErroPagamento] = useState<string | null>(null)
 
@@ -379,7 +380,7 @@ export default function Caixa() {
                   <h3 className="font-semibold">Registrar pagamento</h3>
 
                   <div className="flex flex-wrap gap-2">
-                    {(['pix', 'dinheiro', 'cartao_credito', 'cartao_debito'] as const).map((forma) => (
+                    {(['pix', 'pix_maquininha', 'dinheiro', 'cartao_credito', 'cartao_debito'] as const).map((forma) => (
                       <button
                         key={forma}
                         onClick={() => setFormaPagamento(forma)}
