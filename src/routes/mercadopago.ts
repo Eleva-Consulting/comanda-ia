@@ -187,6 +187,7 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
       ).catch((err) => fastify.log.error({ err }, 'Falha WhatsApp confirmação cliente (webhook MP)'));
 
       const msgCliente = montarResumoWhatsApp({
+        pedidoId:            pedidoConfirmado.id,
         nomeEstabelecimento: estabelecimento.nome,
         clienteNome:         pedidoConfirmado.clienteNome,
         itens:               pedidoConfirmado.itens.map((i) => ({
@@ -201,7 +202,6 @@ export async function mercadoPagoRoutes(fastify: FastifyInstance) {
         precisaTroco:        false,
         trocoPara:           null,
         total:               Number(pedidoConfirmado.total),
-        chavePix:            null,
       });
       whatsApp.enviarMensagem(estabelecimento.id, pedidoConfirmado.clienteFone, msgCliente)
         .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente (webhook MP)'));

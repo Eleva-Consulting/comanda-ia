@@ -1,9 +1,20 @@
 const formaPagamentoLabel: Record<string, string> = {
-  pix:            'PIX',
+  pix:            'Pix',
   dinheiro:       'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   cartao_debito:  'Cartão de débito',
 };
+
+const formaPagamentoEmoji: Record<string, string> = {
+  pix:            '💸',
+  dinheiro:       '💵',
+  cartao_credito: '💳',
+  cartao_debito:  '💳',
+};
+
+// Estimativa fixa de tempo de entrega — ajuste aqui se quiser outro intervalo.
+const TEMPO_ENTREGA_MIN_MINUTOS = 40;
+const TEMPO_ENTREGA_MAX_MINUTOS = 60;
 
 interface ItemResumo {
   nomeItem:   string;
@@ -12,6 +23,7 @@ interface ItemResumo {
 }
 
 interface MontarResumoParams {
+  pedidoId:            string;
   nomeEstabelecimento: string;
   clienteNome:         string;
   itens:               ItemResumo[];
@@ -24,40 +36,63 @@ interface MontarResumoParams {
   precisaTroco:         boolean;
   trocoPara:            number | null;
   total:                number;
-  chavePix:             string | null;
+}
+
+function formatarHora(data: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour:     '2-digit',
+    minute:   '2-digit',
+  }).format(data);
+}
+
+function formatarMoeda(valor: number): string {
+  return valor.toFixed(2).replace('.', ',');
 }
 
 /** Monta a mensagem de confirmação de pedido enviada ao cliente pelo WhatsApp. */
 export function montarResumoWhatsApp(p: MontarResumoParams): string {
-  const itensTxt = p.itens.map((i) => `• ${i.quantidade}x ${i.nomeItem} — R$ ${(i.precoUnit * i.quantidade).toFixed(2)}`).join('\n');
+  const codigoPedido = p.pedidoId.slice(0, 8);
+
+  const itensTxt = p.itens
+    .map((i, idx) => `\`\`\`${idx === 0 ? '➡ ' : '-'}${i.quantidade}x ${i.nomeItem}\`\`\``)
+    .join('\n');
 
   const linhas = [
-    `✅ *Pedido recebido, ${p.clienteNome}!*`,
+    `Olá *${p.clienteNome}*, aqui é o atendente virtual do *${p.nomeEstabelecimento}*`,
+    'Vim te avisar que seu pedido foi *recebido com sucesso* e a cozinha já foi avisada!',
     '',
-    `🍽️ *${p.nomeEstabelecimento}*`,
+    'Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por aqui. 😄',
     '',
+    `Nº do pedido *${codigoPedido}*`,
+    '',
+    '*Itens:*',
     itensTxt,
   ];
 
   if (p.taxaEntrega > 0) {
-    linhas.push('', `Subtotal: R$ ${p.subtotal.toFixed(2)}`, `Taxa de entrega${p.bairroNome ? ` (${p.bairroNome})` : ''}: R$ ${p.taxaEntrega.toFixed(2)}`);
+    linhas.push('', `Subtotal: R$ ${formatarMoeda(p.subtotal)}`, `Taxa de entrega${p.bairroNome ? ` (${p.bairroNome})` : ''}: R$ ${formatarMoeda(p.taxaEntrega)}`);
   }
 
-  linhas.push('', `*Total: R$ ${p.total.toFixed(2)}*`);
-
-  linhas.push('', p.tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏪 Retirada no local');
-  if (p.tipoEntrega === 'entrega' && p.enderecoEntrega) {
-    linhas.push(`Endereço: ${p.enderecoEntrega}`);
-  }
-
-  linhas.push('', `Pagamento: ${formaPagamentoLabel[p.formaPagamento] ?? p.formaPagamento}`);
+  const emoji = formaPagamentoEmoji[p.formaPagamento] ?? '💰';
+  linhas.push('', `${emoji} *${formaPagamentoLabel[p.formaPagamento] ?? p.formaPagamento}*`);
   if (p.formaPagamento === 'dinheiro' && p.precisaTroco && p.trocoPara) {
-    linhas.push(`Troco para R$ ${p.trocoPara.toFixed(2)} (leva R$ ${(p.trocoPara - p.total).toFixed(2)} de troco)`);
+    linhas.push(`Troco para R$ ${formatarMoeda(p.trocoPara)} (leva R$ ${formatarMoeda(p.trocoPara - p.total)} de troco)`);
   }
 
-  if (p.formaPagamento === 'pix' && p.chavePix) {
-    linhas.push('', `💸 Chave PIX: *${p.chavePix}*`, 'Envie o comprovante aqui neste WhatsApp para confirmarmos seu pedido na hora! 😊');
+  if (p.tipoEntrega === 'entrega') {
+    const agora  = new Date();
+    const inicio = new Date(agora.getTime() + TEMPO_ENTREGA_MIN_MINUTOS * 60_000);
+    const fim    = new Date(agora.getTime() + TEMPO_ENTREGA_MAX_MINUTOS * 60_000);
+    linhas.push('', `🕢 Tempo de entrega: *${TEMPO_ENTREGA_MIN_MINUTOS} - ${TEMPO_ENTREGA_MAX_MINUTOS}min* (entre ${formatarHora(inicio)} e ${formatarHora(fim)})`);
+    if (p.enderecoEntrega) {
+      linhas.push(`🛵 Local de entrega: ${p.enderecoEntrega}`);
+    }
+  } else {
+    linhas.push('', '🏪 Retirada no local');
   }
+
+  linhas.push('', `Total do pedido: *R$ ${formatarMoeda(p.total)}*`);
 
   return linhas.join('\n');
 }

@@ -325,6 +325,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
       // WhatsApp para o CLIENTE — resumo do pedido (fire-and-forget)
       if (clienteFoneNormalizado) {
         const msgCliente = montarResumoWhatsApp({
+          pedidoId: pedido.id,
           nomeEstabelecimento: estabelecimento.nome,
           clienteNome,
           itens: itensComSnapshot,
@@ -337,7 +338,6 @@ export async function publicoRoutes(fastify: FastifyInstance) {
           precisaTroco: formaPagamento === 'dinheiro' ? !!precisaTroco : false,
           trocoPara: formaPagamento === 'dinheiro' && precisaTroco ? trocoPara ?? null : null,
           total,
-          chavePix: estabelecimento.chavePix,
         });
         whatsApp.enviarMensagem(estabelecimento.id, clienteFoneNormalizado, msgCliente)
           .catch((err) => fastify.log.error({ err }, 'Falha WhatsApp cliente'));
