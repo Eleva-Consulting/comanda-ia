@@ -119,7 +119,17 @@ class WhatsAppManager {
     if (!estabelecimento) return
 
     const frontendUrl = process.env.FRONTEND_URL?.split(',')[0].trim() ?? 'https://comanda-ia.vercel.app'
-    const menuLink    = `${frontendUrl}/c/${estabelecimento.slug}?telefone=${foneRaw}`
+    // O WhatsApp pode endereçar a conversa por LID (identificador de privacidade, ex: "123...@lid")
+    // em vez do JID baseado em telefone — nesse caso `jid` não é um telefone de verdade. Quando isso
+    // acontece, `remoteJidAlt` (se vier) traz o JID baseado em telefone correspondente; sem ele, não
+    // anexamos telefone nenhum no link (evita capturar um número que não é o telefone real do cliente).
+    const jidTelefone = jid.endsWith('@s.whatsapp.net')
+      ? jid
+      : (msg.key?.remoteJidAlt?.endsWith('@s.whatsapp.net') ? msg.key.remoteJidAlt as string : null)
+    const foneParaLink = jidTelefone ? jidTelefone.replace('@s.whatsapp.net', '') : null
+    const menuLink = foneParaLink
+      ? `${frontendUrl}/c/${estabelecimento.slug}?telefone=${foneParaLink}`
+      : `${frontendUrl}/c/${estabelecimento.slug}`
     const primeiroNome = (msg.pushName as string | undefined)?.split(' ')[0]
     const saudacao     = primeiroNome ? `, ${primeiroNome}` : ''
 
