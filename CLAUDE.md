@@ -317,6 +317,46 @@ VITE_API_URL=http://localhost:3000
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-11 (continuação)
+- **Checkout com Mercado Pago mesclado no main e em produção (`324d081`) — credenciais reais
+  configuradas e fluxo testado de ponta a ponta.** Reconciliação com o trabalho paralelo do
+  Estoque Avançado (Fase 4a) feita manualmente (merge com conflitos reais em
+  `CardapioPublico.tsx`/`publico.ts`/`pedidos.ts`, resolvidos preservando a lógica dos dois
+  lados). A revisão final da branch (opus) encontrou um bug Crítico: o webhook comparava
+  `pagamento.externalReference` (UUID descartável, nunca persistido no Pedido) com `pedido.id`
+  — comparação sempre falsa, então **nenhum pagamento Pix jamais seria confirmado**. Corrigido
+  removendo a comparação (o lookup por `mpPaymentId` já identifica o pedido com segurança), além
+  de uma race de idempotência (retries do MP podiam duplicar notificações — agora `updateMany`
+  condicional) e um vazamento de privilégio no `state` do OAuth (assinava a sessão real do
+  usuário com o segredo padrão do app — agora usa chave de assinatura separada). Depois do
+  merge: usuário criou a aplicação real no Mercado Pago Developers (Checkout Transparente, API
+  de Pagamentos, setor "Serviços de TI"), configurou `MP_CLIENT_ID`/`MP_CLIENT_SECRET`/
+  `MP_REDIRECT_URI` no Railway, e testou um Pix real de ponta a ponta — achado real na primeira
+  tentativa: **faltava configurar o Webhook na aplicação do Mercado Pago** (URL de notificação
+  nunca cadastrada), então o pagamento confirmava no MP mas o backend nunca era avisado; corrigido
+  configurando a URL de produção (`/webhooks/mercadopago`) + evento "Pagamentos (legacy)" no
+  painel do MP. Confirmado depois: pedido chega na Cozinha, WhatsApp de confirmação ao cliente
+  funciona (quando há telefone). Um fix adicional pequeno: o webhook passou a mandar também a
+  mensagem padrão "💰 Pagamento confirmado!" (mesma usada pelas outras transições de status),
+  além do resumo detalhado, mantendo consistência entre os dois fluxos.
+- **Bot do WhatsApp personaliza o link do cardápio com o telefone do cliente** — quando um
+  cliente manda mensagem pro bot do estabelecimento, o link do cardápio que ele recebe agora
+  carrega `?telefone=...` (o número já é conhecido, vem do remetente da própria mensagem
+  recebida via Baileys), pré-preenchendo o campo de telefone no checkout público (continua
+  editável e opcional). Resolve parcialmente o problema de clientes não preencherem telefone no
+  checkout — só funciona pra quem chega pelo bot (link genérico/QR code continua sem essa
+  informação, limitação de privacidade do próprio WhatsApp, não contornável). Junto, atualizadas
+  as mensagens do bot que ainda falavam em "envie o comprovante" (fluxo manual obsoleto agora que
+  o Pix confirma sozinho via Mercado Pago) e removido código morto (`handleComprovante` +
+  validação de comprovante por IA via Claude Haiku, nunca chamados). Implementado via
+  subagent-driven-development (3 tasks + revisão final). Achado de processo na Task 2: o
+  subagente implementador commitou por engano na `main` do checkout principal (não no worktree),
+  a partir de um ponto anterior à Task 1 — o diff descartava silenciosamente as mudanças da
+  Task 1. Pego pela revisão da tarefa, confirmado que nunca foi enviado pro `origin/main` (sem
+  impacto em produção), corrigido pelo controller via reset da `main` local + cherry-pick do
+  código correto em cima da Task 1. Revisão final da branch (opus) confirmou nenhum resíduo do
+  incidente e aprovou sem ressalvas.
+
 ### 2026-07-10
 - **Estoque avançado — Fase 4a mesclada no main e em produção** — módulo `estoque_avancado`
   (flag já existia desde a Fase 1a, sem uso). Brainstorming descartou ficha técnica por prato
@@ -589,10 +629,7 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
 
 ## Próximas features planejadas
 
-1. **Mercado Pago** — PIX real no checkout (substituir exibição de chave manual) — spec e plano já
-   escritos em `docs/superpowers/specs/2026-07-03-mercado-pago-checkout-design.md` e
-   `docs/superpowers/plans/2026-07-03-mercado-pago-checkout.md`, implementação ainda não começou
-2. **Painel de avaliações** — ver média de estrelas e comentários no Dashboard
-3. **Relatórios avançados** — exportar histórico em CSV, filtro por período
-4. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
-5. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
+1. **Painel de avaliações** — ver média de estrelas e comentários no Dashboard
+2. **Relatórios avançados** — exportar histórico em CSV, filtro por período
+3. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
+4. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
