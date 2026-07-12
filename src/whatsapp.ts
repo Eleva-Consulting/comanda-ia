@@ -2,12 +2,10 @@ import makeWASocket, {
   DisconnectReason,
   BufferJSON,
   initAuthCreds,
-  downloadMediaMessage,
   type AuthenticationCreds,
   type SignalDataTypeMap,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
-import Anthropic from '@anthropic-ai/sdk'
 import pino from 'pino'
 import QRCode from 'qrcode'
 import { prisma } from './database.js'
@@ -70,76 +68,6 @@ async function criarAuthState(estabelecimentoId: string) {
   return { state: { creds, keys: keyStore as any }, saveCreds: salvarSession }
 }
 
-// ── Helpers de validação ──────────────────────────────────────────────────────
-
-interface ResultadoValidacao {
-  isComprovante: boolean
-  valor:         number | null
-  nomePagador:   string | null
-}
-
-async function validarComprovanteIA(imageBuffer: Buffer, mimeType: string): Promise<ResultadoValidacao> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return { isComprovante: true, valor: null, nomePagador: null }
-
-  const anthropic = new Anthropic({ apiKey })
-  const base64    = imageBuffer.toString('base64')
-
-  const tipo = (
-    ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType)
-      ? mimeType
-      : 'image/jpeg'
-  ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-
-  try {
-    const resp = await anthropic.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [{
-        role:    'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: tipo, data: base64 } },
-          {
-            type: 'text',
-            text: `Analise esta imagem. É um comprovante de pagamento PIX brasileiro?
-Se sim, extraia o valor pago e o nome do pagador.
-Responda APENAS com JSON, sem texto adicional:
-{"is_comprovante": bool, "valor": number|null, "nome_pagador": string|null}`,
-          },
-        ],
-      }],
-    })
-
-    const texto = resp.content[0].type === 'text' ? resp.content[0].text.trim() : '{}'
-    const json  = JSON.parse(texto)
-    return {
-      isComprovante: Boolean(json.is_comprovante),
-      valor:         typeof json.valor === 'number' ? json.valor : null,
-      nomePagador:   typeof json.nome_pagador === 'string' ? json.nome_pagador : null,
-    }
-  } catch {
-    // Em caso de erro na IA, aceita sem validar (não bloqueia o cliente)
-    return { isComprovante: true, valor: null, nomePagador: null }
-  }
-}
-
-// Retorna true se ao menos uma palavra do nome do pedido aparece no nome do comprovante
-function nomesBatem(nomeOrdem: string, nomeComprovante: string | null): boolean {
-  if (!nomeComprovante) return true
-
-  const normalizar = (s: string) =>
-    s.toLowerCase()
-     .normalize('NFD')
-     .replace(/[̀-ͯ]/g, '')
-     .split(/\s+/)
-     .filter(w => w.length > 2)
-
-  const palavrasOrdem = normalizar(nomeOrdem)
-  const palavrasComp  = normalizar(nomeComprovante)
-
-  return palavrasOrdem.some(w => palavrasComp.includes(w))
-}
-
 // ── WhatsApp Manager ──────────────────────────────────────────────────────────
 
 class WhatsAppManager {
@@ -166,105 +94,7 @@ class WhatsAppManager {
     return socket
   }
 
-  private async handleComprovante(
-    estabelecimentoId: string,
-    socket: ReturnType<typeof makeWASocket>,
-    jid: string,
-    foneRaw: string,
-    msg: any,
-  ): Promise<void> {
-    const ontemAtras  = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const foneDigitos = foneRaw.replace(/\D/g, '').slice(-8)
-    const mimeType    = (msg.message?.imageMessage?.mimetype as string | undefined) ?? 'image/jpeg'
-
-    // Baixa a imagem
-    let imageBuffer: Buffer | null = null
-    try {
-      imageBuffer = await downloadMediaMessage(
-        msg, 'buffer', {},
-        { logger: this.logger, reuploadRequest: socket.updateMediaMessage },
-      ) as Buffer
-    } catch {
-      // Se não conseguir baixar, tenta só pelo telefone
-    }
-
-    // Valida com IA (se não conseguiu baixar, retorna aceito sem validar)
-    const validacao = imageBuffer
-      ? await validarComprovanteIA(imageBuffer, mimeType)
-      : { isComprovante: true, valor: null, nomePagador: null }
-
-    if (!validacao.isComprovante) {
-      await socket.sendMessage(jid, {
-        text: 'Não consegui identificar um comprovante PIX nessa imagem. Por favor, envie uma foto clara do comprovante de pagamento.',
-      })
-      return
-    }
-
-    // Busca pedidos PIX pendentes nas últimas 24h
-    const pedidosPendentes = await prisma.pedido.findMany({
-      where:   { estabelecimentoId, status: 'recebido', formaPagamento: 'pix', mpPaymentId: null, criadoEm: { gte: ontemAtras } },
-      orderBy: { criadoEm: 'desc' },
-      include: { itens: true },
-    })
-
-    if (pedidosPendentes.length === 0) {
-      await socket.sendMessage(jid, {
-        text: `Não há pedidos PIX pendentes no momento.\n\nFaça seu pedido pelo cardápio e depois envie o comprovante aqui! 😊`,
-      })
-      return
-    }
-
-    // 1ª tentativa: match por telefone
-    let pedido = pedidosPendentes.find(
-      p => p.clienteFone && p.clienteFone.replace(/\D/g, '').endsWith(foneDigitos)
-    )
-
-    // 2ª tentativa: match por valor (quando o cliente usa número diferente)
-    if (!pedido && validacao.valor !== null) {
-      pedido = pedidosPendentes.find(
-        p => Math.abs(Number(p.total) - validacao.valor!) < 0.02
-      )
-    }
-
-    if (!pedido) {
-      const valorTxt = validacao.valor !== null ? ` de R$ ${validacao.valor.toFixed(2)}` : ''
-      await socket.sendMessage(jid, {
-        text: `Não encontrei um pedido PIX pendente${valorTxt} para confirmar. Verifique se realizou o pedido pelo link do cardápio ou se o pagamento foi feito no valor correto.`,
-      })
-      return
-    }
-
-    // Valida o valor
-    if (validacao.valor !== null && Math.abs(validacao.valor - Number(pedido.total)) > 0.02) {
-      await socket.sendMessage(jid, {
-        text: `⚠️ O valor no comprovante (*R$ ${validacao.valor.toFixed(2)}*) não confere com o pedido (*R$ ${Number(pedido.total).toFixed(2)}*). Verifique se enviou o comprovante correto.`,
-      })
-      return
-    }
-
-    // Valida o nome (fuzzy)
-    if (validacao.nomePagador && !nomesBatem(pedido.clienteNome, validacao.nomePagador)) {
-      await socket.sendMessage(jid, {
-        text: `⚠️ O nome no comprovante (*${validacao.nomePagador}*) não confere com o nome do pedido (*${pedido.clienteNome}*). Se houver algum engano, entre em contato conosco.`,
-      })
-      return
-    }
-
-    // Tudo certo — confirma o pedido
-    const pedidoAtualizado = await prisma.pedido.update({
-      where:   { id: pedido.id },
-      data:    { status: 'em_preparo' },
-      include: { itens: true },
-    })
-    getIO().to(estabelecimentoId).emit('pedido:atualizado', pedidoAtualizado)
-
-    const codigo = pedido.id.slice(-6).toUpperCase()
-    await socket.sendMessage(jid, {
-      text: `✅ *Pagamento confirmado!*\n\nSeu pedido *#${codigo}* entrou para a cozinha agora. Te avisamos quando estiver pronto! 🍳`,
-    })
-  }
-
-  private async handleMensagem(
+private async handleMensagem(
     estabelecimentoId: string,
     socket: ReturnType<typeof makeWASocket>,
     msg: any,
