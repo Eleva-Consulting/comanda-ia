@@ -13,6 +13,7 @@ interface ItemComandaParaProducao {
   status: StatusProducao;
   recebidoEm: Date;
   setorId: string | null;
+  rodadaId: string | null;
   setor: { nome: string; tempoAlvoMinutos: number | null } | null;
   comanda: { nome: string; conta: { mesa: { numero: string } | null } };
 }
@@ -27,6 +28,7 @@ export function serializarItemProducao(item: ItemComandaParaProducao) {
     status:           item.status,
     recebidoEm:       item.recebidoEm,
     setorId:          item.setorId,
+    rodadaId:         item.rodadaId,
     setorNome:        item.setor?.nome ?? null,
     tempoAlvoMinutos: item.setor?.tempoAlvoMinutos ?? null,
     mesaNumero:       item.comanda.conta.mesa?.numero ?? null,
