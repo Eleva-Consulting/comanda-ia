@@ -318,6 +318,22 @@ VITE_API_URL=http://localhost:3000
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
 ### 2026-07-13
+- **Renomear mesa + tempo real na Produção pra itens sem setor (`960da53`).** Duas correções
+  do módulo de Mesas, achadas em uso real: (1) não havia como editar uma mesa depois de
+  cadastrada — se o dono digitasse "Mesa 1" no campo número (confusão razoável, já que o
+  cabeçalho de Mesas/Caixa sempre prefixa "Mesa " antes do número), o resultado virava
+  "Mesa Mesa 1" em todo lugar, sem jeito de corrigir. Agora cada mesa da grade tem um ícone de
+  lápis que abre "Editar mesa" (reaproveita o `PATCH /mesas/:id`, que já existia sem UI).
+  (2) Tempo real na tela de Produção não funcionava — causa raiz: **não existe nenhuma forma,
+  hoje, de vincular um item do Cardápio a um Setor** (o campo `ItemCardapio.setorId` nunca é
+  setado por nenhuma rota/tela), então todo item real sempre tem `setorId: null`; o código que
+  emite os eventos de produção só disparava `if (item.setorId)`, ou seja, nunca disparava de
+  verdade — a tela só atualizava com F5 manual. Corrigido removendo essa guarda nos 3 pontos
+  (novo item, status, transferência); `salaProducao()` já lidava certo com `setorId` nulo (cai
+  na sala ampla do estabelecimento), só faltava não pular o emit. **Limitação que continua**: a
+  separação da Produção por setor (ex: Bar x Cozinha) continua sem uso real enquanto não existir
+  uma tela pra vincular item→setor no Cardápio — fica como possível próximo passo, não construído
+  ainda (fora do pedido original, que era só "tempo real não funciona").
 - **Nav do header reorganizada — parava de caber e sobrepunha os ícones (`a8cd006`).** Com
   todos os módulos ativos (Mesas + Caixa + Estoque avançado) o DONO chegava a ter 13 links
   numa única linha `flex` sem quebra nem rolagem — os últimos itens (Configurações e às vezes
