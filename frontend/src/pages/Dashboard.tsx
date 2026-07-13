@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, Star, type LucideIcon } from 'lucide-react'
+import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, Star, Calendar, type LucideIcon } from 'lucide-react'
 import {
   BarChart,
   Bar,
@@ -10,6 +10,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 import Layout from '../components/Layout'
+import FiltroPeriodo from '../components/FiltroPeriodo'
 import { API_URL } from '../lib/api'
 
 interface VendaDia {
@@ -46,12 +47,14 @@ interface DashboardData {
     criadoEm: string
     tipoEntrega: string
   }>
+  periodo: { inicio: string; fim: string }
   estatisticas: {
+    emAndamento: number
     totalPedidos: number
     faturamentoTotal: number
     ticketMedio: number
-    porStatus: Array<{ status: string; quantidade: number }>
     vendasPorDia: VendaDia[]
+    topDias: Array<{ data: string; faturamento: number }>
   }
   avaliacoes: {
     media: number | null
@@ -113,20 +116,23 @@ export default function Dashboard() {
   const token = localStorage.getItem('token')
   const [dados, setDados] = useState<DashboardData | null>(null)
   const [carregando, setCarregando] = useState(true)
+  const [periodo, setPeriodo] = useState<{ inicio: string; fim: string } | null>(null)
 
   useEffect(() => {
     if (!token) return
 
-    fetch(`${API_URL}/meu-estabelecimento/dashboard`, {
+    const params = periodo ? `?inicio=${periodo.inicio}&fim=${periodo.fim}` : ''
+    setCarregando(true)
+    fetch(`${API_URL}/meu-estabelecimento/dashboard${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((d: DashboardData) => setDados(d))
       .catch(() => null)
       .finally(() => setCarregando(false))
-  }, [token])
+  }, [token, periodo])
 
-  if (carregando) {
+  if (carregando && !dados) {
     return (
       <Layout>
         <div className="flex min-h-[400px] items-center justify-center">
@@ -144,10 +150,6 @@ export default function Dashboard() {
     )
   }
 
-  const emAndamento = dados.estatisticas.porStatus
-    .filter((p) => ['recebido', 'em_preparo', 'pronto'].includes(p.status))
-    .reduce((s, p) => s + p.quantidade, 0)
-
   const graficoData = dados.estatisticas.vendasPorDia.map((d) => ({
     ...d,
     label: formatarDia(d.data),
@@ -163,23 +165,25 @@ export default function Dashboard() {
         <p className="mt-1 text-sm text-zinc-400">Visão geral do seu estabelecimento</p>
       </div>
 
+      <FiltroPeriodo onMudarPeriodo={(inicio, fim) => setPeriodo({ inicio, fim })} />
+
       {/* KPIs */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Faturamento total"
+          label={`Faturamento — ${formatarDia(dados.periodo.inicio)} a ${formatarDia(dados.periodo.fim)}`}
           valor={formatarBRL(dados.estatisticas.faturamentoTotal)}
           Icone={Wallet}
           cor="emerald"
         />
         <KpiCard
-          label="Total de pedidos"
+          label="Pedidos no período"
           valor={dados.estatisticas.totalPedidos.toString()}
           Icone={ShoppingBag}
           cor="orange"
         />
         <KpiCard
           label="Em andamento"
-          valor={emAndamento.toString()}
+          valor={dados.estatisticas.emAndamento.toString()}
           Icone={TrendingUp}
           cor="sky"
         />
@@ -191,10 +195,32 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Top 5 dias */}
+      {dados.estatisticas.topDias.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
+            <Calendar className="h-5 w-5 text-orange-400" /> Dias que mais venderam
+          </h3>
+          <div className="space-y-2">
+            {dados.estatisticas.topDias.map((d, i) => (
+              <div key={d.data} className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-2.5">
+                <span className="text-sm text-zinc-400">
+                  <span className="mr-2 text-zinc-600">#{i + 1}</span>
+                  {formatarDia(d.data)}
+                </span>
+                <span className="font-bold text-emerald-400">{formatarBRL(d.faturamento)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Gráfico de vendas */}
       {graficoData.length > 0 && (
         <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h3 className="mb-6 text-lg font-bold">Faturamento — últimos 30 dias</h3>
+          <h3 className="mb-6 text-lg font-bold">
+            Faturamento — {formatarDia(dados.periodo.inicio)} a {formatarDia(dados.periodo.fim)}
+          </h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={graficoData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />

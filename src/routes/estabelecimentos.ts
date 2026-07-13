@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { whatsApp } from '../whatsapp.js';
+import { resolverIntervaloPeriodo, diaSaoPaulo } from '../utils/periodoRelatorio.js';
 
 const AtualizarEstabelecimentoSchema = Type.Object({
   aceitandoPedidos: Type.Optional(Type.Boolean()),
@@ -14,6 +15,11 @@ const AtualizarEstabelecimentoSchema = Type.Object({
   taxaEntrega:      Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
   evolutionUrl:     Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
   evolutionToken:   Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()])),
+});
+
+const PeriodoQuerySchema = Type.Object({
+  inicio: Type.Optional(Type.String({ minLength: 10, maxLength: 10 })),
+  fim:    Type.Optional(Type.String({ minLength: 10, maxLength: 10 })),
 });
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
@@ -117,8 +123,10 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
 
   fastify.get('/meu-estabelecimento/dashboard', {
     onRequest: [autenticar],
+    schema: { querystring: PeriodoQuerySchema },
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
+    const { inicio, fim } = request.query as { inicio?: string; fim?: string };
 
     const estabelecimento = await prisma.estabelecimento.findUnique({
       where: { id: estabelecimentoId! },
@@ -132,40 +140,33 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
-    const estatisticas = await prisma.pedido.groupBy({
+    const { inicioUTC, fimUTC, inicioLabel, fimLabel } = resolverIntervaloPeriodo(inicio, fim);
+
+    // "Em andamento" é sempre o estado atual da cozinha — nunca filtrado por período.
+    const emAndamentoAgregado = await prisma.pedido.groupBy({
       by: ['status'],
-      where: { estabelecimentoId: estabelecimentoId! },
+      where: { estabelecimentoId: estabelecimentoId!, status: { in: ['recebido', 'em_preparo', 'pronto'] } },
       _count: { id: true },
     });
+    const emAndamento = emAndamentoAgregado.reduce((soma, item) => soma + item._count.id, 0);
 
-    const totalPedidos = estatisticas.reduce(
-      (soma: number, item: { _count: { id: number } }) => soma + item._count.id,
-      0
-    );
-
-    const agregacoes = await prisma.pedido.aggregate({
-      where: { estabelecimentoId: estabelecimentoId!, status: { not: 'cancelado' } },
-      _sum: { total: true },
-      _avg: { total: true },
-    });
-
-    // Vendas dos últimos 30 dias, agrupadas por data
-    const inicio30Dias = new Date();
-    inicio30Dias.setDate(inicio30Dias.getDate() - 29);
-    inicio30Dias.setHours(0, 0, 0, 0);
-
-    const pedidos30Dias = await prisma.pedido.findMany({
+    // Estatísticas do período selecionado (padrão: hoje, em Brasília).
+    const pedidosPeriodo = await prisma.pedido.findMany({
       where: {
         estabelecimentoId: estabelecimentoId!,
         status: { not: 'cancelado' },
-        criadoEm: { gte: inicio30Dias },
+        criadoEm: { gte: inicioUTC, lte: fimUTC },
       },
       select: { criadoEm: true, total: true },
     });
 
-    const vendasPorDia = pedidos30Dias.reduce<Record<string, { data: string; pedidos: number; faturamento: number }>>(
+    const totalPedidos = pedidosPeriodo.length;
+    const faturamentoTotal = pedidosPeriodo.reduce((soma, p) => soma + Number(p.total), 0);
+    const ticketMedio = totalPedidos > 0 ? faturamentoTotal / totalPedidos : 0;
+
+    const vendasPorDiaMap = pedidosPeriodo.reduce<Record<string, { data: string; pedidos: number; faturamento: number }>>(
       (acc, p) => {
-        const dia = p.criadoEm.toISOString().slice(0, 10);
+        const dia = diaSaoPaulo(p.criadoEm);
         const anterior = acc[dia] ?? { data: dia, pedidos: 0, faturamento: 0 };
         return {
           ...acc,
@@ -179,7 +180,13 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       {},
     );
 
-    // Avaliações
+    const vendasPorDia = Object.values(vendasPorDiaMap).sort((a, b) => a.data.localeCompare(b.data));
+    const topDias = [...vendasPorDia]
+      .sort((a, b) => b.faturamento - a.faturamento)
+      .slice(0, 5)
+      .map((d) => ({ data: d.data, faturamento: d.faturamento }));
+
+    // Avaliações (sem filtro de período — mesmo comportamento de antes).
     const avaliacoesAgregadas = await prisma.pedido.aggregate({
       where: { estabelecimentoId: estabelecimentoId!, avaliacao: { not: null } },
       _avg:   { avaliacao: true },
@@ -209,15 +216,14 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       },
       cardapio:        estabelecimento.itens,
       pedidosRecentes: estabelecimento.pedidos,
+      periodo: { inicio: inicioLabel, fim: fimLabel },
       estatisticas: {
+        emAndamento,
         totalPedidos,
-        faturamentoTotal: Number(agregacoes._sum.total ?? 0),
-        ticketMedio:      Number(agregacoes._avg.total ?? 0),
-        porStatus: estatisticas.map((item: { status: string; _count: { id: number } }) => ({
-          status:     item.status,
-          quantidade: item._count.id,
-        })),
-        vendasPorDia: Object.values(vendasPorDia).sort((a, b) => a.data.localeCompare(b.data)),
+        faturamentoTotal,
+        ticketMedio,
+        vendasPorDia,
+        topDias,
       },
       avaliacoes: {
         media:        avaliacoesAgregadas._avg.avaliacao

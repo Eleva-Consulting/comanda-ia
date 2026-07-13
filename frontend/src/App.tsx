@@ -21,6 +21,7 @@ import RedefinirSenha from './pages/RedefinirSenha'
 import DefinirSenha from './pages/DefinirSenha'
 import Operadores from './pages/Operadores'
 import Auditoria from './pages/Auditoria'
+import Financeiro from './pages/Financeiro'
 import Insumos from './pages/Insumos'
 import Estoque from './pages/Estoque'
 import Historico from './pages/Historico'
@@ -49,6 +50,7 @@ function App() {
       <Route path="/cardapio"  element={<RotaPermissao permissao="cardapio"><Cardapio /></RotaPermissao>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
       <Route path="/auditoria" element={<RotaDono><Auditoria /></RotaDono>} />
+      <Route path="/financeiro" element={<RotaDono><Financeiro /></RotaDono>} />
       <Route path="/insumos" element={<RotaPermissao permissao="estoque"><Insumos /></RotaPermissao>} />
       <Route path="/estoque" element={<RotaPermissao permissao="estoque"><Estoque /></RotaPermissao>} />
       <Route path="/historico"      element={<RotaPermissao permissao="historico"><Historico /></RotaPermissao>} />
