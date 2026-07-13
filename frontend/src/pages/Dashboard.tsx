@@ -1,23 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, Star, Calendar, type LucideIcon } from 'lucide-react'
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts'
+import { Wallet, ShoppingBag, TrendingUp, Receipt, Loader2, Star, type LucideIcon } from 'lucide-react'
 import Layout from '../components/Layout'
-import FiltroPeriodo from '../components/FiltroPeriodo'
 import { API_URL } from '../lib/api'
-
-interface VendaDia {
-  data: string
-  pedidos: number
-  faturamento: number
-}
 
 interface AvaliacaoRecente {
   clienteNome: string
@@ -47,14 +31,11 @@ interface DashboardData {
     criadoEm: string
     tipoEntrega: string
   }>
-  periodo: { inicio: string; fim: string }
   estatisticas: {
     emAndamento: number
     totalPedidos: number
     faturamentoTotal: number
     ticketMedio: number
-    vendasPorDia: VendaDia[]
-    topDias: Array<{ data: string; faturamento: number }>
   }
   avaliacoes: {
     media: number | null
@@ -93,11 +74,6 @@ function formatarData(data: string): string {
   })
 }
 
-function formatarDia(iso: string): string {
-  const [, mes, dia] = iso.split('-')
-  return `${dia}/${mes}`
-}
-
 function Estrelas({ nota, tamanho = 'sm' }: { nota: number; tamanho?: 'sm' | 'lg' }) {
   const cls = tamanho === 'lg' ? 'h-6 w-6' : 'h-3.5 w-3.5'
   return (
@@ -116,21 +92,18 @@ export default function Dashboard() {
   const token = localStorage.getItem('token')
   const [dados, setDados] = useState<DashboardData | null>(null)
   const [carregando, setCarregando] = useState(true)
-  const [periodo, setPeriodo] = useState<{ inicio: string; fim: string } | null>(null)
 
   useEffect(() => {
     if (!token) return
 
-    const params = periodo ? `?inicio=${periodo.inicio}&fim=${periodo.fim}` : ''
-    setCarregando(true)
-    fetch(`${API_URL}/meu-estabelecimento/dashboard${params}`, {
+    fetch(`${API_URL}/meu-estabelecimento/dashboard`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((d: DashboardData) => setDados(d))
       .catch(() => null)
       .finally(() => setCarregando(false))
-  }, [token, periodo])
+  }, [token])
 
   if (carregando && !dados) {
     return (
@@ -150,11 +123,6 @@ export default function Dashboard() {
     )
   }
 
-  const graficoData = dados.estatisticas.vendasPorDia.map((d) => ({
-    ...d,
-    label: formatarDia(d.data),
-  }))
-
   const { avaliacoes } = dados
   const maxDistribuicao = Math.max(...(avaliacoes.distribuicao.map((d) => d.quantidade)), 1)
 
@@ -162,21 +130,19 @@ export default function Dashboard() {
     <Layout>
       <div className="mb-8">
         <h2 className="text-2xl font-extrabold">Olá, {dados.estabelecimento.nome}</h2>
-        <p className="mt-1 text-sm text-zinc-400">Visão geral do seu estabelecimento</p>
+        <p className="mt-1 text-sm text-zinc-400">Visão geral do seu estabelecimento hoje</p>
       </div>
-
-      <FiltroPeriodo onMudarPeriodo={(inicio, fim) => setPeriodo({ inicio, fim })} />
 
       {/* KPIs */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label={`Faturamento — ${formatarDia(dados.periodo.inicio)} a ${formatarDia(dados.periodo.fim)}`}
+          label="Faturamento (hoje)"
           valor={formatarBRL(dados.estatisticas.faturamentoTotal)}
           Icone={Wallet}
           cor="emerald"
         />
         <KpiCard
-          label="Pedidos no período"
+          label="Pedidos (hoje)"
           valor={dados.estatisticas.totalPedidos.toString()}
           Icone={ShoppingBag}
           cor="orange"
@@ -188,66 +154,12 @@ export default function Dashboard() {
           cor="sky"
         />
         <KpiCard
-          label="Ticket médio"
+          label="Ticket médio (hoje)"
           valor={formatarBRL(dados.estatisticas.ticketMedio)}
           Icone={Receipt}
           cor="purple"
         />
       </div>
-
-      {/* Top 5 dias */}
-      {dados.estatisticas.topDias.length > 0 && (
-        <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
-            <Calendar className="h-5 w-5 text-orange-400" /> Dias que mais venderam
-          </h3>
-          <div className="space-y-2">
-            {dados.estatisticas.topDias.map((d, i) => (
-              <div key={d.data} className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-2.5">
-                <span className="text-sm text-zinc-400">
-                  <span className="mr-2 text-zinc-600">#{i + 1}</span>
-                  {formatarDia(d.data)}
-                </span>
-                <span className="font-bold text-emerald-400">{formatarBRL(d.faturamento)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Gráfico de vendas */}
-      {graficoData.length > 0 && (
-        <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h3 className="mb-6 text-lg font-bold">
-            Faturamento — {formatarDia(dados.periodo.inicio)} a {formatarDia(dados.periodo.fim)}
-          </h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={graficoData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: '#71717a', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tickFormatter={(v: number) => `R$${v}`}
-                tick={{ fill: '#71717a', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                width={56}
-              />
-              <Tooltip
-                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, color: '#f4f4f5' }}
-                formatter={(value) => [formatarBRL(Number(value)), 'Faturamento']}
-                labelFormatter={(l) => `Dia ${l}`}
-              />
-              <Bar dataKey="faturamento" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={32} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       {/* Avaliações */}
       {avaliacoes.total > 0 && (

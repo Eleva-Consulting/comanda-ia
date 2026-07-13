@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { whatsApp } from '../whatsapp.js';
-import { resolverIntervaloPeriodo, diaSaoPaulo } from '../utils/periodoRelatorio.js';
+import { resolverIntervaloPeriodo } from '../utils/periodoRelatorio.js';
 
 const AtualizarEstabelecimentoSchema = Type.Object({
   aceitandoPedidos: Type.Optional(Type.Boolean()),
@@ -15,11 +15,6 @@ const AtualizarEstabelecimentoSchema = Type.Object({
   taxaEntrega:      Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
   evolutionUrl:     Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
   evolutionToken:   Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()])),
-});
-
-const PeriodoQuerySchema = Type.Object({
-  inicio: Type.Optional(Type.String({ minLength: 10, maxLength: 10 })),
-  fim:    Type.Optional(Type.String({ minLength: 10, maxLength: 10 })),
 });
 
 export async function estabelecimentosRoutes(fastify: FastifyInstance) {
@@ -123,10 +118,8 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
 
   fastify.get('/meu-estabelecimento/dashboard', {
     onRequest: [autenticar],
-    schema: { querystring: PeriodoQuerySchema },
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
-    const { inicio, fim } = request.query as { inicio?: string; fim?: string };
 
     const estabelecimento = await prisma.estabelecimento.findUnique({
       where: { id: estabelecimentoId! },
@@ -140,7 +133,8 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
-    const { inicioUTC, fimUTC, inicioLabel, fimLabel } = resolverIntervaloPeriodo(inicio, fim);
+    // Dashboard mostra só o dia de hoje (em Brasília) — histórico/período fica na tela Financeiro.
+    const { inicioUTC, fimUTC } = resolverIntervaloPeriodo();
 
     // "Em andamento" é sempre o estado atual da cozinha — nunca filtrado por período.
     const emAndamentoAgregado = await prisma.pedido.groupBy({
@@ -150,41 +144,19 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
     });
     const emAndamento = emAndamentoAgregado.reduce((soma, item) => soma + item._count.id, 0);
 
-    // Estatísticas do período selecionado (padrão: hoje, em Brasília).
-    const pedidosPeriodo = await prisma.pedido.findMany({
+    // Estatísticas de hoje.
+    const pedidosHoje = await prisma.pedido.findMany({
       where: {
         estabelecimentoId: estabelecimentoId!,
         status: { not: 'cancelado' },
         criadoEm: { gte: inicioUTC, lte: fimUTC },
       },
-      select: { criadoEm: true, total: true },
+      select: { total: true },
     });
 
-    const totalPedidos = pedidosPeriodo.length;
-    const faturamentoTotal = pedidosPeriodo.reduce((soma, p) => soma + Number(p.total), 0);
+    const totalPedidos = pedidosHoje.length;
+    const faturamentoTotal = pedidosHoje.reduce((soma, p) => soma + Number(p.total), 0);
     const ticketMedio = totalPedidos > 0 ? faturamentoTotal / totalPedidos : 0;
-
-    const vendasPorDiaMap = pedidosPeriodo.reduce<Record<string, { data: string; pedidos: number; faturamento: number }>>(
-      (acc, p) => {
-        const dia = diaSaoPaulo(p.criadoEm);
-        const anterior = acc[dia] ?? { data: dia, pedidos: 0, faturamento: 0 };
-        return {
-          ...acc,
-          [dia]: {
-            ...anterior,
-            pedidos:     anterior.pedidos + 1,
-            faturamento: anterior.faturamento + Number(p.total),
-          },
-        };
-      },
-      {},
-    );
-
-    const vendasPorDia = Object.values(vendasPorDiaMap).sort((a, b) => a.data.localeCompare(b.data));
-    const topDias = [...vendasPorDia]
-      .sort((a, b) => b.faturamento - a.faturamento)
-      .slice(0, 5)
-      .map((d) => ({ data: d.data, faturamento: d.faturamento }));
 
     // Avaliações (sem filtro de período — mesmo comportamento de antes).
     const avaliacoesAgregadas = await prisma.pedido.aggregate({
@@ -216,14 +188,11 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       },
       cardapio:        estabelecimento.itens,
       pedidosRecentes: estabelecimento.pedidos,
-      periodo: { inicio: inicioLabel, fim: fimLabel },
       estatisticas: {
         emAndamento,
         totalPedidos,
         faturamentoTotal,
         ticketMedio,
-        vendasPorDia,
-        topDias,
       },
       avaliacoes: {
         media:        avaliacoesAgregadas._avg.avaliacao

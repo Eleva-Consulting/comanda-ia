@@ -26,3 +26,39 @@ export function resolverIntervaloPeriodo(inicioStr?: string, fimStr?: string): {
 
   return { inicioUTC, fimUTC, inicioLabel, fimLabel };
 }
+
+interface PedidoParaVendas {
+  criadoEm: Date;
+  total:    number;
+}
+
+/** Agrupa pedidos por dia-calendário (Brasília) e devolve tanto a série completa quanto os 5
+ *  dias de maior faturamento, ordenados do maior pro menor. */
+export function calcularVendasPorDia(pedidos: PedidoParaVendas[]): {
+  vendasPorDia: Array<{ data: string; pedidos: number; faturamento: number }>;
+  topDias:      Array<{ data: string; faturamento: number }>;
+} {
+  const porDiaMap = pedidos.reduce<Record<string, { data: string; pedidos: number; faturamento: number }>>(
+    (acc, p) => {
+      const dia = diaSaoPaulo(p.criadoEm);
+      const anterior = acc[dia] ?? { data: dia, pedidos: 0, faturamento: 0 };
+      return {
+        ...acc,
+        [dia]: {
+          ...anterior,
+          pedidos:     anterior.pedidos + 1,
+          faturamento: anterior.faturamento + p.total,
+        },
+      };
+    },
+    {},
+  );
+
+  const vendasPorDia = Object.values(porDiaMap).sort((a, b) => a.data.localeCompare(b.data));
+  const topDias = [...vendasPorDia]
+    .sort((a, b) => b.faturamento - a.faturamento)
+    .slice(0, 5)
+    .map((d) => ({ data: d.data, faturamento: d.faturamento }));
+
+  return { vendasPorDia, topDias };
+}
