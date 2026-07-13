@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Loader2, Plus, Search, X, ArrowRightLeft, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Search, X, ArrowRightLeft, Trash2, Pencil } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
@@ -127,6 +127,13 @@ export default function Mesas() {
   const [capacidadeNovaMesa, setCapacidadeNovaMesa] = useState('')
   const [salvandoMesa, setSalvandoMesa] = useState(false)
   const [erroNovaMesa, setErroNovaMesa] = useState<string | null>(null)
+
+  const [mesaEditando, setMesaEditando] = useState<Mesa | null>(null)
+  const [numeroEdicaoMesa, setNumeroEdicaoMesa] = useState('')
+  const [areaEdicaoMesa, setAreaEdicaoMesa] = useState('')
+  const [capacidadeEdicaoMesa, setCapacidadeEdicaoMesa] = useState('')
+  const [salvandoEdicaoMesa, setSalvandoEdicaoMesa] = useState(false)
+  const [erroEdicaoMesa, setErroEdicaoMesa] = useState<string | null>(null)
 
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
@@ -360,6 +367,42 @@ export default function Mesas() {
     }
   }
 
+  function abrirEdicaoMesa(mesa: Mesa) {
+    setMesaEditando(mesa)
+    setNumeroEdicaoMesa(mesa.numero)
+    setAreaEdicaoMesa(mesa.area ?? '')
+    setCapacidadeEdicaoMesa(mesa.capacidade ? String(mesa.capacidade) : '')
+    setErroEdicaoMesa(null)
+  }
+
+  async function salvarEdicaoMesa(e: FormEvent) {
+    e.preventDefault()
+    if (!mesaEditando || !numeroEdicaoMesa.trim()) return
+    setSalvandoEdicaoMesa(true)
+    setErroEdicaoMesa(null)
+    try {
+      const resp = await fetch(`${API_URL}/mesas/${mesaEditando.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero: numeroEdicaoMesa.trim(),
+          area: areaEdicaoMesa.trim() || null,
+          capacidade: capacidadeEdicaoMesa.trim() ? Number(capacidadeEdicaoMesa) : null,
+        }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroEdicaoMesa(dados.erro ?? 'Não foi possível salvar a mesa'); return }
+      setMesas((prev) => prev
+        .map((m) => m.id === dados.id ? { ...m, numero: dados.numero, area: dados.area, capacidade: dados.capacidade } : m)
+        .sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })))
+      setMesaEditando(null)
+    } catch {
+      setErroEdicaoMesa('Falha de conexão')
+    } finally {
+      setSalvandoEdicaoMesa(false)
+    }
+  }
+
   async function cancelarConta() {
     if (!contaSelecionada) return
     setCancelandoConta(true)
@@ -458,17 +501,27 @@ export default function Mesas() {
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {mesas.map((mesa) => (
-                <button
-                  key={mesa.id}
-                  onClick={() => mesa.statusMesa === 'livre' ? abrirMesa(mesa.id) : abrirContaExistente(mesa)}
-                  disabled={abrindoMesaId === mesa.id || carregandoConta}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl border p-4 transition disabled:opacity-50 ${corStatusMesa[mesa.statusMesa]}`}
-                >
-                  {abrindoMesaId === mesa.id
-                    ? <Loader2 className="h-5 w-5 animate-spin" />
-                    : <span className="text-xl font-bold">{mesa.numero}</span>}
-                  <span className="text-xs text-zinc-400">{labelStatusMesa[mesa.statusMesa]}</span>
-                </button>
+                <div key={mesa.id} className="relative">
+                  <button
+                    onClick={() => mesa.statusMesa === 'livre' ? abrirMesa(mesa.id) : abrirContaExistente(mesa)}
+                    disabled={abrindoMesaId === mesa.id || carregandoConta}
+                    className={`flex w-full flex-col items-center justify-center gap-1 rounded-2xl border p-4 transition disabled:opacity-50 ${corStatusMesa[mesa.statusMesa]}`}
+                  >
+                    {abrindoMesaId === mesa.id
+                      ? <Loader2 className="h-5 w-5 animate-spin" />
+                      : <span className="text-xl font-bold">{mesa.numero}</span>}
+                    <span className="text-xs text-zinc-400">{labelStatusMesa[mesa.statusMesa]}</span>
+                  </button>
+                  {podeCadastrarMesa && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); abrirEdicaoMesa(mesa) }}
+                      title="Editar mesa"
+                      className="absolute right-1.5 top-1.5 rounded-lg p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -674,6 +727,54 @@ export default function Mesas() {
               <button
                 type="button"
                 onClick={() => setNovaMesaAberta(false)}
+                className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {mesaEditando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setMesaEditando(null)}>
+          <form onSubmit={salvarEdicaoMesa} className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Editar mesa</h3>
+            <div className="space-y-2">
+              <input
+                autoFocus
+                value={numeroEdicaoMesa}
+                onChange={(e) => setNumeroEdicaoMesa(e.target.value)}
+                placeholder="Número (ex: 12)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+              <input
+                value={areaEdicaoMesa}
+                onChange={(e) => setAreaEdicaoMesa(e.target.value)}
+                placeholder="Área (opcional, ex: Salão, Varanda)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                min={1}
+                value={capacidadeEdicaoMesa}
+                onChange={(e) => setCapacidadeEdicaoMesa(e.target.value)}
+                placeholder="Capacidade (opcional, nº de pessoas)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+            </div>
+            {erroEdicaoMesa && <p className="mt-2 text-sm text-red-400">{erroEdicaoMesa}</p>}
+            <div className="mt-3 flex gap-2">
+              <button
+                type="submit"
+                disabled={salvandoEdicaoMesa || !numeroEdicaoMesa.trim()}
+                className="flex-1 rounded-xl bg-orange-500 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {salvandoEdicaoMesa ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMesaEditando(null)}
                 className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700"
               >
                 Cancelar

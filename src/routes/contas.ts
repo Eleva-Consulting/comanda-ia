@@ -279,16 +279,17 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const serializado = serializarItemComanda(itemComanda);
     getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
 
-    if (itemComanda.setorId) {
-      const itemParaProducao = await prisma.itemComanda.findUnique({
-        where:   { id: itemComanda.id },
-        include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
-      });
-      if (itemParaProducao) {
-        getIO()
-          .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
-          .emit('producao:item-novo', serializarItemProducao(itemParaProducao));
-      }
+    // Emite pra Produção mesmo sem setor (cai na sala ampla do estabelecimento) —
+    // um item sem Setor vinculado no Cardápio ainda deve aparecer em tempo real
+    // pra quem acompanha a produção geral (ex: DONO, ou operador sem setor fixo).
+    const itemParaProducao = await prisma.itemComanda.findUnique({
+      where:   { id: itemComanda.id },
+      include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+    });
+    if (itemParaProducao) {
+      getIO()
+        .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
+        .emit('producao:item-novo', serializarItemProducao(itemParaProducao));
     }
 
     return reply.status(201).send(serializado);
@@ -372,7 +373,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
       });
     }
 
-    if (atualizado.setorId) {
+    {
       const itemParaProducao = await prisma.itemComanda.findUnique({
         where:   { id: atualizado.id },
         include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
@@ -426,7 +427,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
       },
     });
 
-    if (atualizado.setorId) {
+    {
       const itemParaProducao = await prisma.itemComanda.findUnique({
         where:   { id: atualizado.id },
         include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
