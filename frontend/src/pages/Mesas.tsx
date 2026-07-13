@@ -3,6 +3,7 @@ import { Loader2, Plus, Search, X, ArrowRightLeft, Trash2 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
+import { temPermissao } from '../lib/permissoes'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,14 @@ export default function Mesas() {
   const [senhaCancelamento, setSenhaCancelamento] = useState('')
   const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
   const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
+
+  const podeCadastrarMesa = temPermissao('configuracoes')
+  const [novaMesaAberta, setNovaMesaAberta] = useState(false)
+  const [numeroNovaMesa, setNumeroNovaMesa] = useState('')
+  const [areaNovaMesa, setAreaNovaMesa] = useState('')
+  const [capacidadeNovaMesa, setCapacidadeNovaMesa] = useState('')
+  const [salvandoMesa, setSalvandoMesa] = useState(false)
+  const [erroNovaMesa, setErroNovaMesa] = useState<string | null>(null)
 
   function carregarMesas() {
     fetch(`${API_URL}/mesas`, { headers: { Authorization: `Bearer ${token}` } })
@@ -317,6 +326,40 @@ export default function Mesas() {
     }
   }
 
+  function abrirNovaMesa() {
+    setNumeroNovaMesa('')
+    setAreaNovaMesa('')
+    setCapacidadeNovaMesa('')
+    setErroNovaMesa(null)
+    setNovaMesaAberta(true)
+  }
+
+  async function criarMesa(e: FormEvent) {
+    e.preventDefault()
+    if (!numeroNovaMesa.trim()) return
+    setSalvandoMesa(true)
+    setErroNovaMesa(null)
+    try {
+      const resp = await fetch(`${API_URL}/mesas`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero: numeroNovaMesa.trim(),
+          area: areaNovaMesa.trim() || null,
+          capacidade: capacidadeNovaMesa.trim() ? Number(capacidadeNovaMesa) : null,
+        }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroNovaMesa(dados.erro ?? 'Não foi possível cadastrar a mesa'); return }
+      setMesas((prev) => [...prev, { ...dados, contaAbertaId: null, statusMesa: 'livre' }].sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })))
+      setNovaMesaAberta(false)
+    } catch {
+      setErroNovaMesa('Falha de conexão')
+    } finally {
+      setSalvandoMesa(false)
+    }
+  }
+
   async function cancelarConta() {
     if (!contaSelecionada) return
     setCancelandoConta(true)
@@ -392,12 +435,26 @@ export default function Mesas() {
     <Layout>
       {!contaSelecionada ? (
         <div>
-          <h2 className="mb-6 text-2xl font-extrabold">Mesas</h2>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-2xl font-extrabold">Mesas</h2>
+            {podeCadastrarMesa && (
+              <button
+                onClick={abrirNovaMesa}
+                className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+              >
+                <Plus className="h-4 w-4" /> Cadastrar mesa
+              </button>
+            )}
+          </div>
           {erroGrade && <p className="mb-4 text-sm text-red-400">{erroGrade}</p>}
           {carregandoMesas ? (
             <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
           ) : mesas.length === 0 ? (
-            <p className="text-sm text-zinc-400">Nenhuma mesa cadastrada. Cadastre em Configurações.</p>
+            <p className="text-sm text-zinc-400">
+              {podeCadastrarMesa
+                ? 'Nenhuma mesa cadastrada. Clique em "Cadastrar mesa" para adicionar a primeira.'
+                : 'Nenhuma mesa cadastrada. Peça pro dono cadastrar em Mesas.'}
+            </p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {mesas.map((mesa) => (
@@ -575,6 +632,54 @@ export default function Mesas() {
               </ul>
             )}
           </div>
+        </div>
+      )}
+
+      {novaMesaAberta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setNovaMesaAberta(false)}>
+          <form onSubmit={criarMesa} className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Cadastrar mesa</h3>
+            <div className="space-y-2">
+              <input
+                autoFocus
+                value={numeroNovaMesa}
+                onChange={(e) => setNumeroNovaMesa(e.target.value)}
+                placeholder="Número (ex: 12)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+              <input
+                value={areaNovaMesa}
+                onChange={(e) => setAreaNovaMesa(e.target.value)}
+                placeholder="Área (opcional, ex: Salão, Varanda)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                min={1}
+                value={capacidadeNovaMesa}
+                onChange={(e) => setCapacidadeNovaMesa(e.target.value)}
+                placeholder="Capacidade (opcional, nº de pessoas)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+            </div>
+            {erroNovaMesa && <p className="mt-2 text-sm text-red-400">{erroNovaMesa}</p>}
+            <div className="mt-3 flex gap-2">
+              <button
+                type="submit"
+                disabled={salvandoMesa || !numeroNovaMesa.trim()}
+                className="flex-1 rounded-xl bg-orange-500 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {salvandoMesa ? 'Salvando...' : 'Cadastrar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNovaMesaAberta(false)}
+                className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
