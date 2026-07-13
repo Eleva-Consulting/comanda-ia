@@ -103,13 +103,13 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
       const rodada = await tx.rodadaComanda.create({
         data: { comandaId: id, criadoPorUsuarioId: userId },
       });
-      const itensCriados = await Promise.all(
-        itensParaCriar.map((item) =>
-          tx.itemComanda.create({
-            data: { ...item, comandaId: id, rodadaId: rodada.id, criadoPorUsuarioId: userId },
-          }),
-        ),
-      );
+      const itensCriados = [];
+      for (const item of itensParaCriar) {
+        const itemCriado = await tx.itemComanda.create({
+          data: { ...item, comandaId: id, rodadaId: rodada.id, criadoPorUsuarioId: userId },
+        });
+        itensCriados.push(itemCriado);
+      }
       return { rodada, itensCriados };
     });
 
