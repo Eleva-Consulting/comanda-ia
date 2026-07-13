@@ -317,6 +317,45 @@ VITE_API_URL=http://localhost:3000
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-13
+- **Dashboard com filtro de período + tela Financeiro mesclados no main (`d61e2ae`) e em
+  produção.** O "Faturamento total" do Dashboard era, na verdade, a soma de tudo desde sempre
+  (sem filtro de data nenhum) — confundia o dono tentando ver "quanto vendi hoje". Agora o
+  Dashboard tem um filtro de período reutilizável (Hoje/7 dias/30 dias/Este mês + intervalo
+  customizado), com "Hoje" como padrão; KPIs de faturamento/pedidos/ticket médio passam a
+  respeitar o período selecionado, "Em andamento" continua sempre ao vivo (nunca filtrado, é o
+  estado atual da cozinha). Novo card "Dias que mais venderam" (top 5 do período). Nova tela
+  `/financeiro` (só DONO, mesmo padrão da Auditoria) com a quebra do faturamento por forma de
+  pagamento (Pix, Dinheiro, Cartão Crédito/Débito). Corrigido de brinde um bug pré-existente de
+  timezone: o agrupamento de vendas por dia usava `toISOString()` (UTC bruto), o que podia
+  contar um pedido feito à noite em Brasília no dia seguinte — agora usa o calendário de
+  `America/Sao_Paulo` de verdade. Escopo deliberado: só `Pedido` (delivery/balcão/link
+  público) — módulo de Mesas fica de fora por agora. Implementado via
+  subagent-driven-development (6 tasks + revisão final). Achado de processo (2ª vez nesta
+  iniciativa): o subagente da Task 1 commitou por engano na `main` do checkout principal —
+  pego pela revisão da tarefa, confirmado sem impacto (nunca chegou no `origin/main`), corrigido
+  com reset + cherry-pick no worktree correto. Achado de UX real (Task 5, depois propagado
+  também pra Financeiro.tsx na revisão final): o spinner de carregamento cobria a página inteira
+  a cada troca de período, fazendo o filtro desmontar e perder o destaque do preset ativo (dados
+  sempre corretos, só o indicador visual resetava) — corrigido em 1 linha nas duas telas,
+  verificado ao vivo no navegador.
+- **Pedido de balcão ganhou "Pix (maquininha)" como forma de pagamento (`799f2c2`).** Cliente às
+  vezes paga Pix na maquininha física do próprio estabelecimento, não pelo checkout online — até
+  então isso travava o pedido (tentava criar uma cobrança real via Mercado Pago, bloqueando se
+  não conectado, ou ficando preso "aguardando pagamento" pra sempre se conectado, já que o
+  pagamento real acontece fora do sistema). Novo valor no enum `FormaPagamento`,
+  `pix_maquininha`, se comporta como dinheiro/cartão — registro simples, pedido direto pra
+  cozinha. Escopo: pedido manual/balcão e Caixa/Mesas; checkout público não ganhou essa opção
+  (não tem "maquininha física" numa compra remota).
+- **⚠️ Flag temporária desliga a exigência de Mercado Pago pra Pix em toda a plataforma
+  (`9f8a32e`).** Decisão do usuário enquanto ajusta processos internos — `Pix` (checkout público
+  e balcão) virou só um registro simples em todos os estabelecimentos, sem cobrança real nem
+  confirmação automática, até ser reativado. Controlado por
+  `EXIGIR_MERCADO_PAGO_PARA_PIX` em `src/mercadopago.ts`, hoje `false`. Reverter: só mudar essa
+  flag pra `true`, nenhum outro código muda — o resto da integração (webhook, confirmação
+  automática) continua intacto por baixo. **Não confundir com bug se Pix não confirmar
+  automaticamente enquanto essa flag estiver assim.**
+
 ### 2026-07-11 (continuação)
 - **Checkout com Mercado Pago mesclado no main e em produção (`324d081`) — credenciais reais
   configuradas e fluxo testado de ponta a ponta.** Reconciliação com o trabalho paralelo do
@@ -629,7 +668,10 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
 
 ## Próximas features planejadas
 
-1. **Painel de avaliações** — ver média de estrelas e comentários no Dashboard
-2. **Relatórios avançados** — exportar histórico em CSV, filtro por período
-3. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
-4. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
+1. **Relatórios avançados** — exportar histórico/financeiro em CSV (filtro por período já
+   entregue em 2026-07-13, no Dashboard e na tela Financeiro)
+2. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
+3. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
+
+> Painel de avaliações (média de estrelas + comentários no Dashboard) já estava entregue antes
+> desta lista ser revisada — ver seção "Avaliações dos clientes" em `Dashboard.tsx`.
