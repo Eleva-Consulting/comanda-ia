@@ -318,6 +318,12 @@ VITE_API_URL=http://localhost:3000
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
 ### 2026-07-13
+- **Botão "Cadastrar mesa" na tela de Mesas (`907b3bd`).** A tela de Mesas dizia "Cadastre em
+  Configurações" mas Configurações nunca teve essa UI — o backend já expunha `POST /mesas` desde
+  a Fase 1b (numero/área/capacidade), só faltava um jeito de chamá-lo. Botão + modal adicionados
+  direto na tela de Mesas, visível só pra quem tem a permissão `configuracoes` (mesma que o
+  endpoint já exige — DONO sempre vê, operador só se tiver essa permissão). Testado ao vivo no
+  navegador: cadastro de mesa nova, erro 409 de número duplicado exibido corretamente.
 - **Dashboard com filtro de período + tela Financeiro mesclados no main (`d61e2ae`) e em
   produção.** O "Faturamento total" do Dashboard era, na verdade, a soma de tudo desde sempre
   (sem filtro de data nenhum) — confundia o dono tentando ver "quanto vendi hoje". Agora o
