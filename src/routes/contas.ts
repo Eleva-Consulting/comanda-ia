@@ -71,7 +71,7 @@ interface ItemComandaComPreco {
   [chave: string]: unknown;
 }
 
-function serializarItemComanda(item: ItemComandaComPreco) {
+export function serializarItemComanda(item: ItemComandaComPreco) {
   return { ...item, precoUnit: Number(item.precoUnit) };
 }
 

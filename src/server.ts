@@ -18,6 +18,7 @@ import { bairrosRoutes } from './routes/bairros.js';
 import { setoresRoutes } from './routes/setores.js';
 import { mesasRoutes } from './routes/mesas.js';
 import { contasRoutes } from './routes/contas.js';
+import { rodadasRoutes } from './routes/rodadas.js';
 import { producaoRoutes } from './routes/producao.js';
 import { pagamentosRoutes } from './routes/pagamentos.js';
 import { auditoriaRoutes } from './routes/auditoria.js';
@@ -81,6 +82,7 @@ export async function buildServer() {
   await fastify.register(setoresRoutes);
   await fastify.register(mesasRoutes);
   await fastify.register(contasRoutes);
+  await fastify.register(rodadasRoutes);
   await fastify.register(producaoRoutes);
   await fastify.register(pagamentosRoutes);
   await fastify.register(auditoriaRoutes);
