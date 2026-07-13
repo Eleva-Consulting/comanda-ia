@@ -329,6 +329,10 @@ VITE_API_URL=http://localhost:3000
   (scroll horizontal) sem mudança de comportamento, só passou a reaproveitar os mesmos arrays de
   itens em vez de duplicar todo o JSX entre desktop/mobile. Reproduzido e verificado ao vivo no
   navegador habilitando todos os módulos temporariamente na galeteria de teste.
+  **Complementado (`df9fe7f`)** com passe de acessibilidade/toque: Escape fecha o dropdown "Mais"
+  (além de clique fora), `aria-haspopup`/`aria-expanded`/`role=menu` no menu, `aria-label` nos
+  botões de notificação e sair, e alvo de toque da nav mobile e dos botões de ícone aumentado pra
+  ~44px (nav desktop continua compacta, pensada pra mouse).
 - **Botão "Cadastrar mesa" na tela de Mesas (`907b3bd`).** A tela de Mesas dizia "Cadastre em
   Configurações" mas Configurações nunca teve essa UI — o backend já expunha `POST /mesas` desde
   a Fase 1b (numero/área/capacidade), só faltava um jeito de chamá-lo. Botão + modal adicionados
