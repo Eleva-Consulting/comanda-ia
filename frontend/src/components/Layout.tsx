@@ -29,12 +29,18 @@ interface Props {
   headerExtra?: ReactNode
 }
 
+const linkColorClass = (isActive: boolean) =>
+  isActive
+    ? 'bg-orange-500/15 text-orange-400'
+    : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+
+// Nav desktop: alvo de clique com mouse, padding compacto.
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-    isActive
-      ? 'bg-orange-500/15 text-orange-400'
-      : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-  }`
+  `rounded-lg px-3 py-1.5 text-sm font-medium transition ${linkColorClass(isActive)}`
+
+// Nav mobile: alvo de toque real (garçom/operador no celular) — mínimo ~44px de altura.
+const linkClassMobile = ({ isActive }: { isActive: boolean }) =>
+  `rounded-lg px-3 py-3 text-sm font-medium transition ${linkColorClass(isActive)}`
 
 export default function Layout({ children, headerExtra }: Props) {
   const navigate = useNavigate()
@@ -143,8 +149,15 @@ export default function Layout({ children, headerExtra }: Props) {
     function aoClicarFora(e: MouseEvent) {
       if (menuMaisRef.current && !menuMaisRef.current.contains(e.target as Node)) setMenuMaisAberto(false)
     }
+    function aoPressionarEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuMaisAberto(false)
+    }
     document.addEventListener('mousedown', aoClicarFora)
-    return () => document.removeEventListener('mousedown', aoClicarFora)
+    document.addEventListener('keydown', aoPressionarEscape)
+    return () => {
+      document.removeEventListener('mousedown', aoClicarFora)
+      document.removeEventListener('keydown', aoPressionarEscape)
+    }
   }, [menuMaisAberto])
 
   return (
@@ -175,6 +188,8 @@ export default function Layout({ children, headerExtra }: Props) {
               <div className="relative" ref={menuMaisRef}>
                 <button
                   onClick={() => setMenuMaisAberto((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuMaisAberto}
                   className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                     maisAtivo ? 'bg-orange-500/15 text-orange-400' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                   }`}
@@ -183,11 +198,12 @@ export default function Layout({ children, headerExtra }: Props) {
                   <ChevronDown className={`h-3.5 w-3.5 transition-transform ${menuMaisAberto ? 'rotate-180' : ''}`} />
                 </button>
                 {menuMaisAberto && (
-                  <div className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-lg">
+                  <div role="menu" className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-lg">
                     {itensSecundarios.map((item) => (
                       <NavLink
                         key={item.to}
                         to={item.to}
+                        role="menuitem"
                         onClick={() => setMenuMaisAberto(false)}
                         className={({ isActive }) =>
                           `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
@@ -210,16 +226,18 @@ export default function Layout({ children, headerExtra }: Props) {
             {pushSuportado && (
               <button
                 onClick={pushAtivo ? desativarPush : ativarPush}
-                className={`rounded-lg p-2 transition hover:bg-zinc-800 ${pushAtivo ? 'text-orange-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+                className={`rounded-lg p-3 transition hover:bg-zinc-800 ${pushAtivo ? 'text-orange-400' : 'text-zinc-400 hover:text-zinc-200'}`}
                 title={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
+                aria-label={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
               >
                 {pushAtivo ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
               </button>
             )}
             <button
               onClick={handleSair}
-              className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+              className="rounded-lg p-3 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
               title="Sair"
+              aria-label="Sair"
             >
               <LogOut className="h-5 w-5" />
             </button>
@@ -229,7 +247,7 @@ export default function Layout({ children, headerExtra }: Props) {
         {/* Nav mobile — rolagem horizontal, sem menu "Mais" (não há problema de espaço num row scrollável) */}
         <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
           {[...itensPrincipais, ...itensSecundarios].map((item) => (
-            <NavLink key={item.to} to={item.to} className={(state) => `shrink-0 ${linkClass(state)}`}>
+            <NavLink key={item.to} to={item.to} className={(state) => `shrink-0 ${linkClassMobile(state)}`}>
               <span className="flex items-center gap-1.5">
                 <item.icon className="h-3.5 w-3.5" />
                 {item.label}
