@@ -95,6 +95,17 @@ export function serializarConta(conta: ContaComComandas) {
   };
 }
 
+export async function emitirAtualizacaoItemComanda(estabelecimentoId: string, itemId: string) {
+  const itemParaProducao = await prisma.itemComanda.findUnique({
+    where:   { id: itemId },
+    include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+  });
+  if (!itemParaProducao) return;
+  getIO()
+    .to(salaProducao(estabelecimentoId, itemParaProducao.setorId))
+    .emit('producao:item-atualizado', serializarItemProducao(itemParaProducao));
+}
+
 export async function contasRoutes(fastify: FastifyInstance) {
   // ── GET /contas ─────────────────────────────────────────────────────────────
   // ?status=aberta,aguardando_pagamento,fechada,cancelada — default: só as em andamento.
@@ -373,17 +384,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
       });
     }
 
-    {
-      const itemParaProducao = await prisma.itemComanda.findUnique({
-        where:   { id: atualizado.id },
-        include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
-      });
-      if (itemParaProducao) {
-        getIO()
-          .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
-          .emit('producao:item-atualizado', serializarItemProducao(itemParaProducao));
-      }
-    }
+    await emitirAtualizacaoItemComanda(estabelecimentoId!, atualizado.id);
 
     return serializado;
   });
@@ -427,17 +428,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
       },
     });
 
-    {
-      const itemParaProducao = await prisma.itemComanda.findUnique({
-        where:   { id: atualizado.id },
-        include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
-      });
-      if (itemParaProducao) {
-        getIO()
-          .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
-          .emit('producao:item-atualizado', serializarItemProducao(itemParaProducao));
-      }
-    }
+    await emitirAtualizacaoItemComanda(estabelecimentoId!, atualizado.id);
 
     return serializado;
   });

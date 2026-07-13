@@ -5,7 +5,8 @@ import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
-import { serializarItemComanda } from './contas.js';
+import { transicaoProducaoValida, proximoStatusAtivo } from '../utils/statusProducao.js';
+import { serializarItemComanda, emitirAtualizacaoItemComanda } from './contas.js';
 
 const ItemRodadaSchema = Type.Object({
   itemCardapioId: Type.String({ minLength: 1 }),
@@ -160,5 +161,46 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
       comandaNome: rodada.comanda.nome,
       itens:       rodada.itens.map(serializarItemComanda),
     };
+  });
+
+  // ── PATCH /rodadas/:id/avancar ───────────────────────────────────────────────
+  // Avança cada item elegível da rodada pro seu próprio próximo estágio — sem
+  // status-alvo no body (ver Global Constraints do plano). Itens de outro setor
+  // (quando o usuário tem setor fixo), cancelados, ou já entregues são ignorados.
+  fastify.patch('/rodadas/:id/avancar', {
+    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
+    schema: { params: RodadaParamsSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { estabelecimentoId, setorId } = request.user;
+
+    const rodada = await prisma.rodadaComanda.findFirst({
+      where:   { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+      include: { itens: true },
+    });
+    if (!rodada) return reply.status(404).send({ erro: 'Rodada não encontrada' });
+
+    const itensElegiveis = rodada.itens.filter((item) => setorId ? item.setorId === setorId : true);
+
+    const itensAtualizados = [];
+    for (const item of itensElegiveis) {
+      const proximo = proximoStatusAtivo(item.status);
+      if (!proximo || !transicaoProducaoValida(item.status, proximo)) continue;
+
+      const timestamps: { prontoEm?: Date; entregueEm?: Date } = {};
+      if (proximo === 'pronto')   timestamps.prontoEm   = new Date();
+      if (proximo === 'entregue') timestamps.entregueEm = new Date();
+
+      const atualizado = await prisma.itemComanda.update({
+        where: { id: item.id },
+        data:  { status: proximo, ...timestamps },
+      });
+      const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
+      getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+      await emitirAtualizacaoItemComanda(estabelecimentoId!, atualizado.id);
+      itensAtualizados.push(serializado);
+    }
+
+    return { rodadaId: id, itensAtualizados };
   });
 }
