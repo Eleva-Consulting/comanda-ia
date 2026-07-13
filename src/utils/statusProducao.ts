@@ -21,3 +21,15 @@ export function transicaoProducaoValida(de: StatusProducao, para: StatusProducao
 export function podeCancelarLivremente(status: StatusProducao): boolean {
   return status === 'recebido' || status === 'em_preparo';
 }
+
+// Avanço "positivo" (nunca pra cancelado) usado pelo avanço em lote de uma rodada inteira
+// (PATCH /rodadas/:id/avancar) — cada item avança pro seu próprio próximo estágio ativo.
+const proximoStatusAtivoMap: Partial<Record<StatusProducao, StatusProducao>> = {
+  recebido:   'em_preparo',
+  em_preparo: 'pronto',
+  pronto:     'entregue',
+};
+
+export function proximoStatusAtivo(status: StatusProducao): StatusProducao | null {
+  return proximoStatusAtivoMap[status] ?? null;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { transicaoProducaoValida, podeCancelarLivremente } from './statusProducao.js';
+import { transicaoProducaoValida, podeCancelarLivremente, proximoStatusAtivo } from './statusProducao.js';
 
 describe('transicaoProducaoValida', () => {
   it('permite recebido -> em_preparo', () => {
@@ -44,5 +44,27 @@ describe('podeCancelarLivremente', () => {
   it('bloqueia cancelamento livre em pronto e entregue (exige senha de supervisor)', () => {
     expect(podeCancelarLivremente('pronto')).toBe(false);
     expect(podeCancelarLivremente('entregue')).toBe(false);
+  });
+});
+
+describe('proximoStatusAtivo', () => {
+  it('avança recebido -> em_preparo', () => {
+    expect(proximoStatusAtivo('recebido')).toBe('em_preparo');
+  });
+
+  it('avança em_preparo -> pronto', () => {
+    expect(proximoStatusAtivo('em_preparo')).toBe('pronto');
+  });
+
+  it('avança pronto -> entregue', () => {
+    expect(proximoStatusAtivo('pronto')).toBe('entregue');
+  });
+
+  it('não tem próximo estágio a partir de entregue', () => {
+    expect(proximoStatusAtivo('entregue')).toBe(null);
+  });
+
+  it('não tem próximo estágio a partir de cancelado', () => {
+    expect(proximoStatusAtivo('cancelado')).toBe(null);
   });
 });
