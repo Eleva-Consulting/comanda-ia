@@ -182,6 +182,7 @@ model Usuario {
 
   pushSubscriptions PushSubscription[]
   itensComandaCriados ItemComanda[]
+  rodadasComandaCriadas RodadaComanda[]
   pagamentosRegistrados Pagamento[]
   logsAuditoria         LogAuditoria[]
   movimentacoesEstoque  MovimentacaoEstoque[]
@@ -391,8 +392,24 @@ model Comanda {
 
   itens   ItemComanda[]
   rateios ItemComandaRateio[]
+  rodadas RodadaComanda[]
 
   @@map("comandas")
+}
+
+model RodadaComanda {
+  id       String   @id @default(uuid())
+  criadaEm DateTime @default(now())
+
+  comandaId String
+  comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+
+  criadoPorUsuarioId String?
+  criadoPor          Usuario? @relation(fields: [criadoPorUsuarioId], references: [id])
+
+  itens ItemComanda[]
+
+  @@map("rodadas_comanda")
 }
 
 model ItemComanda {
@@ -416,6 +433,9 @@ model ItemComanda {
 
   setorId String?
   setor   Setor?  @relation(fields: [setorId], references: [id])
+
+  rodadaId String?
+  rodada   RodadaComanda? @relation(fields: [rodadaId], references: [id], onDelete: SetNull)
 
   criadoPorUsuarioId String?
   criadoPor          Usuario? @relation(fields: [criadoPorUsuarioId], references: [id])
