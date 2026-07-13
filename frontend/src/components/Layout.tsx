@@ -1,12 +1,22 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, ComponentType } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router'
-import { Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet, ShieldCheck, Package, TrendingUp, Landmark } from 'lucide-react'
+import { NavLink, useLocation, useNavigate } from 'react-router'
+import {
+  Bell, BellOff, ChefHat, LogOut, Users, X, Table2, ClipboardList, Wallet, ShieldCheck,
+  Package, TrendingUp, Landmark, Home, Flame, BookOpen, History, Settings, ChevronDown,
+} from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { getRole } from '../lib/auth'
 import { temPermissao } from '../lib/permissoes'
 import { API_URL } from '../lib/api'
+
+interface NavItem {
+  to:    string
+  label: string
+  icon:  ComponentType<{ className?: string }>
+  show:  boolean
+}
 
 interface Toast {
   id:          number
@@ -102,6 +112,41 @@ export default function Layout({ children, headerExtra }: Props) {
   const mostrarEstoque = podeEstoque && modulosAtivos.includes('estoque_avancado')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
 
+  // Itens de uso operacional/frequente — sempre visíveis na barra principal.
+  const itensPrincipais: NavItem[] = [
+    { to: '/dashboard', label: 'Home',     icon: Home,          show: isDono },
+    { to: '/mesas',     label: 'Mesas',    icon: Table2,        show: mostrarMesas },
+    { to: '/producao',  label: 'Produção', icon: ClipboardList, show: mostrarMesas },
+    { to: '/caixa',     label: 'Caixa',    icon: Wallet,        show: mostrarCaixa },
+    { to: '/cozinha',   label: 'Cozinha',  icon: Flame,         show: true },
+    { to: '/cardapio',  label: 'Cardápio', icon: BookOpen,      show: podeCardapio },
+  ].filter((item) => item.show)
+
+  // Itens de gestão/back-office — usados com menos frequência, agrupados no menu "Mais".
+  const itensSecundarios: NavItem[] = [
+    { to: '/insumos',       label: 'Estoque',       icon: Package,     show: mostrarEstoque },
+    { to: '/estoque',       label: 'Resultados',    icon: TrendingUp,  show: mostrarEstoque },
+    { to: '/operadores',    label: 'Operadores',    icon: Users,       show: isDono },
+    { to: '/auditoria',     label: 'Auditoria',     icon: ShieldCheck, show: isDono },
+    { to: '/financeiro',    label: 'Financeiro',    icon: Landmark,    show: isDono },
+    { to: '/historico',     label: 'Histórico',     icon: History,     show: podeHistorico },
+    { to: '/configuracoes', label: 'Configurações', icon: Settings,    show: podeConfiguracoes },
+  ].filter((item) => item.show)
+
+  const location = useLocation()
+  const [menuMaisAberto, setMenuMaisAberto] = useState(false)
+  const menuMaisRef = useRef<HTMLDivElement>(null)
+  const maisAtivo = itensSecundarios.some((item) => location.pathname === item.to)
+
+  useEffect(() => {
+    if (!menuMaisAberto) return
+    function aoClicarFora(e: MouseEvent) {
+      if (menuMaisRef.current && !menuMaisRef.current.contains(e.target as Node)) setMenuMaisAberto(false)
+    }
+    document.addEventListener('mousedown', aoClicarFora)
+    return () => document.removeEventListener('mousedown', aoClicarFora)
+  }, [menuMaisAberto])
+
   return (
     <div className="min-h-dvh bg-zinc-950 font-sans text-zinc-100">
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
@@ -116,76 +161,48 @@ export default function Layout({ children, headerExtra }: Props) {
           </NavLink>
 
           {/* Nav desktop */}
-          <nav className="hidden items-center gap-1 sm:flex">
-            {isDono && <NavLink to="/dashboard" className={linkClass}>Home</NavLink>}
-            {mostrarMesas && (
-              <NavLink to="/mesas" className={linkClass}>
+          <nav className="hidden min-w-0 items-center gap-1 sm:flex">
+            {itensPrincipais.map((item) => (
+              <NavLink key={item.to} to={item.to} className={linkClass}>
                 <span className="flex items-center gap-1.5">
-                  <Table2 className="h-3.5 w-3.5" />
-                  Mesas
+                  <item.icon className="h-3.5 w-3.5" />
+                  {item.label}
                 </span>
               </NavLink>
+            ))}
+
+            {itensSecundarios.length > 0 && (
+              <div className="relative" ref={menuMaisRef}>
+                <button
+                  onClick={() => setMenuMaisAberto((v) => !v)}
+                  className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    maisAtivo ? 'bg-orange-500/15 text-orange-400' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                  }`}
+                >
+                  Mais
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${menuMaisAberto ? 'rotate-180' : ''}`} />
+                </button>
+                {menuMaisAberto && (
+                  <div className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-lg">
+                    {itensSecundarios.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMenuMaisAberto(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                            isActive ? 'bg-orange-500/15 text-orange-400' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
+                          }`
+                        }
+                      >
+                        <item.icon className="h-3.5 w-3.5" />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
-            {mostrarMesas && (
-              <NavLink to="/producao" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <ClipboardList className="h-3.5 w-3.5" />
-                  Produção
-                </span>
-              </NavLink>
-            )}
-            {mostrarCaixa && (
-              <NavLink to="/caixa" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <Wallet className="h-3.5 w-3.5" />
-                  Caixa
-                </span>
-              </NavLink>
-            )}
-            {mostrarEstoque && (
-              <NavLink to="/insumos" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <Package className="h-3.5 w-3.5" />
-                  Estoque
-                </span>
-              </NavLink>
-            )}
-            {mostrarEstoque && (
-              <NavLink to="/estoque" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Resultados
-                </span>
-              </NavLink>
-            )}
-            <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
-            {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
-            {isDono && (
-              <NavLink to="/operadores" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5" />
-                  Operadores
-                </span>
-              </NavLink>
-            )}
-            {isDono && (
-              <NavLink to="/auditoria" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Auditoria
-                </span>
-              </NavLink>
-            )}
-            {isDono && (
-              <NavLink to="/financeiro" className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <Landmark className="h-3.5 w-3.5" />
-                  Financeiro
-                </span>
-              </NavLink>
-            )}
-            {podeHistorico && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
-            {podeConfiguracoes && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -209,77 +226,16 @@ export default function Layout({ children, headerExtra }: Props) {
           </div>
         </div>
 
-        {/* Nav mobile */}
+        {/* Nav mobile — rolagem horizontal, sem menu "Mais" (não há problema de espaço num row scrollável) */}
         <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
-          {isDono && <NavLink to="/dashboard" className={linkClass}>Home</NavLink>}
-          {mostrarMesas && (
-            <NavLink to="/mesas" className={linkClass}>
+          {[...itensPrincipais, ...itensSecundarios].map((item) => (
+            <NavLink key={item.to} to={item.to} className={(state) => `shrink-0 ${linkClass(state)}`}>
               <span className="flex items-center gap-1.5">
-                <Table2 className="h-3.5 w-3.5" />
-                Mesas
+                <item.icon className="h-3.5 w-3.5" />
+                {item.label}
               </span>
             </NavLink>
-          )}
-          {mostrarMesas && (
-            <NavLink to="/producao" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <ClipboardList className="h-3.5 w-3.5" />
-                Produção
-              </span>
-            </NavLink>
-          )}
-          {mostrarCaixa && (
-            <NavLink to="/caixa" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <Wallet className="h-3.5 w-3.5" />
-                Caixa
-              </span>
-            </NavLink>
-          )}
-          {mostrarEstoque && (
-            <NavLink to="/insumos" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <Package className="h-3.5 w-3.5" />
-                Estoque
-              </span>
-            </NavLink>
-          )}
-          {mostrarEstoque && (
-            <NavLink to="/estoque" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5" />
-                Resultados
-              </span>
-            </NavLink>
-          )}
-          <NavLink to="/cozinha" className={linkClass}>Cozinha</NavLink>
-          {podeCardapio && <NavLink to="/cardapio" className={linkClass}>Cardápio</NavLink>}
-          {isDono && (
-            <NavLink to="/operadores" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" />
-                Operadores
-              </span>
-            </NavLink>
-          )}
-          {isDono && (
-            <NavLink to="/auditoria" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Auditoria
-              </span>
-            </NavLink>
-          )}
-          {isDono && (
-            <NavLink to="/financeiro" className={linkClass}>
-              <span className="flex items-center gap-1.5">
-                <Landmark className="h-3.5 w-3.5" />
-                Financeiro
-              </span>
-            </NavLink>
-          )}
-          {podeHistorico && <NavLink to="/historico" className={linkClass}>Histórico</NavLink>}
-          {podeConfiguracoes && <NavLink to="/configuracoes" className={linkClass}>Configurações</NavLink>}
+          ))}
         </div>
       </header>
 
