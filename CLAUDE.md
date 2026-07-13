@@ -318,6 +318,17 @@ VITE_API_URL=http://localhost:3000
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
 ### 2026-07-13
+- **Nav do header reorganizada — parava de caber e sobrepunha os ícones (`a8cd006`).** Com
+  todos os módulos ativos (Mesas + Caixa + Estoque avançado) o DONO chegava a ter 13 links
+  numa única linha `flex` sem quebra nem rolagem — os últimos itens (Configurações e às vezes
+  os próprios ícones de notificação/sair) saíam da viewport ou ficavam cobertos, dependendo da
+  largura da tela. Reorganizada em nav orientada por dados: itens operacionais de uso frequente
+  (Home, Mesas, Produção, Caixa, Cozinha, Cardápio) sempre visíveis; itens de gestão/back-office
+  (Estoque, Resultados, Operadores, Auditoria, Financeiro, Histórico, Configurações) agrupados
+  num dropdown "Mais" (destaca em laranja quando a rota ativa está dentro dele). Nav mobile
+  (scroll horizontal) sem mudança de comportamento, só passou a reaproveitar os mesmos arrays de
+  itens em vez de duplicar todo o JSX entre desktop/mobile. Reproduzido e verificado ao vivo no
+  navegador habilitando todos os módulos temporariamente na galeteria de teste.
 - **Botão "Cadastrar mesa" na tela de Mesas (`907b3bd`).** A tela de Mesas dizia "Cadastre em
   Configurações" mas Configurações nunca teve essa UI — o backend já expunha `POST /mesas` desde
   a Fase 1b (numero/área/capacidade), só faltava um jeito de chamá-lo. Botão + modal adicionados
