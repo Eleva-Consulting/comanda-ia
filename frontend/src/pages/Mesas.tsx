@@ -275,7 +275,11 @@ export default function Mesas() {
       if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
       imprimirRodadaAutomaticamente(dados.rodadaId)
       if (dados.itensDescartados?.length > 0) {
-        setErroPedido(`Alguns itens ficaram indisponíveis e não foram enviados: ${dados.itensDescartados.map((d: { itemCardapioId: string }) => d.itemCardapioId).join(', ')}`)
+        const nomes = dados.itensDescartados.map((d: { itemCardapioId: string; motivo?: string }) => {
+          const itemCarrinho = carrinho.find((c) => c.itemCardapioId === d.itemCardapioId)
+          return itemCarrinho?.nome ?? d.motivo ?? d.itemCardapioId
+        })
+        setErroPedido(`Alguns itens ficaram indisponíveis e não foram enviados: ${nomes.join(', ')}`)
       }
       await recarregarContaAtual()
       setCarrinho([])
@@ -744,32 +748,38 @@ export default function Mesas() {
               )}
             </div>
 
-            {carrinho.length > 0 && (
+            {(carrinho.length > 0 || erroPedido) && (
               <div className="border-t border-zinc-800 p-4">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Pedido</p>
-                <ul className="mb-3 space-y-1.5">
-                  {carrinho.map((c) => (
-                    <li key={c.chave} className="flex items-center justify-between gap-2 text-sm">
-                      <div className="min-w-0">
-                        <span>{c.nome}</span>
-                        {c.acompanhamento && <span className="ml-1 text-xs text-orange-400">({c.acompanhamento})</span>}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button onClick={() => alterarQuantidadeCarrinho(c.chave, -1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
-                        <span className="w-4 text-center">{c.quantidade}</span>
-                        <button onClick={() => alterarQuantidadeCarrinho(c.chave, 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                {carrinho.length > 0 && (
+                  <>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Pedido</p>
+                    <ul className="mb-3 space-y-1.5">
+                      {carrinho.map((c) => (
+                        <li key={c.chave} className="flex items-center justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <span>{c.nome}</span>
+                            {c.acompanhamento && <span className="ml-1 text-xs text-orange-400">({c.acompanhamento})</span>}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button onClick={() => alterarQuantidadeCarrinho(c.chave, -1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
+                            <span className="w-4 text-center">{c.quantidade}</span>
+                            <button onClick={() => alterarQuantidadeCarrinho(c.chave, 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
                 {erroPedido && <p className="mb-2 text-sm text-red-400">{erroPedido}</p>}
-                <button
-                  onClick={enviarPedido}
-                  disabled={enviandoPedido}
-                  className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {enviandoPedido ? 'Enviando...' : `Enviar pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
-                </button>
+                {carrinho.length > 0 && (
+                  <button
+                    onClick={enviarPedido}
+                    disabled={enviandoPedido}
+                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {enviandoPedido ? 'Enviando...' : `Enviar pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
+                  </button>
+                )}
               </div>
             )}
           </div>
