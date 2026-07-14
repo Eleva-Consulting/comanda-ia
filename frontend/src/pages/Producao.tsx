@@ -227,6 +227,28 @@ export default function Producao() {
     )
   }
 
+  // Uma rodada "dividida" tem itens não-terminais (não entregue/cancelado) espalhados
+  // por mais de uma coluna de status — acontece quando o operador avança só um item
+  // específico via "(só este)" em vez da rodada inteira. Nesse caso o botão "Avançar
+  // rodada" precisa sumir em todos os fragmentos da rodada: ele chama
+  // PATCH /rodadas/:id/avancar, que avança TODOS os itens elegíveis da rodada no
+  // backend (por design), não só os itens visíveis no card daquela coluna — mostrar o
+  // botão em apenas um fragmento sugeriria (erroneamente) que ele afeta só aquele card.
+  const rodadasDivididas = new Set<string>()
+  {
+    const statusPorRodada = new Map<string, Set<StatusProducao>>()
+    for (const item of itens) {
+      if (!item.rodadaId) continue
+      if (item.status === 'entregue' || item.status === 'cancelado') continue
+      const statusSet = statusPorRodada.get(item.rodadaId) ?? new Set<StatusProducao>()
+      statusSet.add(item.status)
+      statusPorRodada.set(item.rodadaId, statusSet)
+    }
+    for (const [rodadaId, statusSet] of statusPorRodada) {
+      if (statusSet.size > 1) rodadasDivididas.add(rodadaId)
+    }
+  }
+
   return (
     <Layout>
       <h2 className="mb-6 text-2xl font-extrabold">Produção</h2>
@@ -344,7 +366,9 @@ export default function Producao() {
                             )
                           })}
                         </div>
-                        {grupo.rodadaId && grupo.itens.some((i) => labelAvancar[i.status]) && (
+                        {grupo.rodadaId &&
+                          !rodadasDivididas.has(grupo.rodadaId) &&
+                          grupo.itens.some((i) => labelAvancar[i.status]) && (
                           <button
                             onClick={() => avancarRodada(grupo.itens)}
                             disabled={avancandoRodadaId === grupo.rodadaId}
