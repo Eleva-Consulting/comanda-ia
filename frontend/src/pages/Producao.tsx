@@ -17,6 +17,7 @@ interface ItemProducao {
   status: StatusProducao
   recebidoEm: string
   setorId: string | null
+  rodadaId: string | null
   setorNome: string | null
   tempoAlvoMinutos: number | null
   mesaNumero: string
@@ -63,6 +64,7 @@ export default function Producao() {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [avancandoId, setAvancandoId] = useState<string | null>(null)
+  const [avancandoRodadaId, setAvancandoRodadaId] = useState<string | null>(null)
   const [agora, setAgora] = useState(Date.now())
 
   const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
@@ -147,6 +149,40 @@ export default function Producao() {
     }
   }
 
+  // Recebe os itens do grupo já renderizado (não só o rodadaId) pra poder mesclar
+  // só o campo `status` da resposta por cima do item local já conhecido — a resposta
+  // de PATCH /rodadas/:id/avancar traz o ItemComanda "cru" do Prisma (sem os joins de
+  // mesaNumero/comandaNome/setorNome/tempoAlvoMinutos que serializarItemProducao
+  // adiciona), então não dá pra usar a resposta como item completo sem perder esses
+  // campos visuais. O evento de socket 'producao:item-atualizado' já traz a versão
+  // completa; aqui só garantimos a atualização otimista do status, no mesmo padrão
+  // já usado em avancarStatus.
+  async function avancarRodada(itensDoGrupo: ItemProducao[]) {
+    const rodadaId = itensDoGrupo[0]?.rodadaId
+    if (!rodadaId) return
+    setAvancandoRodadaId(rodadaId)
+    try {
+      const resp = await fetch(`${API_URL}/rodadas/${rodadaId}/avancar`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (resp.ok) {
+        const dados = await resp.json()
+        const statusPorId = new Map<string, StatusProducao>(
+          dados.itensAtualizados.map((i: { id: string; status: StatusProducao }) => [i.id, i.status])
+        )
+        for (const item of itensDoGrupo) {
+          const novoStatus = statusPorId.get(item.id)
+          if (novoStatus) atualizarItemLocal({ ...item, status: novoStatus })
+        }
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAvancandoRodadaId(null)
+    }
+  }
+
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
@@ -204,6 +240,14 @@ export default function Producao() {
               .filter((i) => i.status === coluna.status)
               .sort((a, b) => new Date(a.recebidoEm).getTime() - new Date(b.recebidoEm).getTime())
 
+            const gruposDaColuna: { chave: string; rodadaId: string | null; itens: ItemProducao[] }[] = []
+            for (const item of itensDaColuna) {
+              const chave = item.rodadaId ?? item.id
+              const grupoExistente = gruposDaColuna.find((g) => g.chave === chave)
+              if (grupoExistente) grupoExistente.itens.push(item)
+              else gruposDaColuna.push({ chave, rodadaId: item.rodadaId, itens: [item] })
+            }
+
             return (
               <div key={coluna.status} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
                 <div className="mb-3 flex items-center justify-between px-1">
@@ -215,88 +259,105 @@ export default function Producao() {
                   <p className="px-1 text-sm text-zinc-600">Nada por aqui.</p>
                 ) : (
                   <div className="space-y-2">
-                    {itensDaColuna.map((item) => {
-                      const minutos = minutosDesde(item.recebidoEm, agora)
-                      return (
-                        <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-zinc-100">
-                              {item.quantidade}x {item.nomeItem}
-                            </span>
-                            <span className={`flex items-center gap-1 text-xs font-medium ${corCronometro(minutos, item.tempoAlvoMinutos)}`}>
-                              {minutos}min
-                            </span>
-                          </div>
-                          <p className="text-xs text-zinc-500">
-                            Mesa {item.mesaNumero} · {item.comandaNome}
-                          </p>
-                          {item.acompanhamento && (
-                            <p className="mt-1 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
-                          )}
-                          {item.observacao && (
-                            <p className="mt-1 text-xs italic text-zinc-500">{item.observacao}</p>
-                          )}
-                          {labelAvancar[item.status] && (
-                            <button
-                              onClick={() => avancarStatus(item)}
-                              disabled={avancandoId === item.id}
-                              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-orange-500/10 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
-                            >
-                              {avancandoId === item.id
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : <ChefHat className="h-3.5 w-3.5" />}
-                              {labelAvancar[item.status]}
-                            </button>
-                          )}
-
-                          {itemCancelamento?.id === item.id ? (
-                            <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
-                              <input
-                                value={motivoCancelamento}
-                                onChange={(e) => setMotivoCancelamento(e.target.value)}
-                                placeholder={podeCancelarLivre(item.status) ? 'Motivo (opcional)' : 'Motivo (obrigatório)'}
-                                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
-                              />
-                              {!podeCancelarLivre(item.status) && (
-                                <input
-                                  type="password"
-                                  value={senhaCancelamento}
-                                  onChange={(e) => setSenhaCancelamento(e.target.value)}
-                                  placeholder="Senha de supervisor"
-                                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
-                                />
-                              )}
-                              {erroCancelamento && <p className="text-xs text-red-400">{erroCancelamento}</p>}
-                              <div className="flex gap-1.5">
-                                <button
-                                  onClick={confirmarCancelamentoItem}
-                                  disabled={
-                                    enviandoCancelamento ||
-                                    (!podeCancelarLivre(item.status) && (!motivoCancelamento || !senhaCancelamento))
-                                  }
-                                  className="flex-1 rounded bg-red-500 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
-                                >
-                                  Confirmar
-                                </button>
-                                <button
-                                  onClick={() => setItemCancelamento(null)}
-                                  className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
+                    {gruposDaColuna.map((grupo) => (
+                      <div key={grupo.chave} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                        <p className="mb-2 text-xs text-zinc-500">
+                          Mesa {grupo.itens[0].mesaNumero} · {grupo.itens[0].comandaNome}
+                        </p>
+                        <div className="space-y-2">
+                          {grupo.itens.map((item) => {
+                            const minutos = minutosDesde(item.recebidoEm, agora)
+                            return (
+                              <div key={item.id} className="border-b border-zinc-800 pb-2 last:border-0 last:pb-0">
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold text-zinc-100">
+                                    {item.quantidade}x {item.nomeItem}
+                                  </span>
+                                  <span className={`flex items-center gap-1 text-xs font-medium ${corCronometro(minutos, item.tempoAlvoMinutos)}`}>
+                                    {minutos}min
+                                  </span>
+                                </div>
+                                {item.acompanhamento && (
+                                  <p className="mb-1 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
+                                )}
+                                {item.observacao && (
+                                  <p className="mb-1 text-xs italic text-zinc-500">{item.observacao}</p>
+                                )}
+                                {labelAvancar[item.status] && (
+                                  <button
+                                    onClick={() => avancarStatus(item)}
+                                    disabled={avancandoId === item.id}
+                                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-800 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+                                  >
+                                    {avancandoId === item.id
+                                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      : null}
+                                    {labelAvancar[item.status]} (só este)
+                                  </button>
+                                )}
+                                {itemCancelamento?.id === item.id ? (
+                                  <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
+                                    <input
+                                      value={motivoCancelamento}
+                                      onChange={(e) => setMotivoCancelamento(e.target.value)}
+                                      placeholder={podeCancelarLivre(item.status) ? 'Motivo (opcional)' : 'Motivo (obrigatório)'}
+                                      className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                                    />
+                                    {!podeCancelarLivre(item.status) && (
+                                      <input
+                                        type="password"
+                                        value={senhaCancelamento}
+                                        onChange={(e) => setSenhaCancelamento(e.target.value)}
+                                        placeholder="Senha de supervisor"
+                                        className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                                      />
+                                    )}
+                                    {erroCancelamento && <p className="text-xs text-red-400">{erroCancelamento}</p>}
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={confirmarCancelamentoItem}
+                                        disabled={
+                                          enviandoCancelamento ||
+                                          (!podeCancelarLivre(item.status) && (!motivoCancelamento || !senhaCancelamento))
+                                        }
+                                        className="flex-1 rounded bg-red-500 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                                      >
+                                        Confirmar
+                                      </button>
+                                      <button
+                                        onClick={() => setItemCancelamento(null)}
+                                        className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => abrirCancelamentoItem(item)}
+                                    className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-medium text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
+                                  >
+                                    Cancelar item
+                                  </button>
+                                )}
                               </div>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => abrirCancelamentoItem(item)}
-                              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-medium text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
-                            >
-                              Cancelar item
-                            </button>
-                          )}
+                            )
+                          })}
                         </div>
-                      )
-                    })}
+                        {grupo.rodadaId && grupo.itens.some((i) => labelAvancar[i.status]) && (
+                          <button
+                            onClick={() => avancarRodada(grupo.itens)}
+                            disabled={avancandoRodadaId === grupo.rodadaId}
+                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-orange-500/10 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                          >
+                            {avancandoRodadaId === grupo.rodadaId
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <ChefHat className="h-3.5 w-3.5" />}
+                            Avançar rodada
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
