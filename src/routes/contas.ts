@@ -6,7 +6,6 @@ import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
-import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import type { StatusConta, StatusProducao } from '../generated/prisma/enums.js';
 import { Prisma } from '../generated/prisma/client.js';
 
@@ -25,13 +24,6 @@ const AtualizarComandaSchema = Type.Object({
 });
 
 const ComandaParamsSchema = Type.Object({ id: Type.String() });
-
-const AdicionarItemComandaSchema = Type.Object({
-  itemCardapioId: Type.String({ minLength: 1 }),
-  quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
-  observacao:     Type.Optional(Type.String({ maxLength: 300 })),
-  acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
-});
 
 const ItemComandaParamsSchema = Type.Object({ id: Type.String() });
 
@@ -246,64 +238,6 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const serializada = { ...atualizada, itens: atualizada.itens.map(serializarItemComanda) };
     getIO().to(estabelecimentoId!).emit('comanda:atualizada', serializada);
     return serializada;
-  });
-
-  // ── POST /comandas/:id/itens ────────────────────────────────────────────────
-  fastify.post('/comandas/:id/itens', {
-    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
-    schema: { params: ComandaParamsSchema, body: AdicionarItemComandaSchema },
-  }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { itemCardapioId, quantidade, observacao, acompanhamento } = request.body as {
-      itemCardapioId: string; quantidade: number; observacao?: string; acompanhamento?: string;
-    };
-    const { estabelecimentoId, userId } = request.user;
-
-    const comanda = await prisma.comanda.findFirst({
-      where: { id, conta: { estabelecimentoId: estabelecimentoId! } },
-    });
-    if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
-
-    const itemCardapio = await prisma.itemCardapio.findFirst({
-      where:   { id: itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
-      include: { categoria: { select: { opcoesAcompanhamento: true } } },
-    });
-    if (!itemCardapio) return reply.status(400).send({ erro: 'Item não disponível ou não pertence a este estabelecimento' });
-
-    const resultadoAcompanhamento = resolverAcompanhamento(itemCardapio.categoria?.opcoesAcompanhamento, acompanhamento, itemCardapio.nome);
-    if (resultadoAcompanhamento.erro) return reply.status(400).send({ erro: resultadoAcompanhamento.erro });
-
-    const itemComanda = await prisma.itemComanda.create({
-      data: {
-        comandaId:          id,
-        itemCardapioId:     itemCardapio.id,
-        nomeItem:           itemCardapio.nome,
-        quantidade,
-        precoUnit:          Number(itemCardapio.preco) + (resultadoAcompanhamento.precoAdicional ?? 0),
-        observacao:         observacao ?? null,
-        acompanhamento:     acompanhamento ?? null,
-        setorId:            itemCardapio.setorId,
-        criadoPorUsuarioId: userId,
-      },
-    });
-
-    const serializado = serializarItemComanda(itemComanda);
-    getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
-
-    // Emite pra Produção mesmo sem setor (cai na sala ampla do estabelecimento) —
-    // um item sem Setor vinculado no Cardápio ainda deve aparecer em tempo real
-    // pra quem acompanha a produção geral (ex: DONO, ou operador sem setor fixo).
-    const itemParaProducao = await prisma.itemComanda.findUnique({
-      where:   { id: itemComanda.id },
-      include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
-    });
-    if (itemParaProducao) {
-      getIO()
-        .to(salaProducao(estabelecimentoId!, itemParaProducao.setorId))
-        .emit('producao:item-novo', serializarItemProducao(itemParaProducao));
-    }
-
-    return reply.status(201).send(serializado);
   });
 
   // ── PATCH /itens-comanda/:id/status ─────────────────────────────────────────

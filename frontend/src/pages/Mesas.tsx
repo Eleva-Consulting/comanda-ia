@@ -56,6 +56,15 @@ interface ItemCardapio {
   categoria: { id: string; nome: string; opcoesAcompanhamento: OpcaoAcompanhamento[] } | null
 }
 
+interface ItemCarrinho {
+  chave: string // itemCardapioId + acompanhamento, pra permitir 2 linhas do mesmo item com acompanhamentos diferentes
+  itemCardapioId: string
+  nome: string
+  preco: number
+  quantidade: number
+  acompanhamento?: string
+}
+
 // ── Helpers visuais ────────────────────────────────────────────────────────
 
 const corStatusMesa: Record<Mesa['statusMesa'], string> = {
@@ -102,8 +111,10 @@ export default function Mesas() {
   const [cardapio, setCardapio] = useState<ItemCardapio[]>([])
   const [carregandoCardapio, setCarregandoCardapio] = useState(false)
   const [buscaItem, setBuscaItem] = useState('')
-  const [adicionandoItemId, setAdicionandoItemId] = useState<string | null>(null)
   const [escolhendoAcompanhamentoId, setEscolhendoAcompanhamentoId] = useState<string | null>(null)
+  const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
+  const [enviandoPedido, setEnviandoPedido] = useState(false)
+  const [erroPedido, setErroPedido] = useState<string | null>(null)
 
   const [novaComandaAberta, setNovaComandaAberta] = useState(false)
   const [nomeNovaComanda, setNomeNovaComanda] = useState('')
@@ -201,6 +212,8 @@ export default function Mesas() {
   async function abrirModalItem(comandaId: string) {
     setModalItemAberto(comandaId)
     setBuscaItem('')
+    setCarrinho([])
+    setErroPedido(null)
     await carregarCardapioSeNecessario()
   }
 
@@ -212,21 +225,65 @@ export default function Mesas() {
     if (resp.ok) setContaSelecionada(await resp.json())
   }
 
-  async function adicionarItem(itemCardapioId: string, acompanhamento?: string) {
-    if (!modalItemAberto) return
-    setAdicionandoItemId(itemCardapioId)
+  function adicionarAoCarrinho(item: ItemCardapio, acompanhamento?: string) {
     setEscolhendoAcompanhamentoId(null)
+    const chave = `${item.id}::${acompanhamento ?? ''}`
+    setCarrinho((prev) => {
+      const existente = prev.find((c) => c.chave === chave)
+      if (existente) {
+        return prev.map((c) => c.chave === chave ? { ...c, quantidade: c.quantidade + 1 } : c)
+      }
+      return [...prev, { chave, itemCardapioId: item.id, nome: item.nome, preco: Number(item.preco), quantidade: 1, acompanhamento }]
+    })
+  }
+
+  function alterarQuantidadeCarrinho(chave: string, delta: number) {
+    setCarrinho((prev) => prev
+      .map((c) => c.chave === chave ? { ...c, quantidade: c.quantidade + delta } : c)
+      .filter((c) => c.quantidade > 0))
+  }
+
+  function imprimirRodadaAutomaticamente(rodadaId: string) {
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.top      = '-10000px'
+    iframe.style.left     = '-10000px'
+    iframe.style.width    = '1px'
+    iframe.style.height   = '1px'
+    iframe.src = `/imprimir/rodada/${rodadaId}`
+    document.body.appendChild(iframe)
+    setTimeout(() => iframe.remove(), 8000)
+  }
+
+  async function enviarPedido() {
+    if (!modalItemAberto || carrinho.length === 0) return
+    setEnviandoPedido(true)
+    setErroPedido(null)
     try {
-      const resp = await fetch(`${API_URL}/comandas/${modalItemAberto}/itens`, {
+      const resp = await fetch(`${API_URL}/comandas/${modalItemAberto}/rodadas`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemCardapioId, quantidade: 1, ...(acompanhamento ? { acompanhamento } : {}) }),
+        body: JSON.stringify({
+          itens: carrinho.map((c) => ({
+            itemCardapioId: c.itemCardapioId,
+            quantidade: c.quantidade,
+            ...(c.acompanhamento ? { acompanhamento: c.acompanhamento } : {}),
+          })),
+        }),
       })
-      if (resp.ok) await recarregarContaAtual()
-    } catch (err) {
-      console.error(err)
+      const dados = await resp.json()
+      if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
+      imprimirRodadaAutomaticamente(dados.rodadaId)
+      if (dados.itensDescartados?.length > 0) {
+        setErroPedido(`Alguns itens ficaram indisponíveis e não foram enviados: ${dados.itensDescartados.map((d: { itemCardapioId: string }) => d.itemCardapioId).join(', ')}`)
+      }
+      await recarregarContaAtual()
+      setCarrinho([])
+      if (!dados.itensDescartados?.length) setModalItemAberto(null)
+    } catch {
+      setErroPedido('Falha de conexão')
     } finally {
-      setAdicionandoItemId(null)
+      setEnviandoPedido(false)
     }
   }
 
@@ -626,63 +683,94 @@ export default function Mesas() {
 
       {modalItemAberto && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={() => setModalItemAberto(null)}>
-          <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between">
+          <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-zinc-900 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 pb-3">
               <h3 className="text-lg font-bold">Adicionar item</h3>
               <button onClick={() => setModalItemAberto(null)}><X className="h-5 w-5 text-zinc-400" /></button>
             </div>
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <input
-                value={buscaItem}
-                onChange={(e) => setBuscaItem(e.target.value)}
-                placeholder="Buscar item..."
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-sm"
-              />
-            </div>
-            {carregandoCardapio ? (
-              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
-            ) : itensFiltrados.length === 0 ? (
-              <p className="text-sm text-zinc-500">Nenhum item encontrado.</p>
-            ) : (
-              <ul className="space-y-1">
-                {itensFiltrados.map((item) => {
-                  const pedeAcompanhamento = (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0
-                  return (
-                    <li key={item.id}>
-                      <button
-                        onClick={() => pedeAcompanhamento ? setEscolhendoAcompanhamentoId(item.id) : adicionarItem(item.id)}
-                        disabled={adicionandoItemId === item.id}
-                        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
-                      >
-                        <span>{item.nome}</span>
-                        <span className="text-zinc-400">R$ {Number(item.preco).toFixed(2)}</span>
-                      </button>
-                      {escolhendoAcompanhamentoId === item.id && (
-                        <div className="mb-1 space-y-1 rounded-lg border border-zinc-700 bg-zinc-800 p-2">
-                          <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
-                          {item.categoria!.opcoesAcompanhamento.map((op) => (
+
+            <div className="overflow-y-auto px-4">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  value={buscaItem}
+                  onChange={(e) => setBuscaItem(e.target.value)}
+                  placeholder="Buscar item..."
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-sm"
+                />
+              </div>
+              {carregandoCardapio ? (
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+              ) : itensFiltrados.length === 0 ? (
+                <p className="text-sm text-zinc-500">Nenhum item encontrado.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {itensFiltrados.map((item) => {
+                    const pedeAcompanhamento = (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0
+                    return (
+                      <li key={item.id}>
+                        <button
+                          onClick={() => pedeAcompanhamento ? setEscolhendoAcompanhamentoId(item.id) : adicionarAoCarrinho(item)}
+                          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm hover:bg-zinc-800"
+                        >
+                          <span>{item.nome}</span>
+                          <span className="text-zinc-400">R$ {Number(item.preco).toFixed(2)}</span>
+                        </button>
+                        {escolhendoAcompanhamentoId === item.id && (
+                          <div className="mb-1 space-y-1 rounded-lg border border-zinc-700 bg-zinc-800 p-2">
+                            <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
+                            {item.categoria!.opcoesAcompanhamento.map((op) => (
+                              <button
+                                key={op.nome}
+                                onClick={() => adicionarAoCarrinho(item, op.nome)}
+                                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-700"
+                              >
+                                <span>{op.nome}</span>
+                                {op.precoAdicional > 0 && <span className="text-orange-400">+R$ {op.precoAdicional.toFixed(2)}</span>}
+                              </button>
+                            ))}
                             <button
-                              key={op.nome}
-                              onClick={() => adicionarItem(item.id, op.nome)}
-                              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-700"
+                              onClick={() => setEscolhendoAcompanhamentoId(null)}
+                              className="mt-1 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
                             >
-                              <span>{op.nome}</span>
-                              {op.precoAdicional > 0 && <span className="text-orange-400">+R$ {op.precoAdicional.toFixed(2)}</span>}
+                              Cancelar
                             </button>
-                          ))}
-                          <button
-                            onClick={() => setEscolhendoAcompanhamentoId(null)}
-                            className="mt-1 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      )}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {carrinho.length > 0 && (
+              <div className="border-t border-zinc-800 p-4">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Pedido</p>
+                <ul className="mb-3 space-y-1.5">
+                  {carrinho.map((c) => (
+                    <li key={c.chave} className="flex items-center justify-between gap-2 text-sm">
+                      <div className="min-w-0">
+                        <span>{c.nome}</span>
+                        {c.acompanhamento && <span className="ml-1 text-xs text-orange-400">({c.acompanhamento})</span>}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button onClick={() => alterarQuantidadeCarrinho(c.chave, -1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
+                        <span className="w-4 text-center">{c.quantidade}</span>
+                        <button onClick={() => alterarQuantidadeCarrinho(c.chave, 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
+                      </div>
                     </li>
-                  )
-                })}
-              </ul>
+                  ))}
+                </ul>
+                {erroPedido && <p className="mb-2 text-sm text-red-400">{erroPedido}</p>}
+                <button
+                  onClick={enviarPedido}
+                  disabled={enviandoPedido}
+                  className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {enviandoPedido ? 'Enviando...' : `Enviar pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
+                </button>
+              </div>
             )}
           </div>
         </div>
