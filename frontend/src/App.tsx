@@ -26,6 +26,7 @@ import Insumos from './pages/Insumos'
 import Estoque from './pages/Estoque'
 import Historico from './pages/Historico'
 import ImprimirComanda from './pages/ImprimirComanda'
+import ImprimirRodada from './pages/ImprimirRodada'
 import Configuracoes from './pages/Configuracoes'
 
 function App() {
@@ -56,6 +57,7 @@ function App() {
       <Route path="/historico"      element={<RotaPermissao permissao="historico"><Historico /></RotaPermissao>} />
       <Route path="/configuracoes"  element={<RotaPermissao permissao="configuracoes"><Configuracoes /></RotaPermissao>} />
       <Route path="/imprimir/:pedidoId" element={<RotaProtegida><ImprimirComanda /></RotaProtegida>} />
+      <Route path="/imprimir/rodada/:rodadaId" element={<RotaProtegida><ImprimirRodada /></RotaProtegida>} />
 
       {/* Painel da plataforma (SUPER_ADMIN) */}
       <Route path="/admin"                    element={<RotaAdmin><AdminDashboard /></RotaAdmin>} />
