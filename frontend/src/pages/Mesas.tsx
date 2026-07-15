@@ -65,6 +65,12 @@ interface ItemCarrinho {
   acompanhamento?: string
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function normalizarNumeroMesa(numero: string): string {
+  return numero.trim().replace(/^Mesa\s+/i, '')
+}
+
 // ── Helpers visuais ────────────────────────────────────────────────────────
 
 const corStatusMesa: Record<Mesa['statusMesa'], string> = {
@@ -412,7 +418,7 @@ export default function Mesas() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          numero: numeroNovaMesa.trim(),
+          numero: normalizarNumeroMesa(numeroNovaMesa),
           area: areaNovaMesa.trim() || null,
           capacidade: capacidadeNovaMesa.trim() ? Number(capacidadeNovaMesa) : null,
         }),
@@ -446,7 +452,7 @@ export default function Mesas() {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          numero: numeroEdicaoMesa.trim(),
+          numero: normalizarNumeroMesa(numeroEdicaoMesa),
           area: areaEdicaoMesa.trim() || null,
           capacidade: capacidadeEdicaoMesa.trim() ? Number(capacidadeEdicaoMesa) : null,
         }),

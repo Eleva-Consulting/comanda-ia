@@ -18,6 +18,10 @@ const AtualizarMesaSchema = Type.Object({
 
 const MesaParamsSchema = Type.Object({ id: Type.String() });
 
+function normalizarNumeroMesa(numero: string): string {
+  return numero.trim().replace(/^Mesa\s+/i, '');
+}
+
 export async function mesasRoutes(fastify: FastifyInstance) {
   // ── GET /mesas ──────────────────────────────────────────────────────────────
   // Inclui o status calculado a partir da Conta aberta mais recente, se houver.
@@ -46,7 +50,8 @@ export async function mesasRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar, temPermissao('configuracoes'), moduloAtivo('mesas')],
     schema: { body: CriarMesaSchema },
   }, async (request, reply) => {
-    const { numero, area, capacidade } = request.body as { numero: string; area?: string | null; capacidade?: number | null };
+    const { numero: numeroRaw, area, capacidade } = request.body as { numero: string; area?: string | null; capacidade?: number | null };
+    const numero = normalizarNumeroMesa(numeroRaw);
     const { estabelecimentoId } = request.user;
 
     const existente = await prisma.mesa.findUnique({
@@ -66,7 +71,8 @@ export async function mesasRoutes(fastify: FastifyInstance) {
     schema: { params: MesaParamsSchema, body: AtualizarMesaSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const dados = request.body as { numero?: string; area?: string | null; capacidade?: number | null; ativa?: boolean };
+    const dadosRaw = request.body as { numero?: string; area?: string | null; capacidade?: number | null; ativa?: boolean };
+    const dados = dadosRaw.numero ? { ...dadosRaw, numero: normalizarNumeroMesa(dadosRaw.numero) } : dadosRaw;
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.mesa.updateMany({
