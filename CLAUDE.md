@@ -317,6 +317,52 @@ VITE_API_URL=http://localhost:3000
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-15
+- **Rodadas de pedido na comanda (Mesas) — feature completa, fora da numeração das fases do
+  Módulo de Mesas.** Motivada por três pontos reais levantados pelo usuário no mesmo request:
+  (1) o modal de adicionar item na comanda mandava cada item pro backend na hora, um por clique
+  — sem noção de "pedido" agrupado; (2) não existia impressão nenhuma pro módulo de Mesas
+  (delivery/balcão já imprimem automaticamente há tempos); (3) não dava pra avançar vários itens
+  de uma vez no Kanban de Produção. Passou pelo processo completo do projeto: brainstorm (3
+  perguntas de escopo) → spec (`docs/superpowers/specs/2026-07-13-rodada-pedidos-mesas-design.md`)
+  → plano (`docs/superpowers/plans/2026-07-13-rodada-pedidos-mesas.md`) → subagent-driven-development
+  (8 tasks + revisão final de todo o branch).
+  - Novo model `RodadaComanda` agrupa um lote de `ItemComanda` enviados juntos (migration sem
+    backfill — itens antigos ficam com `rodadaId: null` e continuam funcionando como antes).
+  - `Mesas.tsx`: o modal de adicionar item virou carrinho — o garçom seleciona vários itens,
+    ajusta quantidade, e só ao clicar "Enviar pedido" tudo vai pro backend numa chamada só
+    (`POST /comandas/:id/rodadas`, transação única). A rota antiga de item avulso
+    (`POST /comandas/:id/itens`) foi removida (só a Mesas.tsx chamava).
+  - Impressão automática da rodada ao enviar (`ImprimirRodada.tsx`, mesmo padrão já usado no
+    balcão/delivery).
+  - Kanban de Produção agrupa os itens da mesma rodada num card só, com avanço em lote
+    (`PATCH /rodadas/:id/avancar` — sem status-alvo no body, cada item avança pro seu próprio
+    próximo estágio) **respeitando o isolamento por setor** já existente (operador só avança
+    itens do próprio setor dentro da rodada) — verificado ao vivo com dois operadores de setores
+    diferentes.
+  - **Simplificação em relação à spec original:** em vez de inventar eventos de socket novos
+    (`rodada:nova`), reaproveita 100% os eventos por item que já existiam
+    (`item-comanda:novo`/`atualizado`, `producao:item-novo`/`atualizado`) — o agrupamento visual
+    da rodada acontece inteiramente no frontend via `item.rodadaId`, sem precisar de payload novo.
+  - Achados de revisão corrigidos antes do merge: (1) Task 4 usava `Promise.all` disparando
+    criações concorrentes dentro de uma transação interativa do Prisma — anti-padrão documentado
+    pela própria Prisma; corrigido pra sequencial. (2) Task 7 tinha o aviso de itens descartados
+    (indisponíveis entre montar o carrinho e enviar) completamente invisível — o carrinho era
+    limpo no mesmo trecho que setava o erro, e o JSX do erro só renderizava com carrinho não-vazio;
+    corrigido, e a mensagem passou a mostrar nome do item em vez de UUID cru. (3) Na revisão final
+    de todo o branch: se o operador avançasse só um item de uma rodada multi-item via "(só este)",
+    a rodada "dividia" entre colunas do Kanban, e cada fragmento continuava mostrando "Avançar
+    rodada" — um clique num card mostrando só 1 de 2 itens podia avançar silenciosamente o outro
+    item, nem visível ali; corrigido escondendo o botão de lote enquanto a rodada estiver dividida
+    (só os botões individuais ficam disponíveis até ela voltar a ficar sincronizada).
+  - Achado de processo (mais uma vez nesta iniciativa): a Task 8 foi interrompida no meio por
+    limite de sessão de API do subagente, deixando dados de teste órfãos (mesas, operadores, setor
+    e item de cardápio de teste, uma conta ainda aberta) e o módulo `mesas` ainda habilitado no
+    estabelecimento de teste — limpo pelo controller antes de retomar com um subagente novo.
+  - Limitação conhecida, não resolvida nesta feature (fora do pedido original): continua não
+    existindo nenhuma UI no Cardápio pra vincular um item a um Setor — ver entrada de
+    `960da53` abaixo.
+
 ### 2026-07-13
 - **Renomear mesa + tempo real na Produção pra itens sem setor (`960da53`).** Duas correções
   do módulo de Mesas, achadas em uso real: (1) não havia como editar uma mesa depois de
