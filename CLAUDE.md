@@ -347,6 +347,36 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-16 (continuação)
+- **Tela de Caixa reescrita — fluxo guiado "Receber pagamento"** (spec:
+  `docs/superpowers/specs/2026-07-16-caixa-redesign-design.md`). Motivada por 3 problemas
+  reais: "Dividir por comanda" tinha nome errado (a ação real é pagar a comanda inteira);
+  clicar no nome da comanda registrava um pagamento confirmado NA HORA, sem revisão nem
+  confirmação (única ação financeira do sistema sem etapa de confirmação); e a forma de
+  pagamento era escolhida no topo, longe da ação (default PIX silencioso pra tudo).
+  Brainstorm com o visual companion do superpowers (mockups no navegador): usuário escolheu
+  repensar a tela inteira e, entre 3 estruturas, o fluxo guiado. **Princípio central: nenhum
+  pagamento é registrado sem passar pela revisão + botão "Confirmar R$ X em <forma>".**
+  - 4 telas: conta (leitura + "Receber pagamento" + desconto/estorno/fechar) → "O que está
+    sendo pago?" (conta toda / **Pagamento por comanda** / itens específicos / dividir
+    igualmente / valor livre) → revisão (itens, total, forma escolhida AQUI, QR code Pix já
+    com o valor certo) → saldo zerado (estado verde, "Fechar conta e liberar a mesa").
+  - Dividir igualmente virou parcelas encadeadas ("Parcela 1 de N" → confirma → "Parcela 2
+    de N" automática), cada uma com forma própria, valor recalculado sobre o saldo real —
+    corrige defeito da tela antiga em que o "Registrar 1 parcela" clicado N vezes calculava
+    errado a partir da 2ª (recalculava saldo/N com o saldo já menor).
+  - Comanda já paga aparece desabilitada "✓ já pago" na escolha (antes sumia).
+  - "Conta toda" com desconto ativo paga por valor (saldo devedor); sem desconto paga por
+    itens (mantém vínculo `PagamentoItem`).
+  - 100% frontend (backend intocado). `Caixa.tsx` (647 linhas) dividida em 7 arquivos por
+    responsabilidade em `frontend/src/components/caixa/` (tipos, ResumoTotais,
+    ComandasLeitura, ReceberPagamento, PagamentosRegistrados, FormDesconto).
+  - Verificado ao vivo no navegador (extensão Chrome): pagamento por comanda em dinheiro,
+    parcelas 2x com Pix + cartão de crédito encadeando certo (78+78 fechou os 156 exatos),
+    bloqueio de fechamento com item em produção aparecendo na tela nova, fechamento
+    liberando a mesa. Estorno/desconto portados sem mudança de lógica; itens específicos e
+    valor livre passam pelo mesmo caminho de confirmação verificado.
+
 ### 2026-07-16
 - **Impressão da rodada movida do garçom pra Produção + permissão `producao` + Dashboard
   com vendas de Mesas + trava de fechamento** — quatro correções/ajustes do módulo de Mesas
