@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar } from '../plugins/auth.js';
 
-const PERMISSOES_VALIDAS = ['cozinha', 'cardapio', 'historico', 'pedido_manual', 'configuracoes', 'mesas', 'caixa', 'estoque'] as const;
+const PERMISSOES_VALIDAS = ['cozinha', 'cardapio', 'historico', 'pedido_manual', 'configuracoes', 'mesas', 'producao', 'caixa', 'estoque'] as const;
 
 const CriarOperadorSchema = Type.Object({
   nome:    Type.String({ minLength: 2, maxLength: 100 }),
