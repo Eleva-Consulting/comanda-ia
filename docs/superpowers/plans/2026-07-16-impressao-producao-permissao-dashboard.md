@@ -393,6 +393,48 @@ git commit -m "feat: card de faturamento do dashboard mostra quebra delivery/bal
 
 ---
 
+### Task 5b: Backend — fechar conta só com todos os itens entregues
+
+**Files:**
+- Modify: `src/routes/pagamentos.ts:281-303` (rota `POST /contas/:id/fechar`)
+
+**Interfaces:**
+- Consumes: model `ItemComanda` (`status: StatusProducao`, relação `comanda.contaId`).
+- Produces: 422 `{ erro }` quando há item da conta ainda em produção.
+
+- [ ] **Step 1: Guarda de itens pendentes**
+
+Em `POST /contas/:id/fechar`, após a checagem de `conta.status` e antes da de `podeFechar`:
+
+```ts
+    // Não fecha com item ainda em produção — tudo precisa estar entregue (ou cancelado).
+    const itensPendentes = await prisma.itemComanda.count({
+      where: {
+        comanda: { contaId: id },
+        status: { notIn: ['entregue', 'cancelado'] },
+      },
+    });
+    if (itensPendentes > 0) {
+      return reply.status(422).send({
+        erro: `Ainda há ${itensPendentes} ${itensPendentes === 1 ? 'item' : 'itens'} em produção — marque como entregue antes de fechar a conta`,
+      });
+    }
+```
+
+- [ ] **Step 2: Verificar**
+
+Run: `npx vitest run && npx tsc --noEmit`
+Expected: todos os testes passam, zero erros de tipo.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/routes/pagamentos.ts
+git commit -m "feat: bloquear fechamento de conta com itens ainda em produção"
+```
+
+---
+
 ### Task 6: Verificação ao vivo + log + push
 
 **Files:**

@@ -110,6 +110,15 @@ portanto **nunca recebe disparo de impressão** — requisito explícito do usu�
 - **Fora do escopo (deliberado):** tela Financeiro continua só com `Pedido`; KPI próprio de
   mesas (ex: contas fechadas no dia) fica pra uma rodada futura, se pedido.
 
+## Mudança 4 — Fechar conta só com todos os itens entregues
+
+Pedido do usuário na mesma sessão: hoje dá pra fechar a conta no Caixa com itens ainda em
+produção (recebido/em preparo/pronto). Regra nova em `POST /contas/:id/fechar`: se existir
+qualquer `ItemComanda` da conta com status fora de `entregue`/`cancelado`, a rota responde
+422 com mensagem dizendo quantos itens ainda estão em produção. O `Caixa.tsx` já exibe a
+mensagem de erro retornada pelo backend — nenhuma mudança de frontend necessária. Registrar
+pagamento continua permitido a qualquer momento (o bloqueio é só do fechamento).
+
 ## Testes
 
 - **Backend (Vitest):** guards das rotas re-gateadas (operador só `mesas` recebe 403 em

@@ -292,6 +292,20 @@ export async function pagamentosRoutes(fastify: FastifyInstance) {
     if (conta.status !== 'aberta' && conta.status !== 'aguardando_pagamento') {
       return reply.status(422).send({ erro: 'Conta não está aberta' });
     }
+
+    // Não fecha com item ainda em produção — tudo precisa estar entregue (ou cancelado).
+    const itensPendentes = await prisma.itemComanda.count({
+      where: {
+        comanda: { contaId: id },
+        status: { notIn: ['entregue', 'cancelado'] },
+      },
+    });
+    if (itensPendentes > 0) {
+      return reply.status(422).send({
+        erro: `Ainda há ${itensPendentes} ${itensPendentes === 1 ? 'item' : 'itens'} em produção — marque como entregue antes de fechar a conta`,
+      });
+    }
+
     if (!resumo.podeFechar) {
       return reply.status(422).send({ erro: 'Saldo devedor pendente', saldoDevedor: resumo.saldoDevedor });
     }
