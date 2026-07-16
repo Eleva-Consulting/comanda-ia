@@ -1,6 +1,6 @@
 import { getRole } from './auth'
 
-export type Permissao = 'cozinha' | 'cardapio' | 'historico' | 'pedido_manual' | 'configuracoes' | 'mesas' | 'caixa' | 'estoque'
+export type Permissao = 'cozinha' | 'cardapio' | 'historico' | 'pedido_manual' | 'configuracoes' | 'mesas' | 'producao' | 'caixa' | 'estoque'
 
 export const TODAS_PERMISSOES: { id: Permissao; label: string }[] = [
   { id: 'cozinha',       label: 'Cozinha — ver e atualizar pedidos' },
@@ -9,6 +9,7 @@ export const TODAS_PERMISSOES: { id: Permissao; label: string }[] = [
   { id: 'pedido_manual', label: 'Criar pedido manualmente' },
   { id: 'configuracoes', label: 'Configurações do estabelecimento' },
   { id: 'mesas',         label: 'Mesas — abrir mesas e lançar pedidos' },
+  { id: 'producao',      label: 'Produção — acompanhar e avançar itens em preparo' },
   { id: 'caixa',         label: 'Caixa — fechar contas e processar pagamentos' },
   { id: 'estoque',       label: 'Estoque — insumos e lançamento de consumo diário' },
 ]
@@ -35,6 +36,7 @@ export function temPermissao(permissao: Permissao): boolean {
 const ROTA_POR_PERMISSAO: { permissao: Permissao; rota: string }[] = [
   { permissao: 'cozinha', rota: '/cozinha' },
   { permissao: 'mesas', rota: '/mesas' },
+  { permissao: 'producao', rota: '/producao' },
   { permissao: 'caixa', rota: '/caixa' },
   { permissao: 'cardapio', rota: '/cardapio' },
   { permissao: 'historico', rota: '/historico' },

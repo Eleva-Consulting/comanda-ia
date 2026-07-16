@@ -101,6 +101,7 @@ export default function Layout({ children, headerExtra }: Props) {
   const podeHistorico     = isDono || temPermissao('historico')
   const podeConfiguracoes = isDono || temPermissao('configuracoes')
   const podeMesas = isDono || temPermissao('mesas')
+  const podeProducao = isDono || temPermissao('producao')
   const [modulosAtivos, setModulosAtivos] = useState<string[]>([])
 
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function Layout({ children, headerExtra }: Props) {
   }, [token])
 
   const mostrarMesas = podeMesas && modulosAtivos.includes('mesas')
+  const mostrarProducao = podeProducao && modulosAtivos.includes('mesas')
   const podeCaixa = isDono || temPermissao('caixa')
   const mostrarCaixa = podeCaixa && modulosAtivos.includes('mesas')
   const podeEstoque = isDono || temPermissao('estoque')
@@ -122,7 +124,7 @@ export default function Layout({ children, headerExtra }: Props) {
   const itensPrincipais: NavItem[] = [
     { to: '/dashboard', label: 'Home',     icon: Home,          show: isDono },
     { to: '/mesas',     label: 'Mesas',    icon: Table2,        show: mostrarMesas },
-    { to: '/producao',  label: 'Produção', icon: ClipboardList, show: mostrarMesas },
+    { to: '/producao',  label: 'Produção', icon: ClipboardList, show: mostrarProducao },
     { to: '/caixa',     label: 'Caixa',    icon: Wallet,        show: mostrarCaixa },
     { to: '/cozinha',   label: 'Cozinha',  icon: Flame,         show: true },
     { to: '/cardapio',  label: 'Cardápio', icon: BookOpen,      show: podeCardapio },

@@ -46,7 +46,7 @@ function App() {
       <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
       <Route path="/cozinha"   element={<RotaPermissao permissao="cozinha"><Cozinha /></RotaPermissao>} />
       <Route path="/mesas"     element={<RotaPermissao permissao="mesas"><Mesas /></RotaPermissao>} />
-      <Route path="/producao"  element={<RotaPermissao permissao="mesas"><Producao /></RotaPermissao>} />
+      <Route path="/producao"  element={<RotaPermissao permissao="producao"><Producao /></RotaPermissao>} />
       <Route path="/caixa"     element={<RotaPermissao permissao="caixa"><Caixa /></RotaPermissao>} />
       <Route path="/cardapio"  element={<RotaPermissao permissao="cardapio"><Cardapio /></RotaPermissao>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />
