@@ -154,9 +154,23 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       select: { total: true },
     });
 
+    // Venda do módulo de Mesas conta pelo Pagamento confirmado no Caixa: dinheiro que
+    // de fato entrou hoje; estorno muda o status e sai da soma sozinho.
+    const pagamentosMesasHoje = await prisma.pagamento.aggregate({
+      where: {
+        estabelecimentoId: estabelecimentoId!,
+        status: 'confirmado',
+        criadoEm: { gte: inicioUTC, lte: fimUTC },
+      },
+      _sum: { valor: true },
+    });
+
     const totalPedidos = pedidosHoje.length;
-    const faturamentoTotal = pedidosHoje.reduce((soma, p) => soma + Number(p.total), 0);
-    const ticketMedio = totalPedidos > 0 ? faturamentoTotal / totalPedidos : 0;
+    const faturamentoPedidos = pedidosHoje.reduce((soma, p) => soma + Number(p.total), 0);
+    const faturamentoMesas   = Number(pagamentosMesasHoje._sum.valor ?? 0);
+    const faturamentoTotal   = faturamentoPedidos + faturamentoMesas;
+    // Ticket médio segue só sobre Pedido — pagamento de mesa não é 1 pedido = 1 pagamento.
+    const ticketMedio = totalPedidos > 0 ? faturamentoPedidos / totalPedidos : 0;
 
     // Avaliações (sem filtro de período — mesmo comportamento de antes).
     const avaliacoesAgregadas = await prisma.pedido.aggregate({
@@ -192,6 +206,8 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
         emAndamento,
         totalPedidos,
         faturamentoTotal,
+        faturamentoPedidos,
+        faturamentoMesas,
         ticketMedio,
       },
       avaliacoes: {
