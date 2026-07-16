@@ -35,6 +35,8 @@ interface DashboardData {
     emAndamento: number
     totalPedidos: number
     faturamentoTotal: number
+    faturamentoPedidos: number
+    faturamentoMesas: number
     ticketMedio: number
   }
   avaliacoes: {
@@ -138,6 +140,9 @@ export default function Dashboard() {
         <KpiCard
           label="Faturamento (hoje)"
           valor={formatarBRL(dados.estatisticas.faturamentoTotal)}
+          sub={dados.estatisticas.faturamentoMesas > 0
+            ? `delivery/balcão ${formatarBRL(dados.estatisticas.faturamentoPedidos)} · mesas ${formatarBRL(dados.estatisticas.faturamentoMesas)}`
+            : undefined}
           Icone={Wallet}
           cor="emerald"
         />
@@ -289,7 +294,7 @@ const corClasses: Record<string, { bg: string; text: string }> = {
   purple:  { bg: 'bg-purple-500/10',  text: 'text-purple-400' },
 }
 
-function KpiCard({ label, valor, Icone, cor }: { label: string; valor: string; Icone: LucideIcon; cor: string }) {
+function KpiCard({ label, valor, sub, Icone, cor }: { label: string; valor: string; sub?: string; Icone: LucideIcon; cor: string }) {
   const c = corClasses[cor]
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
@@ -300,6 +305,7 @@ function KpiCard({ label, valor, Icone, cor }: { label: string; valor: string; I
         </div>
       </div>
       <p className="mt-3 text-3xl font-extrabold">{valor}</p>
+      {sub && <p className="mt-1 text-xs text-zinc-500">{sub}</p>}
     </div>
   )
 }
