@@ -347,6 +347,32 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-16 (continuação 3)
+- **Cozinha unificada — Fase 1 mesclada e em produção: pedidos no Kanban da Produção**
+  (plano: `docs/superpowers/plans/2026-07-16-cozinha-unificada-fase1.md`). Aditivo — a
+  Cozinha atual continua intacta (só refactor sem mudança de comportamento: a máquina de
+  status de pedido saiu dela pra `frontend/src/lib/statusPedido.ts`, compartilhada).
+  - Cards de `Pedido` (balcão/delivery/link) aparecem no Kanban junto das rodadas,
+    intercalados por horário de chegada. Mapeamento 5 status → 3 colunas: `recebido` e
+    `pagamento_confirmado` na coluna Recebido, `pronto` e `a_caminho` na Pronto — o badge
+    do card mostra o status real. Avançar usa `PATCH /pedidos/:id` (mesma máquina da
+    Cozinha, WhatsApp automático preservado; retirada pula "saiu pra entrega").
+  - Impressão automática de pedido também na Produção (mesma regra do toggle de balcão;
+    **Cozinha + Produção abertas juntas imprimem em dobro** — igual a duas abas da Cozinha,
+    aceito e documentado no plano).
+  - Backend: zero rota nova — `GET /pedidos` e `PATCH /pedidos/:id` passaram a aceitar
+    também a permissão `producao` (verificado: operador só `mesas` continua 403).
+  - Eventos de pedido chegam por uma **segunda conexão de socket (sala ampla)** na tela —
+    necessário porque a conexão de produção de operador com setor fixo entra só na sala do
+    setor, e pedido não tem setor (todo operador da tela vê todos os pedidos).
+  - Verificado ao vivo no navegador: fluxo completo de um pedido de balcão
+    (Aguard. pgto → Pgto. confirmado → Em preparo → Pronto → Marcar retirado, saindo do
+    Kanban) com uma rodada de mesa convivendo na mesma coluna; Cozinha antiga conferida
+    depois do refactor. Impressão física não testada por automação (diálogo trava a
+    extensão) — testar no ambiente real.
+  - Próximas: Fase 2 (paridade de ações + liberar a tela sem módulo mesas) e Fase 3
+    (tela assume nome/rota "Cozinha") — cada uma com plano próprio antes de codar.
+
 ### 2026-07-16 (continuação 2)
 - **Spec da Cozinha unificada + Fase 0 implementada.** Brainstorm estratégico com o usuário
   sobre a duplicidade Cozinha (`Pedido`) x Produção (`ItemComanda`): com módulo mesas ativo
