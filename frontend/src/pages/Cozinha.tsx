@@ -4,7 +4,23 @@ import { useSocket } from '../hooks/useSocket'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
-type Status = 'recebido' | 'pagamento_confirmado' | 'em_preparo' | 'pronto' | 'a_caminho' | 'entregue' | 'cancelado'
+import {
+  STATUS_PEDIDO_CONFIG as statusConfig,
+  STATUS_ATIVOS_PEDIDO as statusAtivos,
+  labelStatusPedido as labelStatus,
+  obterProximaAcao,
+  type StatusPedido as Status,
+} from '../lib/statusPedido'
+
+// Ícone do botão de ação, resolvido pelo status de destino (a máquina de status em si
+// vive em lib/statusPedido.ts, compartilhada com o Kanban da Produção).
+const ICONE_ACAO: Partial<Record<Status, typeof Flame>> = {
+  pagamento_confirmado: Banknote,
+  em_preparo:           Flame,
+  pronto:               Check,
+  a_caminho:            Truck,
+  entregue:             PackageCheck,
+}
 
 interface PedidosResponse {
   dados: Pedido[]
@@ -69,44 +85,6 @@ interface ItemCardapio {
   disponivel: boolean
   categoria:  { id: string; nome: string; ordem: number; opcoesAcompanhamento: OpcaoAcompanhamento[] } | null
 }
-
-const statusConfig: Record<Status, { label: string; badge: string }> = {
-  recebido:              { label: 'Aguard. pgto',     badge: 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' },
-  pagamento_confirmado:  { label: 'Pgto. confirmado', badge: 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' },
-  em_preparo:            { label: 'Em preparo',        badge: 'bg-yellow-500/10 text-yellow-400 ring-1 ring-yellow-500/30' },
-  pronto:                { label: 'Pronto',            badge: 'bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/30' },
-  a_caminho:             { label: 'A caminho',         badge: 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/30' },
-  entregue:              { label: 'Entregue',          badge: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30' },
-  cancelado:             { label: 'Cancelado',         badge: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/30' },
-}
-
-/** Rótulo do status exibido — "Entregue" não faz sentido pra retirada, vira "Retirado". */
-function labelStatus(status: Status, tipoEntrega: 'entrega' | 'retirada'): string {
-  if (status === 'entregue' && tipoEntrega === 'retirada') return 'Retirado'
-  return statusConfig[status].label
-}
-
-type Acao = { proximoStatus: Status; label: string; Icone: typeof Flame; cor?: string }
-
-const proximaAcaoEntrega: Partial<Record<Status, Acao>> = {
-  recebido:             { proximoStatus: 'pagamento_confirmado', label: 'Confirmar pagamento', Icone: Banknote,     cor: 'bg-emerald-600 hover:bg-emerald-700' },
-  pagamento_confirmado: { proximoStatus: 'em_preparo',          label: 'Iniciar preparo',      Icone: Flame,        cor: 'bg-orange-500 hover:bg-orange-600' },
-  em_preparo:           { proximoStatus: 'pronto',              label: 'Marcar pronto',        Icone: Check,        cor: 'bg-orange-500 hover:bg-orange-600' },
-  pronto:               { proximoStatus: 'a_caminho',           label: 'Saiu para entrega',    Icone: Truck,        cor: 'bg-orange-500 hover:bg-orange-600' },
-  a_caminho:            { proximoStatus: 'entregue',            label: 'Marcar entregue',      Icone: PackageCheck, cor: 'bg-orange-500 hover:bg-orange-600' },
-}
-
-// Retirada não passa por "saiu para entrega" — de "pronto" já vai direto pra retirado.
-const proximaAcaoRetirada: Partial<Record<Status, Acao>> = {
-  ...proximaAcaoEntrega,
-  pronto: { proximoStatus: 'entregue', label: 'Marcar retirado', Icone: PackageCheck, cor: 'bg-orange-500 hover:bg-orange-600' },
-}
-
-function obterProximaAcao(status: Status, tipoEntrega: 'entrega' | 'retirada'): Acao | undefined {
-  return (tipoEntrega === 'retirada' ? proximaAcaoRetirada : proximaAcaoEntrega)[status]
-}
-
-const statusAtivos: Status[] = ['recebido', 'pagamento_confirmado', 'em_preparo', 'pronto', 'a_caminho']
 
 function formatarTempo(criadoEm: string): string {
   const diff = Date.now() - new Date(criadoEm).getTime()
@@ -580,6 +558,7 @@ export default function Cozinha() {
           {pedidosVisiveis.map((pedido) => {
             const cfg = statusConfig[pedido.status]
             const acao = obterProximaAcao(pedido.status, pedido.tipoEntrega)
+            const IconeAcao = acao ? (ICONE_ACAO[acao.proximoStatus] ?? Check) : null
             const atualizando = atualizandoId === pedido.id
             const cancelando = cancelandoId === pedido.id
 
@@ -681,7 +660,7 @@ export default function Cozinha() {
                         disabled={atualizando || cancelando}
                         className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${acao.cor ?? 'bg-orange-500 hover:bg-orange-600'}`}
                       >
-                        {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <acao.Icone className="h-4 w-4" />}
+                        {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : IconeAcao && <IconeAcao className="h-4 w-4" />}
                         {acao.label}
                       </button>
                     )}
