@@ -136,7 +136,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   //   dataInicio — ISO date string (inclusivo)
   //   dataFim    — ISO date string (inclusivo, até 23:59:59)
   fastify.get('/pedidos', {
-    onRequest: [autenticar, temPermissao('cozinha', 'historico')],
+    onRequest: [autenticar, temPermissao('cozinha', 'historico', 'producao')],
   }, async (request) => {
     const { estabelecimentoId } = request.user;
     const q = request.query as Record<string, string | undefined>;
@@ -265,7 +265,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // ── PATCH /pedidos/:id ──────────────────────────────────────────────────────
   // Transação garante que verificação de propriedade e update são atômicos.
   fastify.patch('/pedidos/:id', {
-    onRequest: [autenticar, temPermissao('cozinha')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao')],
     schema: { params: PedidoParamsSchema, body: AtualizarStatusSchema },
   }, async (request, reply) => {
     const { id }     = request.params as { id: string };
