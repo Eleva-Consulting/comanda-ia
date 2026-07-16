@@ -249,18 +249,6 @@ export default function Mesas() {
       .filter((c) => c.quantidade > 0))
   }
 
-  function imprimirRodadaAutomaticamente(rodadaId: string) {
-    const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.top      = '-10000px'
-    iframe.style.left     = '-10000px'
-    iframe.style.width    = '1px'
-    iframe.style.height   = '1px'
-    iframe.src = `/imprimir/rodada/${rodadaId}`
-    document.body.appendChild(iframe)
-    setTimeout(() => iframe.remove(), 8000)
-  }
-
   async function enviarPedido() {
     if (!modalItemAberto || carrinho.length === 0) return
     setEnviandoPedido(true)
@@ -279,7 +267,6 @@ export default function Mesas() {
       })
       const dados = await resp.json()
       if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
-      imprimirRodadaAutomaticamente(dados.rodadaId)
       if (dados.itensDescartados?.length > 0) {
         const nomes = dados.itensDescartados.map((d: { itemCardapioId: string; motivo?: string }) => {
           const itemCarrinho = carrinho.find((c) => c.itemCardapioId === d.itemCardapioId)

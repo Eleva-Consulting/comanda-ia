@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, ChefHat, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
@@ -66,6 +66,24 @@ export default function Producao() {
   const [avancandoId, setAvancandoId] = useState<string | null>(null)
   const [avancandoRodadaId, setAvancandoRodadaId] = useState<string | null>(null)
   const [agora, setAgora] = useState(Date.now())
+
+  // Rodadas já impressas nesta aba — dedupe porque a rodada chega como N eventos
+  // 'producao:item-novo' (um por item) e deve imprimir uma vez só.
+  const rodadasImpressasRef = useRef<Set<string>>(new Set())
+
+  function imprimirRodadaAutomaticamente(rodadaId: string) {
+    if (rodadasImpressasRef.current.has(rodadaId)) return
+    rodadasImpressasRef.current.add(rodadaId)
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.top      = '-10000px'
+    iframe.style.left     = '-10000px'
+    iframe.style.width    = '1px'
+    iframe.style.height   = '1px'
+    iframe.src = `/imprimir/rodada/${rodadaId}`
+    document.body.appendChild(iframe)
+    setTimeout(() => iframe.remove(), 8000)
+  }
 
   const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
@@ -198,17 +216,23 @@ export default function Producao() {
   useEffect(() => {
     if (!socket) return
 
-    function aoReceberItem(item: ItemProducao) {
+    function aoReceberItemNovo(item: ItemProducao) {
+      if (item.rodadaId) imprimirRodadaAutomaticamente(item.rodadaId)
       atualizarItemLocal(item)
     }
 
-    socket.on('producao:item-novo', aoReceberItem)
-    socket.on('producao:item-atualizado', aoReceberItem)
+    function aoReceberItemAtualizado(item: ItemProducao) {
+      atualizarItemLocal(item)
+    }
+
+    socket.on('producao:item-novo', aoReceberItemNovo)
+    socket.on('producao:item-atualizado', aoReceberItemAtualizado)
 
     return () => {
-      socket.off('producao:item-novo', aoReceberItem)
-      socket.off('producao:item-atualizado', aoReceberItem)
+      socket.off('producao:item-novo', aoReceberItemNovo)
+      socket.off('producao:item-atualizado', aoReceberItemAtualizado)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket])
 
   useEffect(() => {
