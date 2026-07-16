@@ -34,6 +34,7 @@ interface DashboardData {
   estatisticas: {
     emAndamento: number
     totalPedidos: number
+    totalRodadas: number
     faturamentoTotal: number
     faturamentoPedidos: number
     faturamentoMesas: number
@@ -148,7 +149,10 @@ export default function Dashboard() {
         />
         <KpiCard
           label="Pedidos (hoje)"
-          valor={dados.estatisticas.totalPedidos.toString()}
+          valor={(dados.estatisticas.totalPedidos + dados.estatisticas.totalRodadas).toString()}
+          sub={dados.estatisticas.totalRodadas > 0
+            ? `delivery/balcão ${dados.estatisticas.totalPedidos} · mesas ${dados.estatisticas.totalRodadas} (rodadas)`
+            : undefined}
           Icone={ShoppingBag}
           cor="orange"
         />

@@ -165,6 +165,15 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       _sum: { valor: true },
     });
 
+    // Movimento de mesas conta por rodada enviada — o análogo de "pedido chegou" no
+    // mundo mesas (spec da Cozinha unificada, Fase 0).
+    const totalRodadas = await prisma.rodadaComanda.count({
+      where: {
+        comanda: { conta: { estabelecimentoId: estabelecimentoId! } },
+        criadaEm: { gte: inicioUTC, lte: fimUTC },
+      },
+    });
+
     const totalPedidos = pedidosHoje.length;
     const faturamentoPedidos = pedidosHoje.reduce((soma, p) => soma + Number(p.total), 0);
     const faturamentoMesas   = Number(pagamentosMesasHoje._sum.valor ?? 0);
@@ -205,6 +214,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       estatisticas: {
         emAndamento,
         totalPedidos,
+        totalRodadas,
         faturamentoTotal,
         faturamentoPedidos,
         faturamentoMesas,

@@ -347,6 +347,23 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-16 (continuação 2)
+- **Spec da Cozinha unificada + Fase 0 implementada.** Brainstorm estratégico com o usuário
+  sobre a duplicidade Cozinha (`Pedido`) x Produção (`ItemComanda`): com módulo mesas ativo
+  a Cozinha fica morta; a galeteria nunca ganha Kanban; e canais vão conviver (mesas +
+  link/bot no mesmo estabelecimento — pedidos do link cairiam numa tela que ninguém olha).
+  Visão aprovada em `docs/superpowers/specs/2026-07-16-cozinha-unificada-design.md`: uma
+  única tela de produção **chamada "Cozinha"** (decisão explícita do usuário), Kanban com
+  cards de rodada e de pedido lado a lado, **paridade total com a Cozinha atual como
+  requisito inegociável** (tabela de inventário na spec), acesso `cozinha` OU `producao`
+  (garçom só com `mesas` segue sem ver), tela deixa de exigir módulo mesas. Rollout em
+  fases 0-3, cada uma com plano próprio antes de codar — **Fases 1-3 ainda não começaram**.
+  - **Fase 0 (entregue):** KPI "Pedidos (hoje)" do Dashboard agora conta também as rodadas
+    enviadas no dia (`RodadaComanda.criadaEm`, via relação, sem campo novo), com quebra
+    "delivery/balcão X · mesas Y (rodadas)" no card — resolve "faturamento aparece mas
+    pedido não" pra quem usa mesas. Payload aditivo `estatisticas.totalRodadas`; ticket
+    médio segue só sobre `Pedido`.
+
 ### 2026-07-16 (continuação)
 - **Tela de Caixa reescrita — fluxo guiado "Receber pagamento"** (spec:
   `docs/superpowers/specs/2026-07-16-caixa-redesign-design.md`). Motivada por 3 problemas
