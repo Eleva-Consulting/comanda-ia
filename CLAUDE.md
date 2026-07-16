@@ -313,9 +313,73 @@ VITE_API_URL=http://localhost:3000
   local, apontando pro proxy público do Postgres do Railway.
 - Deploy manual Railway: `railway up --detach` (auto-deploy às vezes falha)
 
+## Migração do repositório pra organização do GitHub (pendente, nada executado ainda)
+
+> Intenção do usuário (levantada em 2026-07-15): mover `comanda-ia` da conta pessoal
+> `github.com/viniciusalvestech` pra uma organização. **Só foi feita investigação (`gh api`),
+> nenhuma ação de transferência foi executada.**
+
+**Pendência a resolver antes de continuar:** o usuário se referiu à org como "Eleva", mas a
+checagem via `gh api user/orgs` mostrou que a organização da qual ele é membro é
+`Eleva-Consulting` — um login diferente. `gh api orgs/Eleva` também respondeu (login `eleva`,
+name "Eleva"), mas isso pode ser só o perfil público de uma org que não é dele. **Confirmar o
+login exato da organização de destino antes de transferir** (`gh org list` ou conferir em
+github.com/settings/organizations logado).
+
+**Impactos identificados de transferir um repo privado pra uma org (avaliar antes de executar):**
+- **Integrações Railway/Vercel podem quebrar.** Os dois usam GitHub App instalado por
+  conta/org — se o app não estiver autorizado na org de destino, o deploy automático some até
+  reconectar. Plano seguro: autorizar o GitHub App do Railway e da Vercel na org **antes** de
+  transferir, e validar um deploy de teste logo depois.
+- **URL do repo muda** de `github.com/viniciusalvestech/comanda-ia` pra
+  `github.com/<org>/comanda-ia`. O GitHub redireciona a URL antiga automaticamente por um tempo,
+  mas o ideal é todo mundo do time rodar `git remote set-url origin <nova-url>` depois.
+- **Plano da organização importa.** Org no plano Free tem limitações em repo privado (ex:
+  proteção de branch/PR obrigatório) que a conta pessoal do usuário pode já ter de graça — checar
+  o plano da org antes de depender de alguma feature específica de PR/branch protection.
+- **Colaboradores precisam ser adicionados de novo** — acesso dado direto no repo pessoal não
+  migra automaticamente pra permissão de time da org; melhor oportunidade pra organizar por Teams.
+- Transferência em si é rápida e não derruba o repo, mas o **risco real está na reconexão do
+  deploy** — por isso não fazer isso "de qualquer jeito" sem plano, dado que produção depende de
+  push automático.
+
 ## Log de mudanças
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
+
+### 2026-07-16
+- **Impressão da rodada movida do garçom pra Produção + permissão `producao` + Dashboard
+  com vendas de Mesas + trava de fechamento** — quatro correções/ajustes do módulo de Mesas
+  levantados pelo usuário em uso real, no mesmo request (spec:
+  `docs/superpowers/specs/2026-07-16-impressao-producao-permissao-dashboard-design.md`, plano:
+  `docs/superpowers/plans/2026-07-16-impressao-producao-permissao-dashboard.md`).
+  - **Impressão automática da rodada agora dispara na tela de Produção**, não mais no aparelho
+    do garçom ao enviar o pedido (`Mesas.tsx` perdeu a impressão por completo — decisão
+    explícita: garçom só vê, não imprime). `Producao.tsx` imprime ao receber
+    `producao:item-novo` com `rodadaId`, com dedupe por rodada (`useRef<Set>`) porque a rodada
+    chega como N eventos, um por item. Cada aba aberta de Produção imprime (mesmo comportamento
+    da Cozinha — aceito).
+  - **Nova permissão de operador `producao`, separada de `mesas`** — garçom só com `mesas` não
+    vê nem acessa a tela de Produção (e portanto nunca recebe disparo de impressão).
+    `GET /producao/itens` e `PATCH /rodadas/:id/avancar` exigem `producao`;
+    `PATCH /itens-comanda/:id/status` e `GET /rodadas/:id` aceitam `mesas` OU `producao`
+    (cancelar item existe nas duas telas; a leitura da rodada alimenta a impressão) — sem helper
+    novo, `temPermissao` já era variádico/OR. **Sem backfill (decisão do usuário): depois do
+    deploy, o DONO precisa marcar `producao` nos operadores que trabalham na Produção**, senão
+    eles perdem o acesso; operador editado precisa deslogar/logar pra pegar o JWT novo.
+  - **Dashboard passou a somar venda do módulo de Mesas** — `Pagamento` com status `confirmado`
+    registrado no dia (dinheiro que entrou no Caixa; estorno sai da soma sozinho), no mesmo
+    recorte de calendário de Brasília. Card de faturamento mostra a quebra "delivery/balcão ·
+    mesas" (só quando houve venda de mesa no dia). Ticket médio continua só sobre `Pedido`.
+    Tela Financeiro segue só com `Pedido` (escopo deliberado, de novo).
+  - **Fechar conta agora exige todos os itens entregues** — `POST /contas/:id/fechar` responde
+    422 se houver `ItemComanda` fora de `entregue`/`cancelado` (antes dava pra fechar o caixa
+    com pedido ainda em produção). `Caixa.tsx` já exibia o erro do backend, sem mudança de front.
+  - Verificação: vitest (67 testes) + tsc (back e front) verdes; fluxo completo verificado ao
+    vivo via API local (14 checagens: guards por papel, trava de fechamento, pagamento →
+    dashboard → fechamento). **Impressão física não foi testada por automação** (diálogo de
+    impressão do navegador trava a extensão) — testar no ambiente real: enviar rodada pela tela
+    de Mesas com uma aba de Produção aberta em outro aparelho.
 
 ### 2026-07-15
 - **Rodadas de pedido na comanda (Mesas) — feature completa, fora da numeração das fases do
