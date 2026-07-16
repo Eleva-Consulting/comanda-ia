@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Loader2, ChefHat, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
+import { useSocket } from '../hooks/useSocket'
 import { useSocketProducao } from '../hooks/useSocketProducao'
+import CardPedidoProducao, { type PedidoProducao } from '../components/producao/CardPedidoProducao'
+import { STATUS_ATIVOS_PEDIDO, type StatusPedido } from '../lib/statusPedido'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -44,6 +47,16 @@ const labelAvancar: Partial<Record<StatusProducao, string>> = {
   pronto:     'Marcar entregue',
 }
 
+// Pedido tem 5 status ativos e o Kanban 3 colunas — o badge do card mostra o status
+// real ("Aguard. pgto", "A caminho"...) quando difere do nome da coluna.
+const colunaDoPedido: Record<string, StatusProducao | undefined> = {
+  recebido:             'recebido',
+  pagamento_confirmado: 'recebido',
+  em_preparo:           'em_preparo',
+  pronto:               'pronto',
+  a_caminho:            'pronto',
+}
+
 function minutosDesde(dataIso: string, referencia: number): number {
   return Math.floor((referencia - new Date(dataIso).getTime()) / 60000)
 }
@@ -58,9 +71,15 @@ function corCronometro(minutos: number, tempoAlvoMinutos: number | null): string
 export default function Producao() {
   const token = localStorage.getItem('token')
   const { socket } = useSocketProducao(token)
+  // Conexão ampla (mesma da Cozinha/Layout) — eventos de Pedido não passam pelas salas
+  // por setor da produção, e pedido não tem setor: todo operador da tela vê todos.
+  const { socket: socketAmplo } = useSocket(token)
 
   const [modulosAtivos, setModulosAtivos] = useState<string[] | null>(null)
   const [itens, setItens] = useState<ItemProducao[]>([])
+  const [pedidos, setPedidos] = useState<PedidoProducao[]>([])
+  const [avancandoPedidoId, setAvancandoPedidoId] = useState<string | null>(null)
+  const [imprimirAutoBalcao, setImprimirAutoBalcao] = useState(true)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [avancandoId, setAvancandoId] = useState<string | null>(null)
@@ -97,6 +116,58 @@ export default function Producao() {
       .then(setItens)
       .catch((err) => { console.error(err); setErro('Falha ao carregar produção') })
       .finally(() => setCarregando(false))
+  }
+
+  function carregarPedidos() {
+    fetch(`${API_URL}/pedidos?status=${STATUS_ATIVOS_PEDIDO.join(',')}&limite=100`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data: { dados: PedidoProducao[] }) => setPedidos(data.dados ?? []))
+      .catch((err) => { console.error(err); setErro('Falha ao carregar pedidos') })
+  }
+
+  function atualizarPedidoLocal(pedido: PedidoProducao) {
+    setPedidos((prev) => {
+      const semEsse = prev.filter((p) => p.id !== pedido.id)
+      return STATUS_ATIVOS_PEDIDO.includes(pedido.status) ? [...semEsse, pedido] : semEsse
+    })
+  }
+
+  // Pedidos já impressos nesta aba. Mesma regra da Cozinha (balcão respeita o toggle);
+  // se Cozinha e Produção estiverem abertas ao mesmo tempo, imprime nas duas — igual a
+  // duas abas da Cozinha hoje (comportamento aceito, documentado no plano da Fase 1).
+  const pedidosImpressosRef = useRef<Set<string>>(new Set())
+
+  function imprimirPedidoAutomaticamente(pedido: PedidoProducao) {
+    if (pedido.origem === 'balcao' && !imprimirAutoBalcao) return
+    if (pedidosImpressosRef.current.has(pedido.id)) return
+    pedidosImpressosRef.current.add(pedido.id)
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.top      = '-10000px'
+    iframe.style.left     = '-10000px'
+    iframe.style.width    = '1px'
+    iframe.style.height   = '1px'
+    iframe.src = `/imprimir/${pedido.id}`
+    document.body.appendChild(iframe)
+    setTimeout(() => iframe.remove(), 8000)
+  }
+
+  async function avancarPedido(pedido: PedidoProducao, proximoStatus: StatusPedido) {
+    setAvancandoPedidoId(pedido.id)
+    try {
+      const resp = await fetch(`${API_URL}/pedidos/${pedido.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: proximoStatus }),
+      })
+      if (resp.ok) atualizarPedidoLocal(await resp.json())
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAvancandoPedidoId(null)
+    }
   }
 
   function atualizarItemLocal(item: ItemProducao) {
@@ -204,12 +275,18 @@ export default function Producao() {
   useEffect(() => {
     fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
-      .then((data) => setModulosAtivos(data.modulosAtivos ?? []))
+      .then((data) => {
+        setModulosAtivos(data.modulosAtivos ?? [])
+        setImprimirAutoBalcao(data.imprimirAutomaticoBalcao ?? true)
+      })
       .catch(() => setModulosAtivos([]))
   }, [token])
 
   useEffect(() => {
-    if (modulosAtivos?.includes('mesas')) carregarItens()
+    if (modulosAtivos?.includes('mesas')) {
+      carregarItens()
+      carregarPedidos()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modulosAtivos])
 
@@ -234,6 +311,28 @@ export default function Producao() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket])
+
+  useEffect(() => {
+    if (!socketAmplo) return
+
+    function aoReceberPedidoNovo(pedido: PedidoProducao) {
+      imprimirPedidoAutomaticamente(pedido)
+      atualizarPedidoLocal(pedido)
+    }
+
+    function aoReceberPedidoAtualizado(pedido: PedidoProducao) {
+      atualizarPedidoLocal(pedido)
+    }
+
+    socketAmplo.on('pedido:novo', aoReceberPedidoNovo)
+    socketAmplo.on('pedido:atualizado', aoReceberPedidoAtualizado)
+
+    return () => {
+      socketAmplo.off('pedido:novo', aoReceberPedidoNovo)
+      socketAmplo.off('pedido:atualizado', aoReceberPedidoAtualizado)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socketAmplo, imprimirAutoBalcao])
 
   useEffect(() => {
     const intervalo = setInterval(() => setAgora(Date.now()), 15000)
@@ -294,18 +393,50 @@ export default function Producao() {
               else gruposDaColuna.push({ chave, rodadaId: item.rodadaId, itens: [item] })
             }
 
+            const pedidosDaColuna = pedidos
+              .filter((p) => colunaDoPedido[p.status] === coluna.status)
+
+            // Pedidos e rodadas intercalados por horário de chegada — o mais antigo no topo.
+            const cardsDaColuna = [
+              ...pedidosDaColuna.map((pedido) => ({
+                tipo: 'pedido' as const,
+                horario: new Date(pedido.criadoEm).getTime(),
+                pedido,
+              })),
+              ...gruposDaColuna.map((grupo) => ({
+                tipo: 'grupo' as const,
+                horario: new Date(grupo.itens[0].recebidoEm).getTime(),
+                grupo,
+              })),
+            ].sort((a, b) => a.horario - b.horario)
+
+            const totalDaColuna = itensDaColuna.length + pedidosDaColuna.length
+
             return (
               <div key={coluna.status} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
                 <div className="mb-3 flex items-center justify-between px-1">
                   <h3 className="font-semibold text-zinc-200">{coluna.titulo}</h3>
-                  <span className="text-xs text-zinc-500">{itensDaColuna.length}</span>
+                  <span className="text-xs text-zinc-500">{totalDaColuna}</span>
                 </div>
 
-                {itensDaColuna.length === 0 ? (
+                {totalDaColuna === 0 ? (
                   <p className="px-1 text-sm text-zinc-600">Nada por aqui.</p>
                 ) : (
                   <div className="space-y-2">
-                    {gruposDaColuna.map((grupo) => (
+                    {cardsDaColuna.map((card) => {
+                      if (card.tipo === 'pedido') {
+                        return (
+                          <CardPedidoProducao
+                            key={card.pedido.id}
+                            pedido={card.pedido}
+                            agora={agora}
+                            avancando={avancandoPedidoId === card.pedido.id}
+                            onAvancar={avancarPedido}
+                          />
+                        )
+                      }
+                      const grupo = card.grupo
+                      return (
                       <div key={grupo.chave} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                         <p className="mb-2 text-xs text-zinc-500">
                           Mesa {grupo.itens[0].mesaNumero} · {grupo.itens[0].comandaNome}
@@ -405,7 +536,8 @@ export default function Producao() {
                           </button>
                         )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
