@@ -3,7 +3,8 @@ import { temPermissao, primeiraRotaPermitida, type Permissao } from '../lib/perm
 import { getRole } from '../lib/auth'
 
 interface Props {
-  permissao: Permissao
+  /** Uma permissão, ou uma lista — passa quem tiver QUALQUER uma delas (DONO passa sempre). */
+  permissao: Permissao | Permissao[]
   children: React.ReactNode
 }
 
@@ -14,7 +15,8 @@ export default function RotaPermissao({ permissao, children }: Props) {
   const role = getRole()
   if (role === 'SUPER_ADMIN') return <Navigate to="/admin" replace />
 
-  if (!temPermissao(permissao)) return <Navigate to={primeiraRotaPermitida()} replace />
+  const permissoes = Array.isArray(permissao) ? permissao : [permissao]
+  if (!permissoes.some((p) => temPermissao(p))) return <Navigate to={primeiraRotaPermitida()} replace />
 
   return <>{children}</>
 }

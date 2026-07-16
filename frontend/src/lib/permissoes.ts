@@ -36,7 +36,7 @@ export function temPermissao(permissao: Permissao): boolean {
 const ROTA_POR_PERMISSAO: { permissao: Permissao; rota: string }[] = [
   { permissao: 'cozinha', rota: '/cozinha' },
   { permissao: 'mesas', rota: '/mesas' },
-  { permissao: 'producao', rota: '/producao' },
+  { permissao: 'producao', rota: '/cozinha' },
   { permissao: 'caixa', rota: '/caixa' },
   { permissao: 'cardapio', rota: '/cardapio' },
   { permissao: 'historico', rota: '/historico' },
