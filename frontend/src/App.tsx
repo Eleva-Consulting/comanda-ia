@@ -5,7 +5,6 @@ import Cadastro from './pages/Cadastro'
 import AguardandoAprovacao from './pages/AguardandoAprovacao'
 import Cozinha from './pages/Cozinha'
 import Mesas from './pages/Mesas'
-import Producao from './pages/Producao'
 import Caixa from './pages/Caixa'
 import Dashboard from './pages/Dashboard'
 import Cardapio from './pages/Cardapio'
@@ -44,9 +43,10 @@ function App() {
       {/* Painel do estabelecimento (DONO / OPERADOR) */}
       <Route path="/"          element={<Landing />} />
       <Route path="/dashboard" element={<RotaDono><Dashboard /></RotaDono>} />
-      <Route path="/cozinha"   element={<RotaPermissao permissao="cozinha"><Cozinha /></RotaPermissao>} />
+      <Route path="/cozinha"   element={<RotaPermissao permissao={['cozinha', 'producao']}><Cozinha /></RotaPermissao>} />
       <Route path="/mesas"     element={<RotaPermissao permissao="mesas"><Mesas /></RotaPermissao>} />
-      <Route path="/producao"  element={<RotaPermissao permissao="producao"><Producao /></RotaPermissao>} />
+      {/* Rota antiga do Kanban — a tela unificada assumiu o nome Cozinha (Fase 3) */}
+      <Route path="/producao"  element={<Navigate to="/cozinha" replace />} />
       <Route path="/caixa"     element={<RotaPermissao permissao="caixa"><Caixa /></RotaPermissao>} />
       <Route path="/cardapio"  element={<RotaPermissao permissao="cardapio"><Cardapio /></RotaPermissao>} />
       <Route path="/operadores" element={<RotaDono><Operadores /></RotaDono>} />

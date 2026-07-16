@@ -1,250 +1,206 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Clock, User, Flame, Check, PackageCheck, Truck, XCircle, Printer, Loader2, Plus, Minus, X, Banknote, Pencil, MapPin } from 'lucide-react'
-import { useSocket } from '../hooks/useSocket'
+import { useEffect, useRef, useState } from 'react'
+import { Loader2, ChefHat, Plus, Printer, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
+import { useSocket } from '../hooks/useSocket'
+import { useSocketProducao } from '../hooks/useSocketProducao'
+import CardPedidoKanban from '../components/cozinha/CardPedidoKanban'
+import ModalNovoPedido from '../components/cozinha/ModalNovoPedido'
+import ModalEditarItensPedido from '../components/cozinha/ModalEditarItensPedido'
+import ControleAceitandoPedidos from '../components/cozinha/ControleAceitandoPedidos'
+import type { Pedido } from '../components/cozinha/tipos'
+import { STATUS_ATIVOS_PEDIDO, type StatusPedido } from '../lib/statusPedido'
+import { temPermissao } from '../lib/permissoes'
+import { getRole } from '../lib/auth'
 
-import {
-  STATUS_PEDIDO_CONFIG as statusConfig,
-  STATUS_ATIVOS_PEDIDO as statusAtivos,
-  labelStatusPedido as labelStatus,
-  obterProximaAcao,
-  type StatusPedido as Status,
-} from '../lib/statusPedido'
+// ── Tipos ──────────────────────────────────────────────────────────────────
 
-// Ícone do botão de ação, resolvido pelo status de destino (a máquina de status em si
-// vive em lib/statusPedido.ts, compartilhada com o Kanban da Produção).
-const ICONE_ACAO: Partial<Record<Status, typeof Flame>> = {
-  pagamento_confirmado: Banknote,
-  em_preparo:           Flame,
-  pronto:               Check,
-  a_caminho:            Truck,
-  entregue:             PackageCheck,
-}
+type StatusProducao = 'recebido' | 'em_preparo' | 'pronto' | 'entregue' | 'cancelado'
 
-interface PedidosResponse {
-  dados: Pedido[]
-  proximo: string | null
-}
-
-interface ItemPedido {
-  id:             string
-  nomeItem:       string
-  quantidade:     number
-  precoUnit:      number | string
-  observacao:     string | null
+interface ItemProducao {
+  id: string
+  nomeItem: string
+  quantidade: number
+  observacao: string | null
   acompanhamento: string | null
+  status: StatusProducao
+  recebidoEm: string
+  setorId: string | null
+  rodadaId: string | null
+  setorNome: string | null
+  tempoAlvoMinutos: number | null
+  mesaNumero: string
+  comandaNome: string
 }
 
-interface Pedido {
-  id:              string
-  clienteNome:     string
-  clienteFone:     string | null
-  enderecoEntrega: string | null
-  bairroNome:      string | null
-  taxaEntrega:     number | string | null
-  total:           number | string
-  precisaTroco:    boolean
-  trocoPara:       number | string | null
-  status:          Status
-  criadoEm:        string
-  itens:           ItemPedido[]
-  formaPagamento:  'pix' | 'pix_maquininha' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
-  tipoEntrega:     'entrega' | 'retirada'
-  origem:          'balcao' | 'publico'
+// ── Helpers visuais ────────────────────────────────────────────────────────
+
+const colunas: { status: StatusProducao; titulo: string }[] = [
+  { status: 'recebido',   titulo: 'Recebido' },
+  { status: 'em_preparo', titulo: 'Em preparo' },
+  { status: 'pronto',     titulo: 'Pronto' },
+]
+
+const proximoStatus: Partial<Record<StatusProducao, StatusProducao>> = {
+  recebido:   'em_preparo',
+  em_preparo: 'pronto',
+  pronto:     'entregue',
 }
 
-interface Bairro {
-  id:          string
-  nome:        string
-  taxaEntrega: number | null
+const labelAvancar: Partial<Record<StatusProducao, string>> = {
+  recebido:   'Iniciar preparo',
+  em_preparo: 'Marcar pronto',
+  pronto:     'Marcar entregue',
 }
 
-const formaPagamentoLabel: Record<string, string> = {
-  pix:            'PIX',
-  pix_maquininha: 'Pix (maq.)',
-  dinheiro:       'Dinheiro',
-  cartao_credito: 'Crédito',
-  cartao_debito:  'Débito',
+// Pedido tem 5 status ativos e o Kanban 3 colunas — o badge do card mostra o status
+// real ("Aguard. pgto", "A caminho"...) quando difere do nome da coluna.
+const colunaDoPedido: Record<string, StatusProducao | undefined> = {
+  recebido:             'recebido',
+  pagamento_confirmado: 'recebido',
+  em_preparo:           'em_preparo',
+  pronto:               'pronto',
+  a_caminho:            'pronto',
 }
 
-const tipoEntregaLabel: Record<string, string> = {
-  entrega:  '🛵 Entrega',
-  retirada: '🏪 Retirada',
+function minutosDesde(dataIso: string, referencia: number): number {
+  return Math.floor((referencia - new Date(dataIso).getTime()) / 60000)
 }
 
-interface OpcaoAcompanhamento {
-  nome: string
-  precoAdicional: number
-}
-
-interface ItemCardapio {
-  id:         string
-  nome:       string
-  preco:      number
-  disponivel: boolean
-  categoria:  { id: string; nome: string; ordem: number; opcoesAcompanhamento: OpcaoAcompanhamento[] } | null
-}
-
-function formatarTempo(criadoEm: string): string {
-  const diff = Date.now() - new Date(criadoEm).getTime()
-  const minutos = Math.floor(diff / 60000)
-  if (minutos < 1) return 'agora'
-  if (minutos === 1) return 'há 1 min'
-  return `há ${minutos} min`
-}
-
-function imprimirComandaAutomaticamente(pedidoId: string) {
-  const iframe = document.createElement('iframe')
-  iframe.style.position = 'fixed'
-  iframe.style.top      = '-10000px'
-  iframe.style.left     = '-10000px'
-  iframe.style.width    = '1px'
-  iframe.style.height   = '1px'
-  iframe.src = `/imprimir/${pedidoId}`
-  document.body.appendChild(iframe)
-  setTimeout(() => iframe.remove(), 8000)
+function corCronometro(minutos: number, tempoAlvoMinutos: number | null): string {
+  if (tempoAlvoMinutos === null) return 'text-zinc-500'
+  if (minutos >= tempoAlvoMinutos) return 'text-red-400'
+  if (minutos >= tempoAlvoMinutos * 0.7) return 'text-yellow-400'
+  return 'text-zinc-500'
 }
 
 export default function Cozinha() {
   const token = localStorage.getItem('token')
-  const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [atualizandoId, setAtualizandoId] = useState<string | null>(null)
-  const [cancelandoId, setCancelandoId] = useState<string | null>(null)
-  const [carregandoInicial, setCarregandoInicial] = useState(true)
-  const { socket, conectado, erro } = useSocket(token)
+  const { socket } = useSocketProducao(token)
+  // Conexão ampla (mesma do Layout) — eventos de Pedido não passam pelas salas por
+  // setor da produção, e pedido não tem setor: todo operador da tela vê todos.
+  const { socket: socketAmplo, conectado, erro: erroSocket } = useSocket(token)
 
-  // Pausa
+  const [modulosAtivos, setModulosAtivos] = useState<string[] | null>(null)
+  const [itens, setItens] = useState<ItemProducao[]>([])
+  const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [avancandoPedidoId, setAvancandoPedidoId] = useState<string | null>(null)
+  const [cancelandoPedidoId, setCancelandoPedidoId] = useState<string | null>(null)
+  const [imprimirAutoBalcao, setImprimirAutoBalcao] = useState(true)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState<string | null>(null)
+  const [avancandoId, setAvancandoId] = useState<string | null>(null)
+  const [avancandoRodadaId, setAvancandoRodadaId] = useState<string | null>(null)
+  const [agora, setAgora] = useState(Date.now())
+
+  // Controles do header (portados da Cozinha antiga)
   const [aceitando, setAceitando]         = useState(true)
   const [togglingPausa, setTogglingPausa] = useState(false)
-
-  // Impressão automática do balcão
-  const [imprimirAutoBalcao, setImprimirAutoBalcao] = useState(true)
-  const [togglingImprimir, setTogglingImprimir]     = useState(false)
-
-  // Modal novo pedido
-  const [modalAberto, setModalAberto]           = useState(false)
-  const [cardapio, setCardapio]                 = useState<ItemCardapio[]>([])
-  const [carregandoMenu, setCarregandoMenu]     = useState(false)
-  const [clienteNomeModal, setClienteNomeModal] = useState('')
-  const [clienteFoneModal, setClienteFoneModal] = useState('')
-  const [selecionados, setSelecionados]         = useState<Record<string, { quantidade: number; observacao: string; acompanhamento?: string }>>({})
-  const [enviandoManual, setEnviandoManual]     = useState(false)
-  const [erroModal, setErroModal]               = useState<string | null>(null)
-  const [formaPagamentoModal, setFormaPagamentoModal] = useState<'pix' | 'pix_maquininha' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'>('dinheiro')
-  const [tipoEntregaModal, setTipoEntregaModal]       = useState<'entrega' | 'retirada'>('retirada')
-  const [precisaTrocoModal, setPrecisaTrocoModal]     = useState(false)
-  const [trocoParaModal, setTrocoParaModal]           = useState('')
-  const [enderecoModal, setEnderecoModal]             = useState('')
-  const [bairroIdModal, setBairroIdModal]             = useState('')
-  const [bairros, setBairros]                         = useState<Bairro[]>([])
-  const [buscaItemModal, setBuscaItemModal]           = useState('')
-
-  // Modal editar itens de pedido existente
+  const [togglingImprimir, setTogglingImprimir] = useState(false)
+  const [modalNovoAberto, setModalNovoAberto]   = useState(false)
   const [edicaoItensPedido, setEdicaoItensPedido] = useState<Pedido | null>(null)
-  const [salvandoItemId, setSalvandoItemId]       = useState<string | null>(null)
-  const [erroEdicaoItens, setErroEdicaoItens]     = useState<string | null>(null)
-  const [escolhendoAcompanhamentoId, setEscolhendoAcompanhamentoId] = useState<string | null>(null)
-  const [buscaItemEdicao, setBuscaItemEdicao]     = useState('')
 
-  useEffect(() => {
-    if (!token) return
+  const podeNovoPedido = getRole() === 'DONO' || temPermissao('pedido_manual')
 
-    fetch(`${API_URL}/pedidos?status=recebido,pagamento_confirmado,em_preparo,pronto,a_caminho&limite=100`, {
+  // Rodadas já impressas nesta aba — dedupe porque a rodada chega como N eventos
+  // 'producao:item-novo' (um por item) e deve imprimir uma vez só.
+  const rodadasImpressasRef = useRef<Set<string>>(new Set())
+
+  function imprimirRodadaAutomaticamente(rodadaId: string) {
+    if (rodadasImpressasRef.current.has(rodadaId)) return
+    rodadasImpressasRef.current.add(rodadaId)
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.top      = '-10000px'
+    iframe.style.left     = '-10000px'
+    iframe.style.width    = '1px'
+    iframe.style.height   = '1px'
+    iframe.src = `/imprimir/rodada/${rodadaId}`
+    document.body.appendChild(iframe)
+    setTimeout(() => iframe.remove(), 8000)
+  }
+
+  const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
+  const [motivoCancelamento, setMotivoCancelamento] = useState('')
+  const [senhaCancelamento, setSenhaCancelamento] = useState('')
+  const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
+  const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
+
+  function carregarItens() {
+    fetch(`${API_URL}/producao/itens`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then(setItens)
+      .catch((err) => { console.error(err); setErro('Falha ao carregar produção') })
+      .finally(() => setCarregando(false))
+  }
+
+  function carregarPedidos() {
+    fetch(`${API_URL}/pedidos?status=${STATUS_ATIVOS_PEDIDO.join(',')}&limite=100`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((resp: PedidosResponse) => {
-        if (resp.dados && Array.isArray(resp.dados)) setPedidos(resp.dados)
-      })
-      .catch((e) => console.error('Erro ao buscar pedidos:', e))
-      .finally(() => setCarregandoInicial(false))
-  }, [token])
+      .then((data: { dados: Pedido[] }) => setPedidos(data.dados ?? []))
+      .catch((err) => { console.error(err); setErro('Falha ao carregar pedidos') })
+      .finally(() => setCarregando(false))
+  }
 
-  useEffect(() => {
-    if (!socket) return
-
-    const onNovo = (pedido: Pedido) => {
-      setPedidos((prev) => [pedido, ...prev.filter((p) => p.id !== pedido.id)])
-      if (pedido.origem !== 'balcao' || imprimirAutoBalcao) {
-        imprimirComandaAutomaticamente(pedido.id)
-      }
-    }
-
-    const onAtualizado = (pedido: Pedido) => {
-      setPedidos((prev) => prev.map((p) => (p.id === pedido.id ? pedido : p)))
-    }
-
-    socket.on('pedido:novo', onNovo)
-    socket.on('pedido:atualizado', onAtualizado)
-
-    return () => {
-      socket.off('pedido:novo', onNovo)
-      socket.off('pedido:atualizado', onAtualizado)
-    }
-  }, [socket, imprimirAutoBalcao])
-
-  useEffect(() => {
-    if (!token) return
-    fetch(`${API_URL}/meu-estabelecimento`, {
-      headers: { Authorization: `Bearer ${token}` },
+  function atualizarPedidoLocal(pedido: Pedido) {
+    setPedidos((prev) => {
+      const semEsse = prev.filter((p) => p.id !== pedido.id)
+      return STATUS_ATIVOS_PEDIDO.includes(pedido.status) ? [...semEsse, pedido] : semEsse
     })
-      .then((r) => r.json())
-      .then((est) => {
-        setAceitando(est.aceitandoPedidos ?? true)
-        setImprimirAutoBalcao(est.imprimirAutomaticoBalcao ?? true)
-      })
-      .catch(console.error)
+    // Mantém o modal de edição sincronizado se o pedido aberto nele mudou.
+    setEdicaoItensPedido((prev) => (prev && prev.id === pedido.id ? pedido : prev))
+  }
 
-    fetch(`${API_URL}/bairros`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then(setBairros)
-      .catch(console.error)
-  }, [token])
+  // Pedidos já impressos nesta aba (balcão respeita o toggle). Duas abas abertas da
+  // tela imprimem em dobro — mesmo comportamento aceito da Cozinha antiga.
+  const pedidosImpressosRef = useRef<Set<string>>(new Set())
 
-  async function atualizarStatus(pedidoId: string, novoStatus: Status) {
-    setAtualizandoId(pedidoId)
+  function imprimirPedidoAutomaticamente(pedido: Pedido) {
+    if (pedido.origem === 'balcao' && !imprimirAutoBalcao) return
+    if (pedidosImpressosRef.current.has(pedido.id)) return
+    pedidosImpressosRef.current.add(pedido.id)
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.top      = '-10000px'
+    iframe.style.left     = '-10000px'
+    iframe.style.width    = '1px'
+    iframe.style.height   = '1px'
+    iframe.src = `/imprimir/${pedido.id}`
+    document.body.appendChild(iframe)
+    setTimeout(() => iframe.remove(), 8000)
+  }
+
+  async function avancarPedido(pedido: Pedido, proximoStatus: StatusPedido) {
+    setAvancandoPedidoId(pedido.id)
     try {
-      const resposta = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
-        method:  'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: novoStatus }),
+      const resp = await fetch(`${API_URL}/pedidos/${pedido.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: proximoStatus }),
       })
-
-      if (!resposta.ok) throw new Error('Falha ao atualizar status')
-
-      const pedidoAtualizado: Pedido = await resposta.json()
-      setPedidos((prev) =>
-        prev.map((p) => (p.id === pedidoId ? pedidoAtualizado : p))
-      )
-    } catch (e) {
-      console.error('Erro ao atualizar status:', e)
-      alert('Não foi possível atualizar o pedido. Tente de novo.')
+      if (resp.ok) atualizarPedidoLocal(await resp.json())
+    } catch (err) {
+      console.error(err)
     } finally {
-      setAtualizandoId(null)
+      setAvancandoPedidoId(null)
     }
   }
 
-  async function cancelarPedido(pedidoId: string) {
-    setCancelandoId(pedidoId)
+  async function cancelarPedido(pedido: Pedido) {
+    setCancelandoPedidoId(pedido.id)
     try {
-      const resposta = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ status: 'cancelado' }),
+      const resp = await fetch(`${API_URL}/pedidos/${pedido.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelado' }),
       })
-      if (!resposta.ok) throw new Error('Falha ao cancelar')
-      const pedidoAtualizado: Pedido = await resposta.json()
-      setPedidos((prev) => prev.map((p) => (p.id === pedidoId ? pedidoAtualizado : p)))
-    } catch (e) {
-      console.error('Erro ao cancelar pedido:', e)
+      if (resp.ok) atualizarPedidoLocal(await resp.json())
+    } catch (err) {
+      console.error(err)
     } finally {
-      setCancelandoId(null)
+      setCancelandoPedidoId(null)
     }
   }
 
@@ -257,8 +213,8 @@ export default function Cozinha() {
         body:    JSON.stringify({ aceitandoPedidos: !aceitando }),
       })
       if (resp.ok) setAceitando((v) => !v)
-    } catch (e) {
-      console.error(e)
+    } catch (err) {
+      console.error(err)
     } finally {
       setTogglingPausa(false)
     }
@@ -273,840 +229,432 @@ export default function Cozinha() {
         body:    JSON.stringify({ imprimirAutomaticoBalcao: !imprimirAutoBalcao }),
       })
       if (resp.ok) setImprimirAutoBalcao((v) => !v)
-    } catch (e) {
-      console.error(e)
+    } catch (err) {
+      console.error(err)
     } finally {
       setTogglingImprimir(false)
     }
   }
 
-  async function carregarCardapioSeNecessario() {
-    if (cardapio.length > 0) return
-    setCarregandoMenu(true)
-    try {
-      const resp = await fetch(`${API_URL}/cardapio`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const dados: ItemCardapio[] = await resp.json()
-      setCardapio(dados.filter((i) => i.disponivel))
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setCarregandoMenu(false)
-    }
-  }
-
-  async function abrirModalNovoPedido() {
-    setClienteNomeModal('')
-    setClienteFoneModal('')
-    setSelecionados({})
-    setErroModal(null)
-    setFormaPagamentoModal('dinheiro')
-    setTipoEntregaModal('retirada')
-    setPrecisaTrocoModal(false)
-    setTrocoParaModal('')
-    setEnderecoModal('')
-    setBairroIdModal('')
-    setBuscaItemModal('')
-    setModalAberto(true)
-    await carregarCardapioSeNecessario()
-  }
-
-  function aplicarPedidoAtualizado(pedidoAtualizado: Pedido) {
-    setPedidos((prev) => prev.map((p) => (p.id === pedidoAtualizado.id ? pedidoAtualizado : p)))
-    setEdicaoItensPedido((prev) => (prev && prev.id === pedidoAtualizado.id ? pedidoAtualizado : prev))
-  }
-
-  async function abrirEdicaoItens(pedido: Pedido) {
-    setErroEdicaoItens(null)
-    setBuscaItemEdicao('')
-    setEdicaoItensPedido(pedido)
-    await carregarCardapioSeNecessario()
-  }
-
-  async function adicionarItemAoPedido(itemCardapioId: string, acompanhamento?: string) {
-    if (!edicaoItensPedido) return
-    setErroEdicaoItens(null)
-    setSalvandoItemId(itemCardapioId)
-    setEscolhendoAcompanhamentoId(null)
-    try {
-      const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ itemCardapioId, quantidade: 1, ...(acompanhamento ? { acompanhamento } : {}) }),
-      })
-      const dados = await resp.json()
-      if (!resp.ok) { setErroEdicaoItens(dados.erro ?? 'Erro ao adicionar item'); return }
-      aplicarPedidoAtualizado(dados)
-    } catch {
-      setErroEdicaoItens('Falha de conexão')
-    } finally {
-      setSalvandoItemId(null)
-    }
-  }
-
-  async function alterarQuantidadeItemPedido(item: ItemPedido, delta: number) {
-    if (!edicaoItensPedido) return
-    const novaQuantidade = item.quantidade + delta
-    if (novaQuantidade < 1) { removerItemPedido(item.id); return }
-
-    setErroEdicaoItens(null)
-    setSalvandoItemId(item.id)
-    try {
-      const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens/${item.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ quantidade: novaQuantidade }),
-      })
-      const dados = await resp.json()
-      if (!resp.ok) { setErroEdicaoItens(dados.erro ?? 'Erro ao atualizar item'); return }
-      aplicarPedidoAtualizado(dados)
-    } catch {
-      setErroEdicaoItens('Falha de conexão')
-    } finally {
-      setSalvandoItemId(null)
-    }
-  }
-
-  async function removerItemPedido(itemPedidoId: string) {
-    if (!edicaoItensPedido) return
-    setErroEdicaoItens(null)
-    setSalvandoItemId(itemPedidoId)
-    try {
-      const resp = await fetch(`${API_URL}/pedidos/${edicaoItensPedido.id}/itens/${itemPedidoId}`, {
-        method:  'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!resp.ok) {
-        const dados = await resp.json().catch(() => ({}))
-        setErroEdicaoItens(dados.erro ?? 'Erro ao remover item')
-        return
-      }
-      const dados = await resp.json()
-      aplicarPedidoAtualizado(dados)
-    } catch {
-      setErroEdicaoItens('Falha de conexão')
-    } finally {
-      setSalvandoItemId(null)
-    }
-  }
-
-  function alterarQtd(itemId: string, delta: number) {
-    setSelecionados((prev) => {
-      const atual = prev[itemId]?.quantidade ?? 0
-      const nova  = atual + delta
-      if (nova <= 0) {
-        const { [itemId]: _, ...resto } = prev
-        return resto
-      }
-      return {
-        ...prev,
-        [itemId]: { quantidade: nova, observacao: prev[itemId]?.observacao ?? '', acompanhamento: prev[itemId]?.acompanhamento },
-      }
+  function atualizarItemLocal(item: ItemProducao) {
+    setItens((prev) => {
+      const semEsseItem = prev.filter((i) => i.id !== item.id)
+      const aindaAtivo = item.status === 'recebido' || item.status === 'em_preparo' || item.status === 'pronto'
+      return aindaAtivo ? [...semEsseItem, item] : semEsseItem
     })
   }
 
-  function alterarAcompanhamento(itemId: string, acompanhamento: string) {
-    setSelecionados((prev) => ({
-      ...prev,
-      [itemId]: { quantidade: prev[itemId]?.quantidade ?? 1, observacao: prev[itemId]?.observacao ?? '', acompanhamento },
-    }))
+  function podeCancelarLivre(status: StatusProducao): boolean {
+    return status === 'recebido' || status === 'em_preparo'
   }
 
-  function alterarObs(itemId: string, observacao: string) {
-    setSelecionados((prev) => ({
-      ...prev,
-      [itemId]: { quantidade: prev[itemId]?.quantidade ?? 1, observacao },
-    }))
+  function abrirCancelamentoItem(item: ItemProducao) {
+    setItemCancelamento(item)
+    setMotivoCancelamento('')
+    setSenhaCancelamento('')
+    setErroCancelamento(null)
   }
 
-  const bairroSelecionadoModal = bairros.find((b) => b.id === bairroIdModal)
-  const taxaModal = tipoEntregaModal === 'entrega' ? (bairroSelecionadoModal?.taxaEntrega ?? 0) : 0
-  const subtotalManual = cardapio.reduce((soma, item) => {
-    const sel = selecionados[item.id]
-    if (!sel) return soma
-    const opcao = item.categoria?.opcoesAcompanhamento?.find((o) => o.nome === sel.acompanhamento)
-    return soma + (Number(item.preco) + Number(opcao?.precoAdicional ?? 0)) * sel.quantidade
-  }, 0)
-  const totalManual = subtotalManual + taxaModal
-  const itensFiltradosModal = cardapio.filter((item) =>
-    item.nome.toLowerCase().includes(buscaItemModal.trim().toLowerCase())
-  )
-  const itensFiltradosEdicao = cardapio.filter((item) =>
-    item.nome.toLowerCase().includes(buscaItemEdicao.trim().toLowerCase())
-  )
+  async function confirmarCancelamentoItem() {
+    if (!itemCancelamento) return
+    const precisaSenha = !podeCancelarLivre(itemCancelamento.status)
+    if (precisaSenha && (!motivoCancelamento || !senhaCancelamento)) return
 
-  async function criarPedidoManual(e: FormEvent) {
-    e.preventDefault()
-    setErroModal(null)
-
-    const itemFaltandoAcompanhamento = Object.entries(selecionados).find(([itemCardapioId, sel]) => {
-      const item = cardapio.find((i) => i.id === itemCardapioId)
-      return (item?.categoria?.opcoesAcompanhamento?.length ?? 0) > 0 && !sel.acompanhamento
-    })
-    if (itemFaltandoAcompanhamento) {
-      const item = cardapio.find((i) => i.id === itemFaltandoAcompanhamento[0])
-      setErroModal(`Escolha o acompanhamento de "${item?.nome}"`)
-      return
-    }
-
-    const itens = Object.entries(selecionados).map(([itemCardapioId, { quantidade, observacao, acompanhamento }]) => ({
-      itemCardapioId,
-      quantidade,
-      observacao: observacao || undefined,
-      acompanhamento: acompanhamento || undefined,
-    }))
-    if (itens.length === 0) {
-      setErroModal('Selecione pelo menos um item')
-      return
-    }
-    if (tipoEntregaModal === 'entrega' && !enderecoModal.trim()) {
-      setErroModal('Endereço de entrega é obrigatório')
-      return
-    }
-    if (tipoEntregaModal === 'entrega' && bairros.length > 0 && !bairroIdModal) {
-      setErroModal('Selecione o bairro de entrega')
-      return
-    }
-    if (formaPagamentoModal === 'dinheiro' && precisaTrocoModal && !trocoParaModal.trim()) {
-      setErroModal('Informe o valor para o troco')
-      return
-    }
-    setEnviandoManual(true)
+    setErroCancelamento(null)
+    setEnviandoCancelamento(true)
     try {
-      const resp = await fetch(`${API_URL}/pedidos/manual`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({
-          clienteNome: clienteNomeModal,
-          clienteFone: clienteFoneModal.trim() || undefined,
-          enderecoEntrega: tipoEntregaModal === 'entrega' ? enderecoModal.trim() || undefined : undefined,
-          bairroId: tipoEntregaModal === 'entrega' && bairros.length > 0 ? bairroIdModal : undefined,
-          itens,
-          formaPagamento: formaPagamentoModal,
-          precisaTroco: formaPagamentoModal === 'dinheiro' ? precisaTrocoModal : undefined,
-          trocoPara: formaPagamentoModal === 'dinheiro' && precisaTrocoModal
-            ? parseFloat(trocoParaModal.replace(',', '.'))
-            : undefined,
-          tipoEntrega: tipoEntregaModal,
+      const resp = await fetch(`${API_URL}/itens-comanda/${itemCancelamento.id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelado',
+          ...(motivoCancelamento ? { motivo: motivoCancelamento } : {}),
+          ...(precisaSenha ? { senha: senhaCancelamento } : {}),
         }),
       })
-      const dados = await resp.json()
-      if (!resp.ok) { setErroModal(dados.erro ?? 'Erro ao criar pedido'); return }
-      setModalAberto(false)
+      const data = await resp.json()
+      if (!resp.ok) { setErroCancelamento(data.erro ?? 'Não foi possível cancelar o item'); return }
+      atualizarItemLocal({ ...itemCancelamento, status: data.status })
+      setItemCancelamento(null)
     } catch {
-      setErroModal('Falha de conexão')
+      setErroCancelamento('Falha de conexão')
     } finally {
-      setEnviandoManual(false)
+      setEnviandoCancelamento(false)
     }
   }
 
-  const pedidosVisiveis = pedidos.filter((p) => statusAtivos.includes(p.status))
+  async function avancarStatus(item: ItemProducao) {
+    const novoStatus = proximoStatus[item.status]
+    if (!novoStatus) return
+    setAvancandoId(item.id)
+    try {
+      const resp = await fetch(`${API_URL}/itens-comanda/${item.id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: novoStatus }),
+      })
+      if (resp.ok) {
+        const atualizado = await resp.json()
+        atualizarItemLocal({ ...item, status: atualizado.status })
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAvancandoId(null)
+    }
+  }
+
+  // Recebe os itens do grupo já renderizado (não só o rodadaId) pra poder mesclar
+  // só o campo `status` da resposta por cima do item local já conhecido — a resposta
+  // de PATCH /rodadas/:id/avancar traz o ItemComanda "cru" do Prisma (sem os joins de
+  // mesaNumero/comandaNome/setorNome/tempoAlvoMinutos que serializarItemProducao
+  // adiciona), então não dá pra usar a resposta como item completo sem perder esses
+  // campos visuais. O evento de socket 'producao:item-atualizado' já traz a versão
+  // completa; aqui só garantimos a atualização otimista do status, no mesmo padrão
+  // já usado em avancarStatus.
+  async function avancarRodada(itensDoGrupo: ItemProducao[]) {
+    const rodadaId = itensDoGrupo[0]?.rodadaId
+    if (!rodadaId) return
+    setAvancandoRodadaId(rodadaId)
+    try {
+      const resp = await fetch(`${API_URL}/rodadas/${rodadaId}/avancar`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (resp.ok) {
+        const dados = await resp.json()
+        const statusPorId = new Map<string, StatusProducao>(
+          dados.itensAtualizados.map((i: { id: string; status: StatusProducao }) => [i.id, i.status])
+        )
+        for (const item of itensDoGrupo) {
+          const novoStatus = statusPorId.get(item.id)
+          if (novoStatus) atualizarItemLocal({ ...item, status: novoStatus })
+        }
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAvancandoRodadaId(null)
+    }
+  }
+
+  useEffect(() => {
+    fetch(`${API_URL}/meu-estabelecimento`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => {
+        setModulosAtivos(data.modulosAtivos ?? [])
+        setImprimirAutoBalcao(data.imprimirAutomaticoBalcao ?? true)
+        setAceitando(data.aceitandoPedidos ?? true)
+      })
+      .catch(() => setModulosAtivos([]))
+  }, [token])
+
+  // Pedidos existem em qualquer estabelecimento; itens de comanda só com o módulo mesas.
+  useEffect(() => {
+    carregarPedidos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (modulosAtivos?.includes('mesas')) carregarItens()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modulosAtivos])
+
+  useEffect(() => {
+    if (!socket) return
+
+    function aoReceberItemNovo(item: ItemProducao) {
+      if (item.rodadaId) imprimirRodadaAutomaticamente(item.rodadaId)
+      atualizarItemLocal(item)
+    }
+
+    function aoReceberItemAtualizado(item: ItemProducao) {
+      atualizarItemLocal(item)
+    }
+
+    socket.on('producao:item-novo', aoReceberItemNovo)
+    socket.on('producao:item-atualizado', aoReceberItemAtualizado)
+
+    return () => {
+      socket.off('producao:item-novo', aoReceberItemNovo)
+      socket.off('producao:item-atualizado', aoReceberItemAtualizado)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket])
+
+  useEffect(() => {
+    if (!socketAmplo) return
+
+    function aoReceberPedidoNovo(pedido: Pedido) {
+      imprimirPedidoAutomaticamente(pedido)
+      atualizarPedidoLocal(pedido)
+    }
+
+    function aoReceberPedidoAtualizado(pedido: Pedido) {
+      atualizarPedidoLocal(pedido)
+    }
+
+    socketAmplo.on('pedido:novo', aoReceberPedidoNovo)
+    socketAmplo.on('pedido:atualizado', aoReceberPedidoAtualizado)
+
+    return () => {
+      socketAmplo.off('pedido:novo', aoReceberPedidoNovo)
+      socketAmplo.off('pedido:atualizado', aoReceberPedidoAtualizado)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socketAmplo, imprimirAutoBalcao])
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setAgora(Date.now()), 15000)
+    return () => clearInterval(intervalo)
+  }, [])
+
+  // Uma rodada "dividida" tem itens não-terminais (não entregue/cancelado) espalhados
+  // por mais de uma coluna de status — acontece quando o operador avança só um item
+  // específico via "(só este)" em vez da rodada inteira. Nesse caso o botão "Avançar
+  // rodada" precisa sumir em todos os fragmentos da rodada: ele chama
+  // PATCH /rodadas/:id/avancar, que avança TODOS os itens elegíveis da rodada no
+  // backend (por design), não só os itens visíveis no card daquela coluna — mostrar o
+  // botão em apenas um fragmento sugeriria (erroneamente) que ele afeta só aquele card.
+  const rodadasDivididas = new Set<string>()
+  {
+    const statusPorRodada = new Map<string, Set<StatusProducao>>()
+    for (const item of itens) {
+      if (!item.rodadaId) continue
+      if (item.status === 'entregue' || item.status === 'cancelado') continue
+      const statusSet = statusPorRodada.get(item.rodadaId) ?? new Set<StatusProducao>()
+      statusSet.add(item.status)
+      statusPorRodada.set(item.rodadaId, statusSet)
+    }
+    for (const [rodadaId, statusSet] of statusPorRodada) {
+      if (statusSet.size > 1) rodadasDivididas.add(rodadaId)
+    }
+  }
 
   return (
     <Layout headerExtra={
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
+        {podeNovoPedido && (
           <button
-            onClick={abrirModalNovoPedido}
+            onClick={() => setModalNovoAberto(true)}
             className="flex items-center gap-1.5 rounded-full bg-orange-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition hover:bg-orange-600 sm:px-4"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Novo pedido</span>
           </button>
-          <div className="flex items-center divide-x divide-zinc-800 overflow-hidden rounded-full bg-zinc-900/80 ring-1 ring-zinc-800">
-            <ControleAceitandoPedidos
-              conectado={conectado}
-              erro={erro}
-              aceitando={aceitando}
-              disabled={togglingPausa}
-              onToggle={togglePausa}
-            />
-            <button
-              onClick={toggleImprimirAutoBalcao}
-              disabled={togglingImprimir}
-              title={`Impressão automática de pedidos de balcão: ${imprimirAutoBalcao ? 'ligada' : 'desligada'} (delivery e retirada via link sempre imprimem)`}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition disabled:opacity-50 ${
-                imprimirAutoBalcao
-                  ? 'text-emerald-400 hover:bg-emerald-500/10'
-                  : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
-              }`}
-            >
-              <Printer className="h-4 w-4" />
-              <span className="hidden sm:inline">{imprimirAutoBalcao ? 'Auto' : 'Manual'}</span>
-            </button>
-          </div>
+        )}
+        <div className="flex items-center divide-x divide-zinc-800 overflow-hidden rounded-full bg-zinc-900/80 ring-1 ring-zinc-800">
+          <ControleAceitandoPedidos
+            conectado={conectado}
+            erro={erroSocket}
+            aceitando={aceitando}
+            disabled={togglingPausa}
+            onToggle={togglePausa}
+          />
+          <button
+            onClick={toggleImprimirAutoBalcao}
+            disabled={togglingImprimir}
+            title={`Impressão automática de pedidos de balcão: ${imprimirAutoBalcao ? 'ligada' : 'desligada'} (delivery e retirada via link sempre imprimem)`}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition disabled:opacity-50 ${
+              imprimirAutoBalcao
+                ? 'text-emerald-400 hover:bg-emerald-500/10'
+                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+            }`}
+          >
+            <Printer className="h-4 w-4" />
+            <span className="hidden sm:inline">{imprimirAutoBalcao ? 'Auto' : 'Manual'}</span>
+          </button>
         </div>
-      }>
-      <div className="mb-6 flex items-baseline justify-between">
-        <h2 className="text-2xl font-extrabold">Pedidos</h2>
-        <span className="text-sm text-zinc-400">{pedidosVisiveis.length} ativos</span>
       </div>
-
-      {carregandoInicial ? (
-        <div className="flex min-h-[400px] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-zinc-600" />
-        </div>
-      ) : pedidosVisiveis.length === 0 ? (
-        <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 text-center">
-          <p className="text-lg font-semibold text-zinc-400">Aguardando pedidos...</p>
-          <p className="mt-2 max-w-md text-sm text-zinc-500">
-            Os pedidos aparecerão aqui em tempo real assim que chegarem.
-          </p>
-        </div>
+    }>
+      <h2 className="mb-6 text-2xl font-extrabold">Cozinha</h2>
+      {erro && <p className="mb-4 text-sm text-red-400">{erro}</p>}
+      {carregando ? (
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {pedidosVisiveis.map((pedido) => {
-            const cfg = statusConfig[pedido.status]
-            const acao = obterProximaAcao(pedido.status, pedido.tipoEntrega)
-            const IconeAcao = acao ? (ICONE_ACAO[acao.proximoStatus] ?? Check) : null
-            const atualizando = atualizandoId === pedido.id
-            const cancelando = cancelandoId === pedido.id
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {colunas.map((coluna) => {
+            const itensDaColuna = itens
+              .filter((i) => i.status === coluna.status)
+              .sort((a, b) => new Date(a.recebidoEm).getTime() - new Date(b.recebidoEm).getTime())
+
+            const gruposDaColuna: { chave: string; rodadaId: string | null; itens: ItemProducao[] }[] = []
+            for (const item of itensDaColuna) {
+              const chave = item.rodadaId ?? item.id
+              const grupoExistente = gruposDaColuna.find((g) => g.chave === chave)
+              if (grupoExistente) grupoExistente.itens.push(item)
+              else gruposDaColuna.push({ chave, rodadaId: item.rodadaId, itens: [item] })
+            }
+
+            const pedidosDaColuna = pedidos
+              .filter((p) => colunaDoPedido[p.status] === coluna.status)
+
+            // Pedidos e rodadas intercalados por horário de chegada — o mais antigo no topo.
+            const cardsDaColuna = [
+              ...pedidosDaColuna.map((pedido) => ({
+                tipo: 'pedido' as const,
+                horario: new Date(pedido.criadoEm).getTime(),
+                pedido,
+              })),
+              ...gruposDaColuna.map((grupo) => ({
+                tipo: 'grupo' as const,
+                horario: new Date(grupo.itens[0].recebidoEm).getTime(),
+                grupo,
+              })),
+            ].sort((a, b) => a.horario - b.horario)
+
+            const totalDaColuna = itensDaColuna.length + pedidosDaColuna.length
 
             return (
-              <div
-                key={pedido.id}
-                className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-5 transition hover:border-zinc-700"
-              >
-                <div className="mb-4 flex items-start justify-between">
-                  <div>
-                    <p className="font-mono text-xs text-zinc-500">#{pedido.id.slice(-6)}</p>
-                    <div className="mt-1 flex items-center gap-1.5 text-zinc-400">
-                      <Clock className="h-3.5 w-3.5" />
-                      <span className="text-xs">{formatarTempo(pedido.criadoEm)}</span>
-                    </div>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${cfg.badge}`}>
-                    {labelStatus(pedido.status, pedido.tipoEntrega)}
-                  </span>
+              <div key={coluna.status} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <h3 className="font-semibold text-zinc-200">{coluna.titulo}</h3>
+                  <span className="text-xs text-zinc-500">{totalDaColuna}</span>
                 </div>
 
-                <div className="mb-2 flex items-center gap-2">
-                  <User className="h-4 w-4 text-zinc-500" />
-                  <span className="font-semibold">{pedido.clienteNome}</span>
-                </div>
-                <div className="mb-4 flex flex-wrap gap-1.5">
-                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                    {tipoEntregaLabel[pedido.tipoEntrega] ?? pedido.tipoEntrega}
-                  </span>
-                  <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                    pedido.formaPagamento === 'pix'
-                      ? 'bg-blue-500/15 text-blue-400'
-                      : 'bg-zinc-800 text-zinc-400'
-                  }`}>
-                    {formaPagamentoLabel[pedido.formaPagamento] ?? pedido.formaPagamento}
-                  </span>
-                  {pedido.formaPagamento === 'dinheiro' && pedido.precisaTroco && pedido.trocoPara != null && (
-                    <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
-                      Troco p/ R$ {Number(pedido.trocoPara).toFixed(2)}
-                    </span>
-                  )}
-                </div>
-
-                {pedido.tipoEntrega === 'entrega' && pedido.enderecoEntrega && (
-                  <div className="mb-4 flex items-start gap-1.5 text-xs text-zinc-400">
-                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500" />
-                    <span>
-                      {pedido.bairroNome && <span className="font-medium text-zinc-300">{pedido.bairroNome} — </span>}
-                      {pedido.enderecoEntrega}
-                    </span>
-                  </div>
-                )}
-
-                <div className="mb-4 flex-1 space-y-2 border-t border-zinc-800 pt-4">
-                  {pedido.itens.map((item) => (
-                    <div key={item.id}>
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/15 text-sm font-bold text-orange-400">
-                          {item.quantidade}
-                        </span>
-                        <span className="text-sm text-zinc-200">{item.nomeItem}</span>
-                      </div>
-                      {item.acompanhamento && (
-                        <p className="ml-10 mt-0.5 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
-                      )}
-                      {item.observacao && (
-                        <p className="ml-10 mt-0.5 text-xs text-zinc-500 italic">{item.observacao}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t border-zinc-800 pt-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-lg font-bold">R$ {Number(pedido.total).toFixed(2)}</span>
-                    <div className="flex items-center gap-1">
-                      {pedido.status !== 'entregue' && pedido.status !== 'cancelado' && (
-                        <button
-                          onClick={() => abrirEdicaoItens(pedido)}
-                          className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
-                          title="Editar itens do pedido"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => window.open(`/imprimir/${pedido.id}`, '_blank')}
-                        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
-                        title="Imprimir comanda"
-                      >
-                        <Printer className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {acao && (
-                      <button
-                        onClick={() => atualizarStatus(pedido.id, acao.proximoStatus)}
-                        disabled={atualizando || cancelando}
-                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${acao.cor ?? 'bg-orange-500 hover:bg-orange-600'}`}
-                      >
-                        {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : IconeAcao && <IconeAcao className="h-4 w-4" />}
-                        {acao.label}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Cancelar este pedido?')) cancelarPedido(pedido.id)
-                      }}
-                      disabled={atualizando || cancelando}
-                      className="rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20 disabled:opacity-40"
-                      title="Cancelar pedido"
-                    >
-                      {cancelando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {/* Modal novo pedido manual */}
-      {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="flex h-[90vh] w-full max-w-lg flex-col rounded-2xl border border-zinc-800 bg-zinc-900">
-            <div className="flex items-center justify-between border-b border-zinc-800 p-5">
-              <h3 className="text-lg font-bold">Novo Pedido</h3>
-              <button onClick={() => setModalAberto(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <form onSubmit={criarPedidoManual} className="flex flex-1 flex-col overflow-hidden">
-              <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Nome</span>
-                    <input
-                      value={clienteNomeModal}
-                      onChange={(e) => setClienteNomeModal(e.target.value)}
-                      placeholder="Nome do cliente (opcional)"
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium text-zinc-400">Telefone</span>
-                    <input
-                      value={clienteFoneModal}
-                      onChange={(e) => setClienteFoneModal(e.target.value)}
-                      placeholder="85 99999-9999 (opcional)"
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-                    />
-                  </label>
-                </div>
-                {/* Tipo de entrega */}
-                <div className="grid grid-cols-2 gap-2">
-                  {(['retirada', 'entrega'] as const).map((tipo) => (
-                    <button
-                      key={tipo}
-                      type="button"
-                      onClick={() => setTipoEntregaModal(tipo)}
-                      className={`rounded-xl py-2 text-sm font-semibold transition ${
-                        tipoEntregaModal === tipo
-                          ? 'bg-orange-500 text-white'
-                          : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                      }`}
-                    >
-                      {tipo === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}
-                    </button>
-                  ))}
-                </div>
-
-                {tipoEntregaModal === 'entrega' && (
-                  <div className="space-y-3">
-                    {bairros.length > 0 && (
-                      <label className="block">
-                        <span className="mb-1.5 block text-xs font-medium text-zinc-400">Bairro</span>
-                        <select
-                          value={bairroIdModal}
-                          onChange={(e) => setBairroIdModal(e.target.value)}
-                          className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-orange-500"
-                        >
-                          <option value="">Selecione o bairro</option>
-                          {bairros.map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.nome} — {b.taxaEntrega != null ? `R$ ${b.taxaEntrega.toFixed(2)}` : 'grátis'}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-zinc-400">Endereço de entrega</span>
-                      <textarea
-                        rows={2}
-                        value={enderecoModal}
-                        onChange={(e) => setEnderecoModal(e.target.value)}
-                        placeholder="Rua, número, referência"
-                        className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-                      />
-                    </label>
-                  </div>
-                )}
-
-                {/* Forma de pagamento */}
-                <div>
-                  <p className="mb-2 text-xs font-medium text-zinc-400">Pagamento</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { valor: 'dinheiro',       label: 'Dinheiro' },
-                      { valor: 'cartao_debito',  label: 'Débito' },
-                      { valor: 'cartao_credito', label: 'Crédito' },
-                      { valor: 'pix',            label: 'PIX' },
-                      { valor: 'pix_maquininha', label: 'Pix (maquininha)' },
-                    ] as const).map(({ valor, label }) => (
-                      <button
-                        key={valor}
-                        type="button"
-                        onClick={() => setFormaPagamentoModal(valor)}
-                        className={`rounded-xl py-2 text-sm font-semibold transition ${
-                          formaPagamentoModal === valor
-                            ? 'bg-orange-500 text-white'
-                            : 'border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {formaPagamentoModal === 'dinheiro' && (
-                    <div className="mt-3 space-y-2">
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={precisaTrocoModal}
-                          onChange={(e) => setPrecisaTrocoModal(e.target.checked)}
-                          className="h-4 w-4 rounded border-zinc-600 accent-orange-500"
-                        />
-                        <span className="text-sm text-zinc-300">Precisa de troco?</span>
-                      </label>
-                      {precisaTrocoModal && (
-                        <input
-                          value={trocoParaModal}
-                          onChange={(e) => setTrocoParaModal(e.target.value)}
-                          placeholder="Troco para quanto? (R$)"
-                          inputMode="decimal"
-                          className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <p className="mb-3 text-xs font-medium text-zinc-400">Itens</p>
-                  <input
-                    value={buscaItemModal}
-                    onChange={(e) => setBuscaItemModal(e.target.value)}
-                    placeholder="Buscar item pelo nome..."
-                    className="mb-3 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-                  />
-                  {carregandoMenu ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
-                    </div>
-                  ) : itensFiltradosModal.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-zinc-500">Nenhum item encontrado.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {itensFiltradosModal.map((item) => {
-                        const sel = selecionados[item.id]
-                        return (
-                          <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium">{item.nome}</p>
-                                <p className="text-xs text-orange-400">R$ {Number(item.preco).toFixed(2)}</p>
-                              </div>
-                              {sel ? (
-                                <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-800 px-1 py-1">
-                                  <button type="button" onClick={() => alterarQtd(item.id, -1)} className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700">
-                                    <Minus className="h-3.5 w-3.5" />
-                                  </button>
-                                  <span className="min-w-5 text-center text-sm font-bold">{sel.quantidade}</span>
-                                  <button type="button" onClick={() => alterarQtd(item.id, 1)} className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700">
-                                    <Plus className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => alterarQtd(item.id, 1)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white hover:bg-orange-600">
-                                  <Plus className="h-4 w-4" />
-                                </button>
-                              )}
-                            </div>
-                            {sel && (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0 && (
-                              <select
-                                value={sel.acompanhamento ?? ''}
-                                onChange={(e) => alterarAcompanhamento(item.id, e.target.value)}
-                                className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-orange-500"
-                              >
-                                <option value="">Escolha o acompanhamento...</option>
-                                {item.categoria!.opcoesAcompanhamento.map((op) => (
-                                  <option key={op.nome} value={op.nome}>
-                                    {op.nome}{op.precoAdicional > 0 ? ` (+R$ ${op.precoAdicional.toFixed(2)})` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                            {sel && (
-                              <input
-                                value={sel.observacao}
-                                onChange={(e) => alterarObs(item.id, e.target.value)}
-                                placeholder="Observação (opcional)"
-                                className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 placeholder-zinc-600 outline-none focus:border-orange-500"
-                              />
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-                {erroModal && (
-                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
-                    {erroModal}
-                  </p>
-                )}
-              </div>
-              <div className="border-t border-zinc-800 p-5">
-                {taxaModal > 0 && (
-                  <div className="mb-2 flex items-center justify-between text-xs text-zinc-500">
-                    <span>Taxa de entrega{bairroSelecionadoModal ? ` (${bairroSelecionadoModal.nome})` : ''}</span>
-                    <span>R$ {taxaModal.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Total</span>
-                  <span className="text-xl font-extrabold text-orange-400">R$ {totalManual.toFixed(2)}</span>
-                </div>
-                <button
-                  type="submit"
-                  disabled={enviandoManual}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:bg-zinc-800 disabled:text-zinc-500"
-                >
-                  {enviandoManual && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Registrar Pedido
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal editar itens de pedido existente */}
-      {edicaoItensPedido && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="flex h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-zinc-800 bg-zinc-900">
-            <div className="flex items-center justify-between border-b border-zinc-800 p-5">
-              <div>
-                <h3 className="text-lg font-bold">Editar pedido</h3>
-                <p className="text-xs text-zinc-500">{edicaoItensPedido.clienteNome} · #{edicaoItensPedido.id.slice(-6)}</p>
-              </div>
-              <button onClick={() => setEdicaoItensPedido(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-y-auto p-5">
-              <div>
-                <p className="mb-3 text-xs font-medium text-zinc-400">Itens do pedido</p>
-                <div className="space-y-2">
-                  {edicaoItensPedido.itens.map((item) => (
-                    <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{item.nomeItem}</p>
-                          <p className="text-xs text-orange-400">R$ {Number(item.precoUnit).toFixed(2)}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-800 px-1 py-1">
-                          <button
-                            type="button"
-                            disabled={salvandoItemId === item.id}
-                            onClick={() => alterarQuantidadeItemPedido(item, -1)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700 disabled:opacity-40"
-                            title={item.quantidade === 1 ? 'Remover item' : 'Diminuir'}
-                          >
-                            {item.quantidade === 1 ? <X className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
-                          </button>
-                          {salvandoItemId === item.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-400" />
-                          ) : (
-                            <span className="min-w-5 text-center text-sm font-bold">{item.quantidade}</span>
-                          )}
-                          <button
-                            type="button"
-                            disabled={salvandoItemId === item.id}
-                            onClick={() => alterarQuantidadeItemPedido(item, 1)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-orange-400 hover:bg-zinc-700 disabled:opacity-40"
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      {item.acompanhamento && (
-                        <p className="mt-1.5 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
-                      )}
-                      {item.observacao && (
-                        <p className="mt-1.5 text-xs italic text-zinc-500">obs: {item.observacao}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-3 text-xs font-medium text-zinc-400">Adicionar item</p>
-                <input
-                  value={buscaItemEdicao}
-                  onChange={(e) => setBuscaItemEdicao(e.target.value)}
-                  placeholder="Buscar item pelo nome..."
-                  className="mb-3 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
-                />
-                {carregandoMenu ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
-                  </div>
-                ) : itensFiltradosEdicao.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-zinc-500">Nenhum item encontrado.</p>
+                {totalDaColuna === 0 ? (
+                  <p className="px-1 text-sm text-zinc-600">Nada por aqui.</p>
                 ) : (
                   <div className="space-y-2">
-                    {itensFiltradosEdicao.map((item) => {
-                      const pedeAcompanhamento = (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0
+                    {cardsDaColuna.map((card) => {
+                      if (card.tipo === 'pedido') {
+                        return (
+                          <CardPedidoKanban
+                            key={card.pedido.id}
+                            pedido={card.pedido}
+                            agora={agora}
+                            avancando={avancandoPedidoId === card.pedido.id}
+                            cancelando={cancelandoPedidoId === card.pedido.id}
+                            onAvancar={avancarPedido}
+                            onCancelar={cancelarPedido}
+                            onEditar={setEdicaoItensPedido}
+                          />
+                        )
+                      }
+                      const grupo = card.grupo
                       return (
-                        <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{item.nome}</p>
-                              <p className="text-xs text-orange-400">R$ {Number(item.preco).toFixed(2)}</p>
-                            </div>
-                            <button
-                              type="button"
-                              disabled={salvandoItemId === item.id}
-                              onClick={() => pedeAcompanhamento ? setEscolhendoAcompanhamentoId(item.id) : adicionarItemAoPedido(item.id)}
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
-                            >
-                              {salvandoItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                            </button>
-                          </div>
-                          {escolhendoAcompanhamentoId === item.id && (
-                            <div className="mt-2 space-y-1 rounded-lg border border-zinc-700 bg-zinc-900 p-2">
-                              <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
-                              {item.categoria!.opcoesAcompanhamento.map((op) => (
-                                <button
-                                  key={op.nome}
-                                  type="button"
-                                  onClick={() => adicionarItemAoPedido(item.id, op.nome)}
-                                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-800"
-                                >
-                                  <span>{op.nome}</span>
-                                  {op.precoAdicional > 0 && <span className="text-orange-400">+R$ {op.precoAdicional.toFixed(2)}</span>}
-                                </button>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => setEscolhendoAcompanhamentoId(null)}
-                                className="mt-1 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          )}
+                      <div key={grupo.chave} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                        <p className="mb-2 text-xs text-zinc-500">
+                          Mesa {grupo.itens[0].mesaNumero} · {grupo.itens[0].comandaNome}
+                        </p>
+                        <div className="space-y-2">
+                          {grupo.itens.map((item) => {
+                            const minutos = minutosDesde(item.recebidoEm, agora)
+                            return (
+                              <div key={item.id} className="border-b border-zinc-800 pb-2 last:border-0 last:pb-0">
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold text-zinc-100">
+                                    {item.quantidade}x {item.nomeItem}
+                                  </span>
+                                  <span className={`flex items-center gap-1 text-xs font-medium ${corCronometro(minutos, item.tempoAlvoMinutos)}`}>
+                                    {minutos}min
+                                  </span>
+                                </div>
+                                {item.acompanhamento && (
+                                  <p className="mb-1 text-xs font-medium text-orange-400">Acompanhamento: {item.acompanhamento}</p>
+                                )}
+                                {item.observacao && (
+                                  <p className="mb-1 text-xs italic text-zinc-500">{item.observacao}</p>
+                                )}
+                                {labelAvancar[item.status] && (
+                                  <button
+                                    onClick={() => avancarStatus(item)}
+                                    disabled={avancandoId === item.id}
+                                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-800 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+                                  >
+                                    {avancandoId === item.id
+                                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      : null}
+                                    {labelAvancar[item.status]} (só este)
+                                  </button>
+                                )}
+                                {itemCancelamento?.id === item.id ? (
+                                  <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
+                                    <input
+                                      value={motivoCancelamento}
+                                      onChange={(e) => setMotivoCancelamento(e.target.value)}
+                                      placeholder={podeCancelarLivre(item.status) ? 'Motivo (opcional)' : 'Motivo (obrigatório)'}
+                                      className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                                    />
+                                    {!podeCancelarLivre(item.status) && (
+                                      <input
+                                        type="password"
+                                        value={senhaCancelamento}
+                                        onChange={(e) => setSenhaCancelamento(e.target.value)}
+                                        placeholder="Senha de supervisor"
+                                        className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                                      />
+                                    )}
+                                    {erroCancelamento && <p className="text-xs text-red-400">{erroCancelamento}</p>}
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={confirmarCancelamentoItem}
+                                        disabled={
+                                          enviandoCancelamento ||
+                                          (!podeCancelarLivre(item.status) && (!motivoCancelamento || !senhaCancelamento))
+                                        }
+                                        className="flex-1 rounded bg-red-500 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                                      >
+                                        Confirmar
+                                      </button>
+                                      <button
+                                        onClick={() => setItemCancelamento(null)}
+                                        className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => abrirCancelamentoItem(item)}
+                                    className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-medium text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
+                                  >
+                                    Cancelar item
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
+                        {grupo.rodadaId &&
+                          !rodadasDivididas.has(grupo.rodadaId) &&
+                          grupo.itens.some((i) => labelAvancar[i.status]) && (
+                          <button
+                            onClick={() => avancarRodada(grupo.itens)}
+                            disabled={avancandoRodadaId === grupo.rodadaId}
+                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-orange-500/10 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                          >
+                            {avancandoRodadaId === grupo.rodadaId
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <ChefHat className="h-3.5 w-3.5" />}
+                            Avançar rodada
+                          </button>
+                        )}
+                      </div>
                       )
                     })}
                   </div>
                 )}
               </div>
-
-              {erroEdicaoItens && (
-                <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
-                  {erroEdicaoItens}
-                </p>
-              )}
-            </div>
-
-            <div className="border-t border-zinc-800 p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-400">Total</span>
-                <span className="text-xl font-extrabold text-orange-400">R$ {Number(edicaoItensPedido.total).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
+            )
+          })}
         </div>
       )}
+
+      <ModalNovoPedido
+        aberto={modalNovoAberto}
+        token={token!}
+        onFechar={() => setModalNovoAberto(false)}
+      />
+      {edicaoItensPedido && (
+        <ModalEditarItensPedido
+          pedido={edicaoItensPedido}
+          token={token!}
+          onFechar={() => setEdicaoItensPedido(null)}
+          onPedidoAtualizado={atualizarPedidoLocal}
+        />
+      )}
     </Layout>
-  )
-}
-
-interface ControleAceitandoPedidosProps {
-  conectado: boolean
-  erro:      string | null
-  aceitando: boolean
-  disabled:  boolean
-  onToggle:  () => void
-}
-
-/** Estado da conexão + toggle de aceitar pedidos num único controle (evita repetir o mesmo status em dois lugares). */
-function ControleAceitandoPedidos({ conectado, erro, aceitando, disabled, onToggle }: ControleAceitandoPedidosProps) {
-  if (erro) {
-    return (
-      <button
-        onClick={onToggle}
-        disabled={disabled}
-        title={erro}
-        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
-      >
-        <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
-        <span className="hidden sm:inline">{erro}</span>
-      </button>
-    )
-  }
-  if (!aceitando) {
-    return (
-      <button
-        onClick={onToggle}
-        disabled={disabled}
-        title="Toque para reabrir e voltar a receber pedidos"
-        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-400 transition hover:bg-orange-500/10 disabled:opacity-50"
-      >
-        <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" />
-        <span className="hidden sm:inline">Pausada</span>
-      </button>
-    )
-  }
-  return (
-    <button
-      onClick={onToggle}
-      disabled={disabled}
-      title="Toque para pausar o recebimento de pedidos"
-      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50"
-    >
-      <span className="relative flex h-2 w-2 shrink-0">
-        {conectado && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-        )}
-        <span className={`relative inline-flex h-2 w-2 rounded-full ${conectado ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
-      </span>
-      <span className="hidden sm:inline">{conectado ? 'Ativa' : 'Conectando...'}</span>
-    </button>
   )
 }
