@@ -51,8 +51,10 @@ Três problemas reais levantados pelo usuário no mesmo request:
 ### Backend
 
 - Adicionar `'producao'` a `PERMISSOES_VALIDAS` em `src/routes/operadores.ts`.
-- Novo helper `temAlgumaPermissao(...permissoes)` em `src/plugins/auth.ts` (passa se o usuário
-  tiver **qualquer uma** das permissões listadas; DONO passa sempre, como em `temPermissao`).
+- Sem helper novo: `temPermissao` já é variádico com semântica OR ("passar mais de uma
+  permissão libera se o usuário tiver QUALQUER uma delas") — comportamento já coberto por
+  teste em `src/plugins/auth.test.ts`. As rotas compartilhadas usam
+  `temPermissao('mesas', 'producao')`.
 - Re-gatear rotas:
 
 | Rota | Guarda hoje | Guarda nova | Motivo |
