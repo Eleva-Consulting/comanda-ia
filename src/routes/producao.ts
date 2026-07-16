@@ -9,7 +9,7 @@ export async function producaoRoutes(fastify: FastifyInstance) {
   // Itens de ItemComanda ainda em produção (recebido/em_preparo/pronto), filtrados
   // pelo setor fixo do usuário logado — ou todos os setores, se ele não tiver um.
   fastify.get('/producao/itens', {
-    onRequest: [autenticar, temPermissao('producao'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao'), moduloAtivo('mesas')],
   }, async (request) => {
     const { estabelecimentoId, setorId } = request.user;
 

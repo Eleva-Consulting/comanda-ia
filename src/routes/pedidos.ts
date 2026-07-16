@@ -321,7 +321,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // corrigir engano (ex: cliente pede mais um item depois de "concluído").
   // Exige a senha configurada pelo DONO em Configurações.
   fastify.post('/pedidos/:id/reabrir', {
-    onRequest: [autenticar, temPermissao('cozinha')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao')],
     schema: { params: PedidoParamsSchema, body: Type.Object({ senha: Type.String({ minLength: 1 }) }) },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -522,7 +522,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
 
   // ── DELETE /pedidos/:id ─────────────────────────────────────────────────────
   fastify.delete('/pedidos/:id', {
-    onRequest: [autenticar, temPermissao('cozinha')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao')],
     schema: { params: PedidoParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -541,7 +541,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // ── POST /pedidos/:id/itens ──────────────────────────────────────────────────
   // Adiciona um item a um pedido existente, usando o preço atual do cardápio.
   fastify.post('/pedidos/:id/itens', {
-    onRequest: [autenticar, temPermissao('cozinha')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao')],
     schema: { params: PedidoParamsSchema, body: AdicionarItemSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -590,7 +590,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // ── PATCH /pedidos/:id/itens/:itemPedidoId ───────────────────────────────────
   // Muda a quantidade de um item já existente no pedido — preço travado não muda.
   fastify.patch('/pedidos/:id/itens/:itemPedidoId', {
-    onRequest: [autenticar, temPermissao('cozinha')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao')],
     schema: { params: ItemPedidoParamsSchema, body: AtualizarQuantidadeItemSchema },
   }, async (request, reply) => {
     const { id, itemPedidoId } = request.params as { id: string; itemPedidoId: string };
@@ -622,7 +622,7 @@ export async function pedidosRoutes(fastify: FastifyInstance) {
   // ── DELETE /pedidos/:id/itens/:itemPedidoId ──────────────────────────────────
   // Remove um item do pedido. Bloqueado se for o último item restante.
   fastify.delete('/pedidos/:id/itens/:itemPedidoId', {
-    onRequest: [autenticar, temPermissao('cozinha')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao')],
     schema: { params: ItemPedidoParamsSchema },
   }, async (request, reply) => {
     const { id, itemPedidoId } = request.params as { id: string; itemPedidoId: string };

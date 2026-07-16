@@ -60,7 +60,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
   // Botão "Pausar/Reabrir" da Cozinha — separado do PATCH geral para não exigir
   // a permissão "configuracoes" de quem só precisa pausar/retomar pedidos.
   fastify.patch('/meu-estabelecimento/aceitando-pedidos', {
-    onRequest: [autenticar, temPermissao('cozinha', 'configuracoes')],
+    onRequest: [autenticar, temPermissao('cozinha', 'configuracoes', 'producao')],
     schema: { body: Type.Object({ aceitandoPedidos: Type.Boolean() }) },
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;
@@ -78,7 +78,7 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
   // Liga/desliga a impressão automática de pedidos de balcão. Delivery e
   // retirada via link público sempre imprimem automático, independente disso.
   fastify.patch('/meu-estabelecimento/imprimir-automatico-balcao', {
-    onRequest: [autenticar, temPermissao('cozinha', 'configuracoes')],
+    onRequest: [autenticar, temPermissao('cozinha', 'configuracoes', 'producao')],
     schema: { body: Type.Object({ imprimirAutomaticoBalcao: Type.Boolean() }) },
   }, async (request, reply) => {
     const { estabelecimentoId } = request.user;

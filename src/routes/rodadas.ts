@@ -142,7 +142,7 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
   // ── GET /rodadas/:id ─────────────────────────────────────────────────────────
   // Usada pela tela de impressão (ImprimirRodada.tsx).
   fastify.get('/rodadas/:id', {
-    onRequest: [autenticar, temPermissao('mesas', 'producao'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha'), moduloAtivo('mesas')],
     schema: { params: RodadaParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -168,7 +168,7 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
   // status-alvo no body (ver Global Constraints do plano). Itens de outro setor
   // (quando o usuário tem setor fixo), cancelados, ou já entregues são ignorados.
   fastify.patch('/rodadas/:id/avancar', {
-    onRequest: [autenticar, temPermissao('producao'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('cozinha', 'producao'), moduloAtivo('mesas')],
     schema: { params: RodadaParamsSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };

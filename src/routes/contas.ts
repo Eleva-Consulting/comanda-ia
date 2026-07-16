@@ -242,7 +242,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
   // ── PATCH /itens-comanda/:id/status ─────────────────────────────────────────
   fastify.patch('/itens-comanda/:id/status', {
-    onRequest: [autenticar, temPermissao('mesas', 'producao'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha'), moduloAtivo('mesas')],
     schema: { params: ItemComandaParamsSchema, body: AtualizarStatusItemComandaSchema },
   }, async (request, reply) => {
     const { id }     = request.params as { id: string };
