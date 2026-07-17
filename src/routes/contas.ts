@@ -6,6 +6,7 @@ import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
+import { paraOpcoesAcompanhamento } from '../utils/acompanhamento.js';
 import type { StatusConta, StatusProducao } from '../generated/prisma/enums.js';
 import { Prisma } from '../generated/prisma/client.js';
 
@@ -73,7 +74,7 @@ interface RascunhoItemComProduto {
   quantidade: number;
   observacao: string | null;
   acompanhamento: string | null;
-  itemCardapio?: { nome: string; preco: unknown } | null;
+  itemCardapio?: { nome: string; preco: unknown; categoria: { opcoesAcompanhamento: unknown } | null } | null;
 }
 
 interface ComandaComItens {
@@ -97,15 +98,19 @@ export function serializarConta(conta: ContaComComandas) {
         itens: comanda.itens?.map(serializarItemComanda),
         // Itens em rascunho (não enviados). Só presente quando o include foi feito (telas de
         // Mesas); Caixa/pagamento ignoram e não incluem — rascunho nunca entra na conta.
-        rascunho: rascunhoItens?.map((r) => ({
-          id:             r.id,
-          itemCardapioId: r.itemCardapioId,
-          nomeItem:       r.itemCardapio?.nome ?? '',
-          precoUnit:      Number(r.itemCardapio?.preco ?? 0),
-          quantidade:     r.quantidade,
-          observacao:     r.observacao,
-          acompanhamento: r.acompanhamento,
-        })),
+        rascunho: rascunhoItens?.map((r) => {
+          const adicional = paraOpcoesAcompanhamento(r.itemCardapio?.categoria?.opcoesAcompanhamento)
+            .find((o) => o.nome === r.acompanhamento)?.precoAdicional ?? 0;
+          return {
+            id:             r.id,
+            itemCardapioId: r.itemCardapioId,
+            nomeItem:       r.itemCardapio?.nome ?? '',
+            precoUnit:      Number(r.itemCardapio?.preco ?? 0) + Number(adicional),
+            quantidade:     r.quantidade,
+            observacao:     r.observacao,
+            acompanhamento: r.acompanhamento,
+          };
+        }),
       };
     }),
   };
@@ -138,7 +143,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const contas = await prisma.conta.findMany({
       where:   { estabelecimentoId: estabelecimentoId!, status: { in: status } },
       orderBy: { abertaEm: 'desc' },
-      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true } } }, orderBy: { criadoEm: 'asc' } } } } },
+      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true, categoria: { select: { opcoesAcompanhamento: true } } } } }, orderBy: { criadoEm: 'asc' } } } } },
     });
     return contas.map(serializarConta);
   });
@@ -153,7 +158,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
     const conta = await prisma.conta.findFirst({
       where:   { id, estabelecimentoId: estabelecimentoId! },
-      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true } } }, orderBy: { criadoEm: 'asc' } } } } },
+      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true, categoria: { select: { opcoesAcompanhamento: true } } } } }, orderBy: { criadoEm: 'asc' } } } } },
     });
     if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
     return serializarConta(conta);
