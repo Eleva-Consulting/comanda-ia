@@ -347,6 +347,33 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17 (continuação 5)
+- **Pedido em rascunho por mesa — anota tudo, revisa a mesa, envia de uma vez** (spec:
+  `docs/superpowers/specs/2026-07-17-pedido-rascunho-mesa-design.md`, plano:
+  `docs/superpowers/plans/2026-07-17-pedido-rascunho-mesa.md`). Substitui o "revisar pedido"
+  por-comanda de `9115356`: agora o garçom anota itens de todas as comandas da mesa num
+  **rascunho persistido no servidor** (não vai pra cozinha), revisa a mesa inteira agrupada
+  por comanda, pode ajustar/adicionar, e envia tudo de uma vez (uma rodada por comanda).
+  - Nova tabela `RascunhoItemComanda` (staging separado) — Produção/Caixa/Dashboard não
+    enxergam rascunho, zero mudança neles. Migration `rascunho_item_comanda` (Railway aplica
+    no deploy). Helper `criarRodadaDeItens`/`montarItensParaCriar` extraído de
+    `POST /comandas/:id/rodadas` (com teste unit) e reaproveitado no envio; a rota antiga
+    `POST /comandas/:id/rodadas` foi removida. Rotas novas: `POST /comandas/:id/rascunho`,
+    `PATCH`/`DELETE /rascunho/:id`, `POST /contas/:id/rascunho/enviar`. `serializarConta`
+    passou a incluir `rascunho` por comanda (com preço final já com adicional de acompanhamento).
+    Rascunho persiste (escolha do usuário) e sincroniza entre aparelhos via `conta:atualizada`.
+  - **Achado de processo (2 vezes):** (1) o dev server do Vite ficou servindo uma versão
+    intermediária stale do Mesas.tsx (module `?t=` congelado) — reiniciar o `npm run dev` do
+    front resolveu; lição: quando o navegador mostra erro numa linha que não bate com o
+    código atual, suspeitar de HMR/dev-server stale antes de caçar bug fantasma. (2) **Bug
+    real achado na verificação ao vivo:** `atualizarSeForContaAtual` (handler de
+    `conta:atualizada` em Mesas) substituía `contaSelecionada` pelo payload cru do evento;
+    as rotas de rascunho emitem só `{ id }` (sem `comandas`), então a tela quebrava (preta)
+    no `comandas.flatMap`. Corrigido pra **refetchar** em vez de confiar no payload (`9da4bc3`)
+    — robusto pra qualquer formato de evento; contrato de `conta:atualizada` volta a não
+    importar. Verificado ao vivo: rascunho em 2 comandas, revisão da mesa (R$ 114), envio →
+    3 itens em 2 rodadas na Cozinha; persistência confirmada no reload.
+
 ### 2026-07-17 (continuação 4)
 - **Bugfix: tela de Mesas ficava preta ao adicionar item (`45b27ba`).** Regressão da feature
   de revisão de pedido (`9115356`). Causa raiz achada por systematic-debugging + reprodução
