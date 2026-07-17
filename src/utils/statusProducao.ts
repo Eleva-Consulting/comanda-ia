@@ -15,11 +15,12 @@ export function transicaoProducaoValida(de: StatusProducao, para: StatusProducao
   return transicoesProducaoPermitidas[de].includes(para);
 }
 
-// Cancelamento de item pronto/entregue exige senha de supervisor — feature já construída
-// (ver PATCH /itens-comanda/:id/status em src/routes/contas.ts, que usa senhaReabrirPedido
-// do estabelecimento). Esta função é o gate que decide quando essa exigência se aplica.
+// Cancelamento de item que a cozinha já começou (em_preparo/pronto/entregue) exige senha
+// de supervisor (ver PATCH /itens-comanda/:id/status em src/routes/contas.ts, que usa
+// senhaReabrirPedido do estabelecimento). Só item ainda "recebido" cancela livre —
+// decisão do usuário em 2026-07-17 (antes, em_preparo também era livre).
 export function podeCancelarLivremente(status: StatusProducao): boolean {
-  return status === 'recebido' || status === 'em_preparo';
+  return status === 'recebido';
 }
 
 // Avanço "positivo" (nunca pra cancelado) usado pelo avanço em lote de uma rodada inteira

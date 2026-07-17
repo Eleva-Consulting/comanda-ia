@@ -348,8 +348,10 @@ export default function Mesas() {
     }
   }
 
+  // Item que a cozinha já começou (em_preparo em diante) exige senha de supervisor — espelha
+  // podeCancelarLivremente do backend (decisão de 2026-07-17).
   function podeCancelarLivre(status: StatusProducao): boolean {
-    return status === 'recebido' || status === 'em_preparo'
+    return status === 'recebido'
   }
 
   function abrirCancelamentoItem(item: ItemComanda) {

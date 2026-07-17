@@ -282,12 +282,12 @@ export async function contasRoutes(fastify: FastifyInstance) {
       }
 
       if (!podeCancelarLivremente(item.status)) {
-        if (!motivo) return reply.status(400).send({ erro: 'Motivo é obrigatório para cancelar item pronto/entregue' });
-        if (!senha) return reply.status(400).send({ erro: 'Senha de supervisor é obrigatória para cancelar item pronto/entregue' });
+        if (!motivo) return reply.status(400).send({ erro: 'Motivo é obrigatório para cancelar item que já está em produção' });
+        if (!senha) return reply.status(400).send({ erro: 'Senha de supervisor é obrigatória para cancelar item que já está em produção' });
 
         const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
         if (!estabelecimento?.senhaReabrirPedido) {
-          return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de cancelar itens prontos/entregues' });
+          return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de cancelar itens já em produção' });
         }
         const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
         if (!senhaCorreta) return reply.status(403).send({ erro: 'Senha incorreta' });

@@ -36,12 +36,12 @@ describe('transicaoProducaoValida', () => {
 });
 
 describe('podeCancelarLivremente', () => {
-  it('permite cancelamento livre em recebido e em_preparo', () => {
+  it('permite cancelamento livre só em recebido (antes da cozinha começar)', () => {
     expect(podeCancelarLivremente('recebido')).toBe(true);
-    expect(podeCancelarLivremente('em_preparo')).toBe(true);
   });
 
-  it('bloqueia cancelamento livre em pronto e entregue (exige senha de supervisor)', () => {
+  it('bloqueia cancelamento livre a partir de em_preparo (exige senha de supervisor — decisão de 2026-07-17)', () => {
+    expect(podeCancelarLivremente('em_preparo')).toBe(false);
     expect(podeCancelarLivremente('pronto')).toBe(false);
     expect(podeCancelarLivremente('entregue')).toBe(false);
   });
