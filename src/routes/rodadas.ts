@@ -7,6 +7,7 @@ import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
 import { transicaoProducaoValida, proximoStatusAtivo } from '../utils/statusProducao.js';
 import { serializarItemComanda, emitirAtualizacaoItemComanda } from './contas.js';
+import type { Prisma } from '../generated/prisma/client.js';
 
 const ItemRodadaSchema = Type.Object({
   itemCardapioId: Type.String({ minLength: 1 }),
@@ -22,11 +23,78 @@ const CriarRodadaSchema = Type.Object({
 const ComandaParamsSchema = Type.Object({ id: Type.String() });
 const RodadaParamsSchema  = Type.Object({ id: Type.String() });
 
-interface ItemRodadaInput {
+export interface EntradaItemRodada {
   itemCardapioId: string;
   quantidade:     number;
-  observacao?:    string;
-  acompanhamento?: string;
+  observacao?:    string | null;
+  acompanhamento?: string | null;
+  refId?:         string; // referência opaca do chamador (ex.: id do item de rascunho)
+}
+
+type ItemCardapioComCategoria = {
+  id: string; nome: string; preco: unknown; setorId: string | null;
+  categoria: { opcoesAcompanhamento: unknown } | null;
+};
+
+// Parte pura: valida as entradas contra o cardápio e separa o que criar do que descartar.
+// Sem tocar no banco — testável isoladamente.
+export function montarItensParaCriar(
+  cardapioPorId: Map<string, ItemCardapioComCategoria>,
+  itens: EntradaItemRodada[],
+) {
+  const itensParaCriar: {
+    itemCardapioId: string; nomeItem: string; quantidade: number; precoUnit: number;
+    observacao: string | null; acompanhamento: string | null; setorId: string | null;
+  }[] = [];
+  const itensDescartados: { itemCardapioId: string; motivo: string; refId?: string }[] = [];
+
+  for (const itemInput of itens) {
+    const itemCardapio = cardapioPorId.get(itemInput.itemCardapioId);
+    if (!itemCardapio) {
+      itensDescartados.push({ itemCardapioId: itemInput.itemCardapioId, motivo: 'Item não disponível ou não pertence a este estabelecimento', refId: itemInput.refId });
+      continue;
+    }
+    const resultado = resolverAcompanhamento(itemCardapio.categoria?.opcoesAcompanhamento, itemInput.acompanhamento ?? undefined, itemCardapio.nome);
+    if (resultado.erro) {
+      itensDescartados.push({ itemCardapioId: itemInput.itemCardapioId, motivo: resultado.erro, refId: itemInput.refId });
+      continue;
+    }
+    itensParaCriar.push({
+      itemCardapioId: itemCardapio.id,
+      nomeItem:       itemCardapio.nome,
+      quantidade:     itemInput.quantidade,
+      precoUnit:      Number(itemCardapio.preco) + (resultado.precoAdicional ?? 0),
+      observacao:     itemInput.observacao ?? null,
+      acompanhamento: itemInput.acompanhamento ?? null,
+      setorId:        itemCardapio.setorId,
+    });
+  }
+  return { itensParaCriar, itensDescartados };
+}
+
+// Cria uma RodadaComanda + ItemComanda a partir das entradas, dentro de uma transação
+// recebida. NÃO emite socket nem abre transação própria — o chamador cuida disso.
+// Reaproveitado pela criação direta e pelo envio do rascunho da mesa.
+export async function criarRodadaDeItens(
+  tx: Prisma.TransactionClient,
+  params: { comandaId: string; estabelecimentoId: string; userId: string | null; itens: EntradaItemRodada[] },
+) {
+  const cardapio = await tx.itemCardapio.findMany({
+    where: { id: { in: params.itens.map((i) => i.itemCardapioId) }, estabelecimentoId: params.estabelecimentoId, disponivel: true },
+    include: { categoria: { select: { opcoesAcompanhamento: true } } },
+  });
+  const cardapioPorId = new Map<string, ItemCardapioComCategoria>(cardapio.map((i) => [i.id, i]));
+  const { itensParaCriar, itensDescartados } = montarItensParaCriar(cardapioPorId, params.itens);
+  const descartadosRefIds = itensDescartados.map((d) => d.refId).filter((r): r is string => !!r);
+
+  const itensCriados = [];
+  if (itensParaCriar.length > 0) {
+    const rodada = await tx.rodadaComanda.create({ data: { comandaId: params.comandaId, criadoPorUsuarioId: params.userId } });
+    for (const item of itensParaCriar) {
+      itensCriados.push(await tx.itemComanda.create({ data: { ...item, comandaId: params.comandaId, rodadaId: rodada.id, criadoPorUsuarioId: params.userId } }));
+    }
+  }
+  return { itensCriados, itensDescartados, descartadosRefIds };
 }
 
 export async function rodadasRoutes(fastify: FastifyInstance) {
@@ -39,7 +107,7 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
     schema: { params: ComandaParamsSchema, body: CriarRodadaSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { itens } = request.body as { itens: ItemRodadaInput[] };
+    const { itens } = request.body as { itens: EntradaItemRodada[] };
     const { estabelecimentoId, userId } = request.user;
 
     const comanda = await prisma.comanda.findFirst({
@@ -47,72 +115,14 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
     });
     if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
 
-    const itensCardapio = await prisma.itemCardapio.findMany({
-      where: {
-        id:         { in: itens.map((i) => i.itemCardapioId) },
-        estabelecimentoId: estabelecimentoId!,
-        disponivel: true,
-      },
-      include: { categoria: { select: { opcoesAcompanhamento: true } } },
-    });
-    const itensCardapioPorId = new Map(itensCardapio.map((i) => [i.id, i]));
+    const { itensCriados, itensDescartados } = await prisma.$transaction((tx) =>
+      criarRodadaDeItens(tx, { comandaId: id, estabelecimentoId: estabelecimentoId!, userId, itens }),
+    );
 
-    const itensParaCriar: {
-      itemCardapioId: string;
-      nomeItem: string;
-      quantidade: number;
-      precoUnit: number;
-      observacao: string | null;
-      acompanhamento: string | null;
-      setorId: string | null;
-    }[] = [];
-    const itensDescartados: { itemCardapioId: string; motivo: string }[] = [];
-
-    for (const itemInput of itens) {
-      const itemCardapio = itensCardapioPorId.get(itemInput.itemCardapioId);
-      if (!itemCardapio) {
-        itensDescartados.push({ itemCardapioId: itemInput.itemCardapioId, motivo: 'Item não disponível ou não pertence a este estabelecimento' });
-        continue;
-      }
-
-      const resultadoAcompanhamento = resolverAcompanhamento(
-        itemCardapio.categoria?.opcoesAcompanhamento,
-        itemInput.acompanhamento,
-        itemCardapio.nome,
-      );
-      if (resultadoAcompanhamento.erro) {
-        itensDescartados.push({ itemCardapioId: itemInput.itemCardapioId, motivo: resultadoAcompanhamento.erro });
-        continue;
-      }
-
-      itensParaCriar.push({
-        itemCardapioId: itemCardapio.id,
-        nomeItem:       itemCardapio.nome,
-        quantidade:     itemInput.quantidade,
-        precoUnit:      Number(itemCardapio.preco) + (resultadoAcompanhamento.precoAdicional ?? 0),
-        observacao:     itemInput.observacao ?? null,
-        acompanhamento: itemInput.acompanhamento ?? null,
-        setorId:        itemCardapio.setorId,
-      });
-    }
-
-    if (itensParaCriar.length === 0) {
+    if (itensCriados.length === 0) {
       return reply.status(400).send({ erro: 'Nenhum item válido pra criar a rodada', itensDescartados });
     }
-
-    const { rodada, itensCriados } = await prisma.$transaction(async (tx) => {
-      const rodada = await tx.rodadaComanda.create({
-        data: { comandaId: id, criadoPorUsuarioId: userId },
-      });
-      const itensCriados = [];
-      for (const item of itensParaCriar) {
-        const itemCriado = await tx.itemComanda.create({
-          data: { ...item, comandaId: id, rodadaId: rodada.id, criadoPorUsuarioId: userId },
-        });
-        itensCriados.push(itemCriado);
-      }
-      return { rodada, itensCriados };
-    });
+    const rodada = { id: itensCriados[0].rodadaId! };
 
     // Reaproveita o mecanismo de eventos já existente pra item avulso, em loop —
     // sem evento novo. O agrupamento visual da rodada acontece no frontend via rodadaId.
