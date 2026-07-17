@@ -347,6 +347,34 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17
+- **Cozinha unificada — Fases 2+3 mescladas e em produção: o Kanban É a Cozinha agora**
+  (plano: `docs/superpowers/plans/2026-07-16-cozinha-unificada-fase2-3.md`). A iniciativa
+  inteira da spec de 2026-07-16 está completa.
+  - **`/cozinha` é a tela unificada** (Kanban com pedidos + rodadas); `/producao` virou
+    redirect; a Cozinha antiga (lista de cards) foi removida; "Produção" saiu do nav.
+  - **Paridade total entregue**: Novo pedido manual (modal completo portado — bairros, troco,
+    acompanhamento obrigatório, busca), pausar/reabrir loja, toggle de impressão de balcão,
+    editar itens do pedido (modal portado), cancelar/imprimir pedido no card, badges
+    completos (tipo entrega, forma pagamento, troco, endereço/bairro, total). Beep/toast já
+    eram globais do Layout — nada a portar.
+  - **Acesso: `cozinha` OU `producao`** (`RotaPermissao` agora aceita lista); a tela **não
+    exige mais módulo mesas** — sem o módulo mostra só pedidos (modo galeteria, verificado
+    ao vivo). Rotas de backend alargadas: toggles, edição de itens de pedido, DELETE pedido,
+    `GET /producao/itens`, avançar rodada, status/leitura de item-comanda — sempre só
+    adicionando permissão aceita, nunca removendo.
+  - Componentes novos em `frontend/src/components/cozinha/`: `ModalNovoPedido`,
+    `ModalEditarItensPedido`, `CardPedidoKanban`, `ControleAceitandoPedidos`, `tipos.ts`.
+    `pages/Producao.tsx` deixou de existir (o arquivo virou o novo `pages/Cozinha.tsx`).
+  - Verificado ao vivo no navegador: redirect, header completo, pausar/reabrir ("Pausada"),
+    toggle Auto/Manual, pedido manual com troco criado pelo modal aparecendo via socket com
+    toast global, edição de itens (quantidade + item novo, total recalculado no card em tempo
+    real), modo sem módulo mesas, e 4/4 checagens de permissão via API (operador `cozinha`
+    vê rodadas; operador `producao` usa toggles). Cancelamento de pedido usa o mesmo
+    `window.confirm` de sempre (não testável por automação, lógica idêntica à portada).
+  - **Pós-deploy: nada a fazer nos operadores** — quem tinha `cozinha` ou `producao`
+    continua vendo a mesma rota `/cozinha` de sempre, agora com o Kanban.
+
 ### 2026-07-16 (continuação 3)
 - **Cozinha unificada — Fase 1 mesclada e em produção: pedidos no Kanban da Produção**
   (plano: `docs/superpowers/plans/2026-07-16-cozinha-unificada-fase1.md`). Aditivo — a
