@@ -347,6 +347,21 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17 (continuação 6)
+- **Modo claro/escuro (`c06298f`).** Botão sol/lua no header (Layout e LayoutAdmin) alterna
+  o tema; escolha salva em `localStorage['tema']`; **começa no escuro** (visual atual intacto).
+  Abordagem (spec `docs/superpowers/specs/2026-07-17-modo-claro-escuro-design.md`): em vez de
+  reescrever os ~404 usos de `zinc` espalhados por 43 telas, **remapeia a própria escala `zinc`
+  do Tailwind v4 por tema** — no `index.css`, sob `:root[data-theme="light"]`, sobrescreve as
+  variáveis `--color-zinc-*` com valores claros (a escala "inverte": zinc-950 vira branco,
+  zinc-100 vira quase preto etc.). As classes existentes continuam iguais e ficam corretas nos
+  dois temas; o escuro usa o default do Tailwind, sem override. Hook `useTema` aplica
+  `data-theme` no `<html>` e persiste; `main.tsx` aplica cedo (sem flash). Cores de marca/status
+  (laranja, verde, azul...) e overlays ficam iguais nos dois. Verificado ao vivo nos dois temas
+  (Cozinha, Caixa, Dashboard, Cardápio): claro limpo em todas, escuro idêntico ao atual,
+  persistência no reload confirmada — **nenhum ajuste fino por tela foi necessário** (a inversão
+  cobriu tudo). 100% frontend, sem migration.
+
 ### 2026-07-17 (continuação 5)
 - **Pedido em rascunho por mesa — anota tudo, revisa a mesa, envia de uma vez** (spec:
   `docs/superpowers/specs/2026-07-17-pedido-rascunho-mesa-design.md`, plano:
