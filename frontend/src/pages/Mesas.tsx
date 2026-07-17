@@ -545,15 +545,17 @@ export default function Mesas() {
   )
 
   // ── Rascunho da mesa (itens anotados, ainda não enviados) ─────────────────
-  const rascunhoDaMesa = contaSelecionada?.comandas.flatMap((c) => (c.rascunho ?? []).map((r) => ({ ...r, comandaNome: c.nome, comandaId: c.id }))) ?? []
+  const rascunhoDaMesa = contaSelecionada?.comandas?.flatMap((c) => (c.rascunho ?? []).map((r) => ({ ...r, comandaNome: c.nome, comandaId: c.id }))) ?? []
   const totalItensRascunho = rascunhoDaMesa.reduce((soma, r) => soma + r.quantidade, 0)
   const totalValorRascunho = rascunhoDaMesa.reduce((soma, r) => soma + r.precoUnit * r.quantidade, 0)
 
   useEffect(() => {
     if (!socket) return
 
-    function atualizarSeForContaAtual(conta: Conta) {
-      setContaSelecionada((prev) => (prev && prev.id === conta.id) ? conta : prev)
+    // Refetch em vez de confiar no payload — alguns emissores de conta:atualizada mandam
+    // só { id } (ex.: rotas de rascunho), sem comandas. Confiar no payload cru quebrava a tela.
+    function atualizarSeForContaAtual(evento: { id: string }) {
+      if (contaSelecionada && contaSelecionada.id === evento.id) recarregarContaAtual()
     }
 
     function recarregarContaEGrade() {
