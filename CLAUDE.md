@@ -347,6 +347,18 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17 (continuação 3)
+- **Garçom revisa o pedido antes de enviar pra cozinha (`9115356`).** Pedido do usuário: o
+  garçom precisa conferir com o cliente ("a comanda tal está certa?") antes do envio real.
+  No modal de lançar pedido de Mesas, "Enviar pedido" virou **"Revisar pedido"** → abre uma
+  etapa de resumo (Mesa + comanda de destino, itens com quantidade/acompanhamento e subtotal
+  por linha — incluindo o adicional do acompanhamento —, total do pedido e o aviso "nada foi
+  pra cozinha ainda") com "Confirmar e enviar pra cozinha" e "← Voltar e ajustar" (carrinho
+  preservado). Mesmo princípio do Caixa: nenhuma ação importante sem revisão. Se o envio
+  falhar (ex.: item indisponível), volta pra etapa do carrinho com o erro visível.
+  Verificado ao vivo no navegador (carrinho 2+1 → revisão R$ 149,00 → voltar → confirmar →
+  itens na comanda como "Recebido").
+
 ### 2026-07-17 (continuação 2)
 - **Pix via Mercado Pago reativado (`317e163`).** `EXIGIR_MERCADO_PAGO_PARA_PIX` voltou pra
   `true` em `src/mercadopago.ts` a pedido do usuário — Pix no checkout público e no balcão
