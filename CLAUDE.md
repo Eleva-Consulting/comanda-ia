@@ -347,6 +347,23 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17 (continuação 4)
+- **Bugfix: tela de Mesas ficava preta ao adicionar item (`45b27ba`).** Regressão da feature
+  de revisão de pedido (`9115356`). Causa raiz achada por systematic-debugging + reprodução
+  com dado malformado injetado via SQL (confirmada no console:
+  `TypeError: opcoesAcompanhamento.find is not a function`): `precoLinhaCarrinho` chamava
+  `.find()` em `categoria.opcoesAcompanhamento` — coluna Json que o TS tipa como array mas
+  pode vir com outro formato nos dados reais (restaurante que configurou acompanhamentos). O
+  `?.` só protege contra null/undefined, não contra tipo errado; sem error boundary, a exceção
+  derrubava a tela inteira (preta), exatamente ao tocar no 1º item (quando `totalCarrinho`
+  roda). O código antigo sobrevivia porque usava `.length` (seguro em objeto) e `.map` protegido
+  por length. Fix em duas camadas: (1) frontend `opcoesAcompanhamentoDe` normaliza pra array
+  antes de qualquer `.find`/`.map` em Mesas; (2) backend `GET /cardapio` e `/cardapio/categorias`
+  serializam via `paraOpcoesAcompanhamento` (util que `/publico` já usava) — protege também os
+  modais da Cozinha (`ModalNovoPedido`) e o editor de Cardápio, que tinham o mesmo risco latente.
+  Verificado ao vivo: com a categoria malformada, adicionar item e revisar agora funciona (adicional
+  tratado como 0), zero exceções; e o backend devolve `[]` em vez do valor malformado.
+
 ### 2026-07-17 (continuação 3)
 - **Garçom revisa o pedido antes de enviar pra cozinha (`9115356`).** Pedido do usuário: o
   garçom precisa conferir com o cliente ("a comanda tal está certa?") antes do envio real.
