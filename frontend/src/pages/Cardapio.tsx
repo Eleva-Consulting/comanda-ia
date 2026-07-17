@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed, Camera, ImageOff, Tag } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed, Camera, ImageOff, Tag, Search } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -57,8 +57,21 @@ export default function Cardapio() {
   const fotoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [uploadandoFotoId, setUploadandoFotoId] = useState<string | null>(null)
 
+  const [busca, setBusca] = useState('')
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null)
+  const [mostrarBotaoFlutuante, setMostrarBotaoFlutuante] = useState(false)
+
   useEffect(() => {
     carregarTudo()
+  }, [])
+
+  // Botão "Novo item" flutuante quando o do header sai da viewport ao rolar.
+  useEffect(() => {
+    function aoRolar() {
+      setMostrarBotaoFlutuante(window.scrollY > 250)
+    }
+    window.addEventListener('scroll', aoRolar, { passive: true })
+    return () => window.removeEventListener('scroll', aoRolar)
   }, [])
 
   async function carregarTudo() {
@@ -80,25 +93,30 @@ export default function Cardapio() {
     }
   }
 
-  // ── Itens agrupados por categoria ────────────────────────────────────────
+  // ── Itens agrupados por categoria (com busca e filtro por categoria) ─────
+  const buscaNormalizada = busca.trim().toLowerCase()
+  const itensVisiveis = buscaNormalizada
+    ? itens.filter((i) => i.nome.toLowerCase().includes(buscaNormalizada))
+    : itens
+
   const grupos = (() => {
     const comCategoria = categorias
       .map((cat) => ({
         id:    cat.id,
         nome:  cat.nome,
         ordem: cat.ordem,
-        itens: itens.filter((i) => i.categoriaId === cat.id),
+        itens: itensVisiveis.filter((i) => i.categoriaId === cat.id),
       }))
       .filter((g) => g.itens.length > 0)
 
-    const semCategoria = itens.filter((i) => !i.categoriaId)
+    const semCategoria = itensVisiveis.filter((i) => !i.categoriaId)
 
     return [
       ...comCategoria,
       ...(semCategoria.length > 0
         ? [{ id: '__sem__', nome: 'Sem categoria', ordem: Infinity, itens: semCategoria }]
         : []),
-    ]
+    ].filter((g) => !categoriaFiltro || g.id === categoriaFiltro)
   })()
 
   // ── Modal de item ────────────────────────────────────────────────────────
@@ -323,19 +341,59 @@ export default function Cardapio() {
         </button>
       </div>
 
+      {/* ── Busca ── */}
+      <div className="relative mb-4">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar item pelo nome..."
+          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2.5 pl-9 pr-9 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-500"
+        />
+        {busca && (
+          <button
+            onClick={() => setBusca('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            title="Limpar busca"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {/* ── Seção de categorias ── */}
       <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Tag className="h-4 w-4 text-zinc-400" />
-          <span className="text-sm font-semibold text-zinc-300">Categorias</span>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Tag className="h-4 w-4 text-zinc-400" />
+            <span className="text-sm font-semibold text-zinc-300">Categorias</span>
+            <span className="text-xs text-zinc-600">· toque numa categoria pra filtrar</span>
+          </div>
+          {categoriaFiltro && (
+            <button
+              onClick={() => setCategoriaFiltro(null)}
+              className="text-xs font-medium text-orange-400 hover:text-orange-300"
+            >
+              Limpar filtro
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {categorias.map((cat) => (
             <div
               key={cat.id}
-              className="flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200"
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition ${
+                categoriaFiltro === cat.id
+                  ? 'border-orange-500 bg-orange-500/15 text-orange-400'
+                  : 'border-zinc-700 bg-zinc-800 text-zinc-200'
+              }`}
             >
-              <span>{cat.nome}</span>
+              <button
+                onClick={() => setCategoriaFiltro((f) => (f === cat.id ? null : cat.id))}
+                title={categoriaFiltro === cat.id ? 'Remover filtro' : 'Filtrar por esta categoria'}
+              >
+                {cat.nome}
+              </button>
               <button
                 onClick={() => abrirModalEditarCategoria(cat)}
                 className="ml-0.5 rounded p-0.5 text-zinc-400 transition hover:text-zinc-100"
@@ -374,6 +432,12 @@ export default function Cardapio() {
           <p className="mt-2 max-w-md text-sm text-zinc-500">
             Adicione seu primeiro item clicando em "Novo item".
           </p>
+        </div>
+      ) : grupos.length === 0 ? (
+        <div className="flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 text-center">
+          <Search className="mb-3 h-8 w-8 text-zinc-600" />
+          <p className="font-semibold text-zinc-400">Nenhum item encontrado</p>
+          <p className="mt-1 text-sm text-zinc-500">Ajuste a busca ou limpe o filtro de categoria.</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -487,6 +551,17 @@ export default function Cardapio() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* ── Botão flutuante "Novo item" (aparece ao rolar, quando o do header some) ── */}
+      {mostrarBotaoFlutuante && !modalAberto && !modalCategoriaAberto && (
+        <button
+          onClick={abrirModalNovo}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-orange-500 px-5 py-3.5 font-semibold text-white shadow-lg shadow-orange-500/40 transition hover:bg-orange-600 sm:bottom-8 sm:right-8"
+        >
+          <Plus className="h-5 w-5" />
+          Novo item
+        </button>
       )}
 
       {/* ── Modal de item ── */}
