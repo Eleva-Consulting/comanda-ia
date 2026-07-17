@@ -347,6 +347,23 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17 (continuação)
+- **Cardápio: busca + filtro por categoria + botão flutuante (`cca6d9f`).** Três pedidos de
+  UX do usuário: (1) campo de busca por nome acima das categorias (com botão de limpar);
+  (2) clicar no nome de uma categoria na seção "Categorias" filtra a lista pra ela (chip
+  fica laranja, aparece "Limpar filtro"; clicar de novo desfaz); (3) botão "Novo item"
+  flutuante no canto inferior direito quando a página rola (o do header some da viewport).
+  Estado vazio próprio pra busca/filtro sem resultado. Verificado ao vivo no navegador com
+  categoria e itens de teste (removidos depois).
+- **Cancelar item "em preparo" agora exige senha de supervisor (`7794356`).** Reclamação
+  real: garçom cancelava item na tela de Mesas mesmo com a cozinha já preparando. Decisão
+  do usuário: em_preparo entra na mesma regra de pronto/entregue (motivo + senha de
+  supervisor), valendo pra todo mundo (Mesas e Cozinha/Kanban); só `recebido` continua
+  cancelável livre. Mudança em `podeCancelarLivremente` (backend, com teste atualizado via
+  TDD) espelhada nos dois `podeCancelarLivre` do frontend; mensagens de erro atualizadas
+  ("item que já está em produção"). Verificado via API: em_preparo sem senha → 400;
+  recebido → 200.
+
 ### 2026-07-17
 - **Cozinha unificada — Fases 2+3 mescladas e em produção: o Kanban É a Cozinha agora**
   (plano: `docs/superpowers/plans/2026-07-16-cozinha-unificada-fase2-3.md`). A iniciativa
