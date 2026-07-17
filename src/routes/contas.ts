@@ -67,8 +67,18 @@ export function serializarItemComanda(item: ItemComandaComPreco) {
   return { ...item, precoUnit: Number(item.precoUnit) };
 }
 
+interface RascunhoItemComProduto {
+  id: string;
+  itemCardapioId: string;
+  quantidade: number;
+  observacao: string | null;
+  acompanhamento: string | null;
+  itemCardapio?: { nome: string; preco: unknown } | null;
+}
+
 interface ComandaComItens {
   itens?: ItemComandaComPreco[];
+  rascunhoItens?: RascunhoItemComProduto[];
   [chave: string]: unknown;
 }
 
@@ -80,10 +90,24 @@ export interface ContaComComandas {
 export function serializarConta(conta: ContaComComandas) {
   return {
     ...conta,
-    comandas: conta.comandas?.map((comanda) => ({
-      ...comanda,
-      itens: comanda.itens?.map(serializarItemComanda),
-    })),
+    comandas: conta.comandas?.map((comanda) => {
+      const { rascunhoItens, ...resto } = comanda;
+      return {
+        ...resto,
+        itens: comanda.itens?.map(serializarItemComanda),
+        // Itens em rascunho (não enviados). Só presente quando o include foi feito (telas de
+        // Mesas); Caixa/pagamento ignoram e não incluem — rascunho nunca entra na conta.
+        rascunho: rascunhoItens?.map((r) => ({
+          id:             r.id,
+          itemCardapioId: r.itemCardapioId,
+          nomeItem:       r.itemCardapio?.nome ?? '',
+          precoUnit:      Number(r.itemCardapio?.preco ?? 0),
+          quantidade:     r.quantidade,
+          observacao:     r.observacao,
+          acompanhamento: r.acompanhamento,
+        })),
+      };
+    }),
   };
 }
 
@@ -114,7 +138,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const contas = await prisma.conta.findMany({
       where:   { estabelecimentoId: estabelecimentoId!, status: { in: status } },
       orderBy: { abertaEm: 'desc' },
-      include: { mesa: true, comandas: { include: { itens: true } } },
+      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true } } }, orderBy: { criadoEm: 'asc' } } } } },
     });
     return contas.map(serializarConta);
   });
@@ -129,7 +153,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
     const conta = await prisma.conta.findFirst({
       where:   { id, estabelecimentoId: estabelecimentoId! },
-      include: { mesa: true, comandas: { include: { itens: true } } },
+      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true } } }, orderBy: { criadoEm: 'asc' } } } } },
     });
     if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
     return serializarConta(conta);
