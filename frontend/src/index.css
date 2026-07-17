@@ -4,7 +4,24 @@
   --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
 }
 
+/* Modo claro: inverte a escala zinc (o app inteiro usa zinc pra fundo/card/texto/borda).
+   As classes bg-zinc-900, text-zinc-100 etc. continuam iguais no código e ficam corretas
+   nos dois temas. O modo escuro (default) usa os valores padrão do Tailwind, sem override. */
+:root[data-theme="light"] {
+  --color-zinc-950: #ffffff; /* fundo da página */
+  --color-zinc-900: #f4f4f5; /* card/superfície */
+  --color-zinc-800: #e4e4e7; /* input/borda/hover */
+  --color-zinc-700: #d4d4d8; /* borda mais forte */
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-500: #71717a; /* muted (bom nos dois) */
+  --color-zinc-400: #52525b; /* texto secundário (escurecido pra ler no claro) */
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a; /* texto */
+  --color-zinc-100: #18181b; /* texto primário */
+  --color-zinc-50:  #09090b;
+}
+
 html, body, #root {
   min-height: 100dvh;
-  background-color: #09090b; /* zinc-950 */
+  background-color: var(--color-zinc-950); /* preto no escuro, branco no claro */
 }
