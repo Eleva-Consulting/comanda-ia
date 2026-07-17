@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { r2Configurado, uploadParaR2, deletarDeR2 } from '../r2.js';
+import { paraOpcoesAcompanhamento } from '../utils/acompanhamento.js';
 
 const ItemParamsSchema = Type.Object({ id: Type.String() });
 
@@ -45,11 +46,22 @@ const categoriaSelect = { select: { id: true, nome: true, ordem: true, opcoesAco
 
 type OpcaoAcompanhamento = { nome: string; precoAdicional: number };
 
+// `opcoesAcompanhamento` é uma coluna Json — pode conter dado malformado (não-array).
+// Normalizar aqui garante que todo consumidor autenticado receba sempre um array válido,
+// evitando que `.find`/`.map` no frontend derrubem a tela (mesma proteção que /publico usa).
+function serializarCategoria<T extends { opcoesAcompanhamento: unknown }>(categoria: T) {
+  return { ...categoria, opcoesAcompanhamento: paraOpcoesAcompanhamento(categoria.opcoesAcompanhamento) };
+}
+
 // preco é Decimal no Postgres — sem essa conversão, o Fastify serializa como
 // string ("20") em vez de número, quebrando qualquer conta feita no frontend
 // (ex: "20" + 3 vira concatenação "203", não soma 23).
-function serializarItem<T extends { preco: unknown }>(item: T) {
-  return { ...item, preco: Number(item.preco) };
+function serializarItem<T extends { preco: unknown; categoria?: { opcoesAcompanhamento: unknown } | null }>(item: T) {
+  return {
+    ...item,
+    preco: Number(item.preco),
+    ...(item.categoria ? { categoria: serializarCategoria(item.categoria) } : {}),
+  };
 }
 
 export async function cardapioRoutes(fastify: FastifyInstance) {
@@ -58,10 +70,11 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar],
   }, async (request) => {
     const { estabelecimentoId } = request.user;
-    return prisma.categoria.findMany({
+    const categorias = await prisma.categoria.findMany({
       where:   { estabelecimentoId: estabelecimentoId! },
       orderBy: { ordem: 'asc' },
     });
+    return categorias.map(serializarCategoria);
   });
 
   // ── POST /cardapio/categorias ─────────────────────────────────────────────
@@ -75,7 +88,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const categoria = await prisma.categoria.create({
       data: { nome, ordem: ordem ?? 0, opcoesAcompanhamento: opcoesAcompanhamento ?? [], estabelecimentoId: estabelecimentoId! },
     });
-    return reply.status(201).send(categoria);
+    return reply.status(201).send(serializarCategoria(categoria));
   });
 
   // ── PATCH /cardapio/categorias/:id ────────────────────────────────────────
@@ -94,7 +107,8 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     if (resultado.count === 0) {
       return reply.status(404).send({ erro: 'Categoria não encontrada' });
     }
-    return prisma.categoria.findUnique({ where: { id } });
+    const atualizada = await prisma.categoria.findUnique({ where: { id } });
+    return atualizada ? serializarCategoria(atualizada) : atualizada;
   });
 
   // ── DELETE /cardapio/categorias/:id ───────────────────────────────────────

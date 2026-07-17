@@ -71,6 +71,14 @@ function normalizarNumeroMesa(numero: string): string {
   return numero.trim().replace(/^Mesa\s+/i, '')
 }
 
+// `opcoesAcompanhamento` é uma coluna Json — o TypeScript a tipa como array, mas o dado
+// real pode vir com outro formato (ex.: objeto). Ler direto com .find/.map quebra a tela
+// inteira (TypeError). Sempre normalizar pra um array seguro antes de iterar.
+function opcoesAcompanhamentoDe(item: ItemCardapio | undefined): OpcaoAcompanhamento[] {
+  const opcoes = item?.categoria?.opcoesAcompanhamento
+  return Array.isArray(opcoes) ? opcoes : []
+}
+
 // ── Helpers visuais ────────────────────────────────────────────────────────
 
 const corStatusMesa: Record<Mesa['statusMesa'], string> = {
@@ -492,7 +500,7 @@ export default function Mesas() {
   function precoLinhaCarrinho(c: ItemCarrinho): number {
     const item = cardapio.find((i) => i.id === c.itemCardapioId)
     const adicional = Number(
-      item?.categoria?.opcoesAcompanhamento?.find((o) => o.nome === c.acompanhamento)?.precoAdicional ?? 0
+      opcoesAcompanhamentoDe(item).find((o) => o.nome === c.acompanhamento)?.precoAdicional ?? 0
     )
     return (c.preco + adicional) * c.quantidade
   }
@@ -773,7 +781,8 @@ export default function Mesas() {
               ) : (
                 <ul className="space-y-1">
                   {itensFiltrados.map((item) => {
-                    const pedeAcompanhamento = (item.categoria?.opcoesAcompanhamento?.length ?? 0) > 0
+                    const opcoesAcompanhamento = opcoesAcompanhamentoDe(item)
+                    const pedeAcompanhamento = opcoesAcompanhamento.length > 0
                     return (
                       <li key={item.id}>
                         <button
@@ -786,7 +795,7 @@ export default function Mesas() {
                         {escolhendoAcompanhamentoId === item.id && (
                           <div className="mb-1 space-y-1 rounded-lg border border-zinc-700 bg-zinc-800 p-2">
                             <p className="mb-1 text-xs font-medium text-zinc-400">Escolha o acompanhamento:</p>
-                            {item.categoria!.opcoesAcompanhamento.map((op) => (
+                            {opcoesAcompanhamento.map((op) => (
                               <button
                                 key={op.nome}
                                 onClick={() => adicionarAoCarrinho(item, op.nome)}
