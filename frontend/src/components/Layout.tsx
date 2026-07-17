@@ -4,9 +4,11 @@ import { NavLink, useLocation, useNavigate } from 'react-router'
 import {
   Bell, BellOff, ChefHat, LogOut, Users, X, Table2, Wallet, ShieldCheck,
   Package, TrendingUp, Landmark, Home, Flame, BookOpen, History, Settings, ChevronDown,
+  Sun, Moon,
 } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
+import { useTema } from '../hooks/useTema'
 import { getRole } from '../lib/auth'
 import { temPermissao } from '../lib/permissoes'
 import { API_URL } from '../lib/api'
@@ -118,6 +120,7 @@ export default function Layout({ children, headerExtra }: Props) {
   const podeEstoque = isDono || temPermissao('estoque')
   const mostrarEstoque = podeEstoque && modulosAtivos.includes('estoque_avancado')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
+  const { tema, alternar: alternarTema } = useTema()
 
   // Itens de uso operacional/frequente — sempre visíveis na barra principal.
   const itensPrincipais: NavItem[] = [
@@ -223,6 +226,14 @@ export default function Layout({ children, headerExtra }: Props) {
 
           <div className="flex items-center gap-2">
             {headerExtra}
+            <button
+              onClick={alternarTema}
+              className="rounded-lg p-3 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+              title={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+              aria-label={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+            >
+              {tema === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
             {pushSuportado && (
               <button
                 onClick={pushAtivo ? desativarPush : ativarPush}

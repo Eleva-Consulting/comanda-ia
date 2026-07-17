@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router'
-import { ChefHat, LogOut, LayoutDashboard, Building2 } from 'lucide-react'
+import { ChefHat, LogOut, LayoutDashboard, Building2, Sun, Moon } from 'lucide-react'
+import { useTema } from '../hooks/useTema'
 
 interface Props {
   children: ReactNode
@@ -15,6 +16,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function LayoutAdmin({ children }: Props) {
   const navigate = useNavigate()
+  const { tema, alternar: alternarTema } = useTema()
 
   function handleSair() {
     localStorage.removeItem('token')
@@ -49,6 +51,15 @@ export default function LayoutAdmin({ children }: Props) {
               Estabelecimentos
             </NavLink>
           </nav>
+
+          <button
+            onClick={alternarTema}
+            className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            title={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+            aria-label={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+          >
+            {tema === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
 
           {/* Sair */}
           <button
