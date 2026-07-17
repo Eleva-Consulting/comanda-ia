@@ -347,6 +347,14 @@ github.com/settings/organizations logado).
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-17 (continuação 2)
+- **Pix via Mercado Pago reativado (`317e163`).** `EXIGIR_MERCADO_PAGO_PARA_PIX` voltou pra
+  `true` em `src/mercadopago.ts` a pedido do usuário — Pix no checkout público e no balcão
+  volta a criar cobrança real no MP com confirmação automática via webhook; estabelecimento
+  sem MP conectado não oferece Pix online. A flag tinha ficado `false` de 2026-07-12 a
+  2026-07-17 (ver entrada ⚠️ de `9f8a32e`). `pix_maquininha` segue como forma separada, sem
+  MP. Se Pix não confirmar sozinho, checar primeiro o Webhook no painel do Mercado Pago.
+
 ### 2026-07-17 (continuação)
 - **Cardápio: busca + filtro por categoria + botão flutuante (`cca6d9f`).** Três pedidos de
   UX do usuário: (1) campo de busca por nome acima das categorias (com botão de limpar);
