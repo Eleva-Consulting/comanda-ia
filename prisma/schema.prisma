@@ -183,6 +183,7 @@ model Usuario {
   pushSubscriptions PushSubscription[]
   itensComandaCriados ItemComanda[]
   rodadasComandaCriadas RodadaComanda[]
+  rascunhoItensCriados  RascunhoItemComanda[]
   pagamentosRegistrados Pagamento[]
   logsAuditoria         LogAuditoria[]
   movimentacoesEstoque  MovimentacaoEstoque[]
@@ -234,6 +235,7 @@ model ItemCardapio {
   setor      Setor?     @relation(fields: [setorId], references: [id])
 
   itensComanda ItemComanda[]
+  rascunhoItens RascunhoItemComanda[]
 
   @@map("itens_cardapio")
 }
@@ -390,11 +392,35 @@ model Comanda {
   contaId String
   conta   Conta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
 
-  itens   ItemComanda[]
-  rateios ItemComandaRateio[]
-  rodadas RodadaComanda[]
+  itens         ItemComanda[]
+  rateios       ItemComandaRateio[]
+  rodadas       RodadaComanda[]
+  rascunhoItens RascunhoItemComanda[]
 
   @@map("comandas")
+}
+
+// Itens de pedido ainda em rascunho — anotados pelo garçom mas NÃO enviados pra cozinha.
+// Só viram ItemComanda + RodadaComanda no envio final da mesa (POST /contas/:id/rascunho/enviar).
+// Produção, Caixa e Dashboard não enxergam rascunho.
+model RascunhoItemComanda {
+  id             String  @id @default(uuid())
+  quantidade     Int
+  observacao     String?
+  acompanhamento String?
+
+  comandaId String
+  comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+
+  itemCardapioId String
+  itemCardapio   ItemCardapio @relation(fields: [itemCardapioId], references: [id], onDelete: Cascade)
+
+  criadoPorUsuarioId String?
+  criadoPor          Usuario? @relation(fields: [criadoPorUsuarioId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  @@map("rascunho_itens_comanda")
 }
 
 model RodadaComanda {
