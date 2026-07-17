@@ -29,11 +29,22 @@ interface ItemComanda {
   comandaId: string
 }
 
+interface RascunhoItem {
+  id: string
+  itemCardapioId: string
+  nomeItem: string
+  precoUnit: number
+  quantidade: number
+  observacao: string | null
+  acompanhamento: string | null
+}
+
 interface Comanda {
   id: string
   nome: string
   contaId: string
   itens: ItemComanda[]
+  rascunho?: RascunhoItem[]
 }
 
 interface Conta {
@@ -127,9 +138,9 @@ export default function Mesas() {
   const [buscaItem, setBuscaItem] = useState('')
   const [escolhendoAcompanhamentoId, setEscolhendoAcompanhamentoId] = useState<string | null>(null)
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
-  // Etapa de revisão do pedido dentro do modal — o envio pra cozinha só acontece
-  // depois que o garçom confere o resumo e confirma (pedido do usuário em 2026-07-17).
-  const [revisandoPedido, setRevisandoPedido] = useState(false)
+  // Tela de revisão da MESA inteira: o garçom anota tudo em rascunho (todas as comandas),
+  // revisa aqui e envia pra cozinha de uma vez só (pedido do usuário em 2026-07-17).
+  const [revisandoMesa, setRevisandoMesa] = useState(false)
   const [enviandoPedido, setEnviandoPedido] = useState(false)
   const [erroPedido, setErroPedido] = useState<string | null>(null)
 
@@ -231,7 +242,6 @@ export default function Mesas() {
     setBuscaItem('')
     setCarrinho([])
     setErroPedido(null)
-    setRevisandoPedido(false)
     await carregarCardapioSeNecessario()
   }
 
@@ -261,12 +271,13 @@ export default function Mesas() {
       .filter((c) => c.quantidade > 0))
   }
 
-  async function enviarPedido() {
+  // Adiciona os itens do carrinho ao RASCUNHO da comanda (não vai pra cozinha).
+  async function adicionarRascunho() {
     if (!modalItemAberto || carrinho.length === 0) return
     setEnviandoPedido(true)
     setErroPedido(null)
     try {
-      const resp = await fetch(`${API_URL}/comandas/${modalItemAberto}/rodadas`, {
+      const resp = await fetch(`${API_URL}/comandas/${modalItemAberto}/rascunho`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -277,21 +288,60 @@ export default function Mesas() {
           })),
         }),
       })
-      const dados = await resp.json()
-      if (!resp.ok) { setRevisandoPedido(false); setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
-      if (dados.itensDescartados?.length > 0) {
-        const nomes = dados.itensDescartados.map((d: { itemCardapioId: string; motivo?: string }) => {
-          const itemCarrinho = carrinho.find((c) => c.itemCardapioId === d.itemCardapioId)
-          return itemCarrinho?.nome ?? d.motivo ?? d.itemCardapioId
-        })
-        setErroPedido(`Alguns itens ficaram indisponíveis e não foram enviados: ${nomes.join(', ')}`)
-      }
+      const dados = await resp.json().catch(() => ({}))
+      if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível adicionar ao pedido'); return }
       await recarregarContaAtual()
       setCarrinho([])
-      setRevisandoPedido(false)
-      if (!dados.itensDescartados?.length) setModalItemAberto(null)
+      setModalItemAberto(null)
     } catch {
-      setRevisandoPedido(false)
+      setErroPedido('Falha de conexão')
+    } finally {
+      setEnviandoPedido(false)
+    }
+  }
+
+  async function alterarQtdRascunho(id: string, quantidade: number) {
+    if (quantidade < 1) return removerRascunho(id)
+    try {
+      const resp = await fetch(`${API_URL}/rascunho/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantidade }),
+      })
+      if (resp.ok) await recarregarContaAtual()
+    } catch (err) { console.error(err) }
+  }
+
+  async function removerRascunho(id: string) {
+    try {
+      const resp = await fetch(`${API_URL}/rascunho/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      if (resp.ok) await recarregarContaAtual()
+    } catch (err) { console.error(err) }
+  }
+
+  // Envia TODO o rascunho da mesa pra cozinha de uma vez (uma rodada por comanda).
+  async function enviarRascunhoDaMesa() {
+    if (!contaSelecionada) return
+    setEnviandoPedido(true)
+    setErroPedido(null)
+    try {
+      const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/rascunho/enviar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const dados = await resp.json().catch(() => ({}))
+      if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
+      await recarregarContaAtual()
+      if (dados.itensDescartados?.length > 0) {
+        const nomes = dados.itensDescartados.map((d: { itemCardapioId: string; motivo?: string }) => {
+          const r = contaSelecionada.comandas.flatMap((c) => c.rascunho ?? []).find((x) => x.itemCardapioId === d.itemCardapioId)
+          return r?.nomeItem ?? d.motivo ?? d.itemCardapioId
+        })
+        setErroPedido(`Alguns itens ficaram indisponíveis e continuam no pedido: ${nomes.join(', ')}`)
+      } else {
+        setRevisandoMesa(false)
+      }
+    } catch {
       setErroPedido('Falha de conexão')
     } finally {
       setEnviandoPedido(false)
@@ -494,18 +544,10 @@ export default function Mesas() {
     item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
   )
 
-  // ── Revisão do pedido antes de enviar pra cozinha ─────────────────────────
-  const comandaDestino = contaSelecionada?.comandas.find((c) => c.id === modalItemAberto)
-
-  function precoLinhaCarrinho(c: ItemCarrinho): number {
-    const item = cardapio.find((i) => i.id === c.itemCardapioId)
-    const adicional = Number(
-      opcoesAcompanhamentoDe(item).find((o) => o.nome === c.acompanhamento)?.precoAdicional ?? 0
-    )
-    return (c.preco + adicional) * c.quantidade
-  }
-
-  const totalCarrinho = carrinho.reduce((soma, c) => soma + precoLinhaCarrinho(c), 0)
+  // ── Rascunho da mesa (itens anotados, ainda não enviados) ─────────────────
+  const rascunhoDaMesa = contaSelecionada?.comandas.flatMap((c) => (c.rascunho ?? []).map((r) => ({ ...r, comandaNome: c.nome, comandaId: c.id }))) ?? []
+  const totalItensRascunho = rascunhoDaMesa.reduce((soma, r) => soma + r.quantidade, 0)
+  const totalValorRascunho = rascunhoDaMesa.reduce((soma, r) => soma + r.precoUnit * r.quantidade, 0)
 
   useEffect(() => {
     if (!socket) return
@@ -663,7 +705,7 @@ export default function Mesas() {
                   </button>
                 </div>
 
-                {comanda.itens.length === 0 ? (
+                {comanda.itens.length === 0 && (comanda.rascunho?.length ?? 0) === 0 ? (
                   <p className="text-sm text-zinc-500">Nenhum item ainda.</p>
                 ) : (
                   <ul className="space-y-2">
@@ -701,8 +743,105 @@ export default function Mesas() {
                     ))}
                   </ul>
                 )}
+
+                {/* Itens em rascunho — anotados, ainda NÃO enviados pra cozinha */}
+                {(comanda.rascunho?.length ?? 0) > 0 && (
+                  <div className="mt-3 rounded-xl border border-dashed border-orange-500/40 bg-orange-500/5 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-orange-400/80">Não enviado</p>
+                    <ul className="space-y-1.5">
+                      {comanda.rascunho!.map((r) => (
+                        <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <span className="font-medium">{r.quantidade}x {r.nomeItem}</span>
+                            {r.acompanhamento && <p className="text-xs font-medium text-orange-400">Acompanhamento: {r.acompanhamento}</p>}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button onClick={() => alterarQtdRascunho(r.id, r.quantidade - 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
+                            <span className="w-4 text-center">{r.quantidade}</span>
+                            <button onClick={() => alterarQtdRascunho(r.id, r.quantidade + 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
+                            <button onClick={() => removerRascunho(r.id)} className="rounded p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-400" title="Remover">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+
+          {/* Barra da mesa: revisar e enviar TODO o rascunho de uma vez */}
+          {totalItensRascunho > 0 && (
+            <button
+              onClick={() => { setErroPedido(null); setRevisandoMesa(true) }}
+              className="sticky bottom-4 mt-4 w-full rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600"
+            >
+              Revisar e enviar pedido ({totalItensRascunho} {totalItensRascunho === 1 ? 'item' : 'itens'})
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Revisão da mesa inteira: todo o rascunho agrupado por comanda + envio único */}
+      {revisandoMesa && contaSelecionada && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={() => setRevisandoMesa(false)}>
+          <div className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-zinc-900 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 pb-3">
+              <div>
+                <h3 className="text-lg font-bold">Confirmar pedido</h3>
+                <p className="text-xs text-zinc-400">Mesa {contaSelecionada.mesa.numero} · toda a mesa</p>
+              </div>
+              <button onClick={() => setRevisandoMesa(false)}><X className="h-5 w-5 text-zinc-400" /></button>
+            </div>
+
+            <div className="overflow-y-auto px-4">
+              {contaSelecionada.comandas.filter((c) => (c.rascunho?.length ?? 0) > 0).map((comanda) => (
+                <div key={comanda.id} className="mb-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{comanda.nome}</p>
+                  <ul className="space-y-1.5">
+                    {comanda.rascunho!.map((r) => (
+                      <li key={r.id} className="flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-zinc-100">{r.quantidade}x {r.nomeItem}</p>
+                          {r.acompanhamento && <p className="text-xs font-medium text-orange-400">Acompanhamento: {r.acompanhamento}</p>}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button onClick={() => alterarQtdRascunho(r.id, r.quantidade - 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
+                          <span className="w-4 text-center">{r.quantidade}</span>
+                          <button onClick={() => alterarQtdRascunho(r.id, r.quantidade + 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
+                          <button onClick={() => removerRascunho(r.id)} className="rounded p-1 text-zinc-500 hover:bg-red-500/10 hover:text-red-400" title="Remover"><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <div className="mt-1 flex items-center justify-between border-t border-zinc-800 pt-3 text-base font-bold">
+                <span>Total do pedido</span>
+                <span>R$ {totalValorRascunho.toFixed(2)}</span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">Confira com os clientes antes de enviar — nada foi pra cozinha ainda.</p>
+            </div>
+
+            <div className="space-y-2 p-4">
+              {erroPedido && <p className="text-sm text-red-400">{erroPedido}</p>}
+              <button
+                onClick={enviarRascunhoDaMesa}
+                disabled={enviandoPedido || totalItensRascunho === 0}
+                className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+              >
+                {enviandoPedido ? 'Enviando...' : 'Confirmar e enviar tudo pra cozinha'}
+              </button>
+              <button
+                onClick={() => setRevisandoMesa(false)}
+                disabled={enviandoPedido}
+                className="w-full rounded-xl bg-zinc-800 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                ← Voltar e adicionar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -711,59 +850,10 @@ export default function Mesas() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={() => setModalItemAberto(null)}>
           <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-zinc-900 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 pb-3">
-              <div>
-                <h3 className="text-lg font-bold">{revisandoPedido ? 'Confirmar pedido' : 'Adicionar item'}</h3>
-                {revisandoPedido && (
-                  <p className="text-xs text-zinc-400">
-                    {contaSelecionada?.mesa ? `Mesa ${contaSelecionada.mesa.numero}` : 'Sem mesa'} · Comanda {comandaDestino?.nome ?? ''}
-                  </p>
-                )}
-              </div>
+              <h3 className="text-lg font-bold">Adicionar item</h3>
               <button onClick={() => setModalItemAberto(null)}><X className="h-5 w-5 text-zinc-400" /></button>
             </div>
 
-            {revisandoPedido ? (
-              <div className="flex flex-col overflow-hidden">
-                <div className="overflow-y-auto px-4">
-                  <ul className="space-y-2">
-                    {carrinho.map((c) => (
-                      <li key={c.chave} className="flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-zinc-100">{c.quantidade}x {c.nome}</p>
-                          {c.acompanhamento && (
-                            <p className="text-xs font-medium text-orange-400">Acompanhamento: {c.acompanhamento}</p>
-                          )}
-                        </div>
-                        <span className="shrink-0 text-zinc-300">R$ {precoLinhaCarrinho(c).toFixed(2)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-3 flex items-center justify-between border-t border-zinc-800 pt-3 text-base font-bold">
-                    <span>Total do pedido</span>
-                    <span>R$ {totalCarrinho.toFixed(2)}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500">Confira com o cliente antes de enviar — nada foi pra cozinha ainda.</p>
-                </div>
-                <div className="space-y-2 p-4">
-                  {erroPedido && <p className="text-sm text-red-400">{erroPedido}</p>}
-                  <button
-                    onClick={enviarPedido}
-                    disabled={enviandoPedido}
-                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
-                  >
-                    {enviandoPedido ? 'Enviando...' : 'Confirmar e enviar pra cozinha'}
-                  </button>
-                  <button
-                    onClick={() => setRevisandoPedido(false)}
-                    disabled={enviandoPedido}
-                    className="w-full rounded-xl bg-zinc-800 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
-                  >
-                    ← Voltar e ajustar
-                  </button>
-                </div>
-              </div>
-            ) : (
-            <>
             <div className="overflow-y-auto px-4">
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
@@ -845,15 +935,16 @@ export default function Mesas() {
                 {erroPedido && <p className="mb-2 text-sm text-red-400">{erroPedido}</p>}
                 {carrinho.length > 0 && (
                   <button
-                    onClick={() => { setErroPedido(null); setRevisandoPedido(true) }}
-                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600"
+                    onClick={adicionarRascunho}
+                    disabled={enviandoPedido}
+                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
                   >
-                    {`Revisar pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
+                    {enviandoPedido
+                      ? 'Adicionando...'
+                      : `Adicionar ao pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
                   </button>
                 )}
               </div>
-            )}
-            </>
             )}
           </div>
         </div>

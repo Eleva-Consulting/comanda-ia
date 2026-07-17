@@ -9,18 +9,6 @@ import { transicaoProducaoValida, proximoStatusAtivo } from '../utils/statusProd
 import { serializarItemComanda, emitirAtualizacaoItemComanda } from './contas.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
-const ItemRodadaSchema = Type.Object({
-  itemCardapioId: Type.String({ minLength: 1 }),
-  quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
-  observacao:     Type.Optional(Type.String({ maxLength: 300 })),
-  acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
-});
-
-const CriarRodadaSchema = Type.Object({
-  itens: Type.Array(ItemRodadaSchema, { minItems: 1 }),
-});
-
-const ComandaParamsSchema = Type.Object({ id: Type.String() });
 const RodadaParamsSchema  = Type.Object({ id: Type.String() });
 
 export interface EntradaItemRodada {
@@ -98,56 +86,9 @@ export async function criarRodadaDeItens(
 }
 
 export async function rodadasRoutes(fastify: FastifyInstance) {
-  // ── POST /comandas/:id/rodadas ───────────────────────────────────────────────
-  // Cria uma Rodada (lote de itens enviados juntos) — substitui o antigo "um item
-  // por clique" (POST /comandas/:id/itens, removido). Itens que ficaram indisponíveis
-  // entre a montagem do carrinho e o envio são descartados sem quebrar a rodada inteira.
-  fastify.post('/comandas/:id/rodadas', {
-    onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
-    schema: { params: ComandaParamsSchema, body: CriarRodadaSchema },
-  }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { itens } = request.body as { itens: EntradaItemRodada[] };
-    const { estabelecimentoId, userId } = request.user;
-
-    const comanda = await prisma.comanda.findFirst({
-      where: { id, conta: { estabelecimentoId: estabelecimentoId! } },
-    });
-    if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
-
-    const { itensCriados, itensDescartados } = await prisma.$transaction((tx) =>
-      criarRodadaDeItens(tx, { comandaId: id, estabelecimentoId: estabelecimentoId!, userId, itens }),
-    );
-
-    if (itensCriados.length === 0) {
-      return reply.status(400).send({ erro: 'Nenhum item válido pra criar a rodada', itensDescartados });
-    }
-    const rodada = { id: itensCriados[0].rodadaId! };
-
-    // Reaproveita o mecanismo de eventos já existente pra item avulso, em loop —
-    // sem evento novo. O agrupamento visual da rodada acontece no frontend via rodadaId.
-    for (const itemCriado of itensCriados) {
-      const serializado = serializarItemComanda(itemCriado);
-      getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
-    }
-
-    const itensParaProducao = await prisma.itemComanda.findMany({
-      where: { id: { in: itensCriados.map((i) => i.id) } },
-      include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
-    });
-    // salaProducao já resolve sozinha pra onde cada item vai (sala ampla + sala do setor,
-    // quando tem setor; só a sala ampla, quando não tem) — mesmo padrão já usado pra item
-    // avulso, sem precisar agrupar nada antes.
-    for (const item of itensParaProducao) {
-      getIO().to(salaProducao(estabelecimentoId!, item.setorId)).emit('producao:item-novo', serializarItemProducao(item));
-    }
-
-    return reply.status(201).send({
-      rodadaId: rodada.id,
-      itens: itensCriados.map(serializarItemComanda),
-      itensDescartados,
-    });
-  });
+  // NOTA: a criação de rodada agora acontece pelo envio do rascunho da mesa
+  // (POST /contas/:id/rascunho/enviar, em rascunho.ts), que reaproveita
+  // criarRodadaDeItens acima. A antiga POST /comandas/:id/rodadas foi removida.
 
   // ── GET /rodadas/:id ─────────────────────────────────────────────────────────
   // Usada pela tela de impressão (ImprimirRodada.tsx).
