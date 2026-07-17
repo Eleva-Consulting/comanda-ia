@@ -119,6 +119,9 @@ export default function Mesas() {
   const [buscaItem, setBuscaItem] = useState('')
   const [escolhendoAcompanhamentoId, setEscolhendoAcompanhamentoId] = useState<string | null>(null)
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
+  // Etapa de revisão do pedido dentro do modal — o envio pra cozinha só acontece
+  // depois que o garçom confere o resumo e confirma (pedido do usuário em 2026-07-17).
+  const [revisandoPedido, setRevisandoPedido] = useState(false)
   const [enviandoPedido, setEnviandoPedido] = useState(false)
   const [erroPedido, setErroPedido] = useState<string | null>(null)
 
@@ -220,6 +223,7 @@ export default function Mesas() {
     setBuscaItem('')
     setCarrinho([])
     setErroPedido(null)
+    setRevisandoPedido(false)
     await carregarCardapioSeNecessario()
   }
 
@@ -266,7 +270,7 @@ export default function Mesas() {
         }),
       })
       const dados = await resp.json()
-      if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
+      if (!resp.ok) { setRevisandoPedido(false); setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
       if (dados.itensDescartados?.length > 0) {
         const nomes = dados.itensDescartados.map((d: { itemCardapioId: string; motivo?: string }) => {
           const itemCarrinho = carrinho.find((c) => c.itemCardapioId === d.itemCardapioId)
@@ -276,8 +280,10 @@ export default function Mesas() {
       }
       await recarregarContaAtual()
       setCarrinho([])
+      setRevisandoPedido(false)
       if (!dados.itensDescartados?.length) setModalItemAberto(null)
     } catch {
+      setRevisandoPedido(false)
       setErroPedido('Falha de conexão')
     } finally {
       setEnviandoPedido(false)
@@ -479,6 +485,19 @@ export default function Mesas() {
   const itensFiltrados = cardapio.filter((item) =>
     item.nome.toLowerCase().includes(buscaItem.trim().toLowerCase())
   )
+
+  // ── Revisão do pedido antes de enviar pra cozinha ─────────────────────────
+  const comandaDestino = contaSelecionada?.comandas.find((c) => c.id === modalItemAberto)
+
+  function precoLinhaCarrinho(c: ItemCarrinho): number {
+    const item = cardapio.find((i) => i.id === c.itemCardapioId)
+    const adicional = Number(
+      item?.categoria?.opcoesAcompanhamento?.find((o) => o.nome === c.acompanhamento)?.precoAdicional ?? 0
+    )
+    return (c.preco + adicional) * c.quantidade
+  }
+
+  const totalCarrinho = carrinho.reduce((soma, c) => soma + precoLinhaCarrinho(c), 0)
 
   useEffect(() => {
     if (!socket) return
@@ -684,10 +703,59 @@ export default function Mesas() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={() => setModalItemAberto(null)}>
           <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-zinc-900 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 pb-3">
-              <h3 className="text-lg font-bold">Adicionar item</h3>
+              <div>
+                <h3 className="text-lg font-bold">{revisandoPedido ? 'Confirmar pedido' : 'Adicionar item'}</h3>
+                {revisandoPedido && (
+                  <p className="text-xs text-zinc-400">
+                    {contaSelecionada?.mesa ? `Mesa ${contaSelecionada.mesa.numero}` : 'Sem mesa'} · Comanda {comandaDestino?.nome ?? ''}
+                  </p>
+                )}
+              </div>
               <button onClick={() => setModalItemAberto(null)}><X className="h-5 w-5 text-zinc-400" /></button>
             </div>
 
+            {revisandoPedido ? (
+              <div className="flex flex-col overflow-hidden">
+                <div className="overflow-y-auto px-4">
+                  <ul className="space-y-2">
+                    {carrinho.map((c) => (
+                      <li key={c.chave} className="flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-zinc-100">{c.quantidade}x {c.nome}</p>
+                          {c.acompanhamento && (
+                            <p className="text-xs font-medium text-orange-400">Acompanhamento: {c.acompanhamento}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-zinc-300">R$ {precoLinhaCarrinho(c).toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 flex items-center justify-between border-t border-zinc-800 pt-3 text-base font-bold">
+                    <span>Total do pedido</span>
+                    <span>R$ {totalCarrinho.toFixed(2)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">Confira com o cliente antes de enviar — nada foi pra cozinha ainda.</p>
+                </div>
+                <div className="space-y-2 p-4">
+                  {erroPedido && <p className="text-sm text-red-400">{erroPedido}</p>}
+                  <button
+                    onClick={enviarPedido}
+                    disabled={enviandoPedido}
+                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                  >
+                    {enviandoPedido ? 'Enviando...' : 'Confirmar e enviar pra cozinha'}
+                  </button>
+                  <button
+                    onClick={() => setRevisandoPedido(false)}
+                    disabled={enviandoPedido}
+                    className="w-full rounded-xl bg-zinc-800 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+                  >
+                    ← Voltar e ajustar
+                  </button>
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="overflow-y-auto px-4">
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
@@ -768,14 +836,15 @@ export default function Mesas() {
                 {erroPedido && <p className="mb-2 text-sm text-red-400">{erroPedido}</p>}
                 {carrinho.length > 0 && (
                   <button
-                    onClick={enviarPedido}
-                    disabled={enviandoPedido}
-                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    onClick={() => { setErroPedido(null); setRevisandoPedido(true) }}
+                    className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600"
                   >
-                    {enviandoPedido ? 'Enviando...' : `Enviar pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
+                    {`Revisar pedido (${carrinho.reduce((s, c) => s + c.quantidade, 0)} ${carrinho.reduce((s, c) => s + c.quantidade, 0) === 1 ? 'item' : 'itens'})`}
                   </button>
                 )}
               </div>
+            )}
+            </>
             )}
           </div>
         </div>
