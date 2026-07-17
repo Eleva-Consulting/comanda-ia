@@ -1,13 +1,12 @@
 import { prisma } from './database.js'
 
-// Flag temporária (decisão do usuário em 2026-07-12): enquanto `true`, Pix exige o
-// estabelecimento estar conectado ao Mercado Pago (comportamento normal, com cobrança real e
-// confirmação automática via webhook). Setar como `false` desliga essa exigência em TODO o
-// sistema — checkout público e pedido de balcão — enquanto processos internos são ajustados;
-// nesse modo, Pix vira só um registro (como dinheiro/cartão), sem cobrança real nem confirmação
-// automática. Reverter: voltar pra `true`. Usado em `src/routes/publico.ts` e
-// `src/routes/pedidos.ts`.
-export const EXIGIR_MERCADO_PAGO_PARA_PIX = false
+// Enquanto `true`, Pix exige o estabelecimento estar conectado ao Mercado Pago (cobrança
+// real + confirmação automática via webhook) no checkout público e no pedido de balcão.
+// Setar como `false` desliga essa exigência em TODO o sistema — Pix vira só um registro
+// (como dinheiro/cartão), sem cobrança real nem confirmação automática. Ficou `false` de
+// 2026-07-12 a 2026-07-17 (decisão temporária do usuário); reativado em 2026-07-17.
+// Usado em `src/routes/publico.ts` e `src/routes/pedidos.ts`.
+export const EXIGIR_MERCADO_PAGO_PARA_PIX = true
 
 function configOAuth() {
   const clientId     = process.env.MP_CLIENT_ID
