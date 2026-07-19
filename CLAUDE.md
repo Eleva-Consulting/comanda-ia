@@ -246,17 +246,19 @@ abaixo registra o que cada subagente/revisão encontrou).
   no deploy. Antes de qualquer `git push`: rodar `git pull` (ou `git pull --rebase` se o repo local
   tiver commits ainda não enviados) e resolver qualquer conflito localmente antes de pushar. Nunca
   usar `git push --force` em branch compartilhada (`main`) sem confirmar com o time antes.
-- **`main` NÃO tem proteção de branch técnica (decisão de 2026-07-19)** — a Eleva-Consulting está
-  no plano GitHub Free, que não permite branch protection em repositório privado (exige upgrade
-  pro plano Team, ~$4/usuário/mês). Push direto na `main` continua tecnicamente possível pra quem
-  tem acesso — a regra de sempre usar branch + PR é **só convenção do time**, não é imposta pelo
-  GitHub. GitHub Actions (`.github/workflows/ci.yml`) roda build+typecheck+testes (backend e
-  frontend) em todo PR contra `main` normalmente (isso funciona no plano Free), mas nada obriga o
-  PR a existir nem os checks a passar antes de um push direto. Fluxo recomendado mesmo sem trava:
-  `git checkout -b feat/xyz` → commits → `git push -u origin feat/xyz` → `gh pr create` →
-  aguardar CI verde → mesclar. Se o time fizer upgrade pro plano Team no futuro, retomar a
-  configuração de branch protection real (PR obrigatório + checks `Backend (build + test)` e
-  `Frontend (build)` obrigatórios, sem aprovação de terceiro exigida, `enforce_admins` ativado).
+- **REGRA: sempre passar por Pull Request antes de mesclar na `main`, mesmo sem trava técnica do
+  GitHub** — a Eleva-Consulting está no plano GitHub Free, que não permite branch protection em
+  repositório privado (exige upgrade pro plano Team, ~$4/usuário/mês). Isso significa que push
+  direto na `main` continua tecnicamente possível pra qualquer colaborador com acesso — **nada no
+  GitHub impede isso**, é puramente disciplina do time. Por isso a regra é obrigatória por
+  convenção pra todo mundo (Vinicius, colaboradores, e qualquer sessão de Claude Code trabalhando
+  neste repo): `git checkout -b feat/xyz` → commits → `git push -u origin feat/xyz` →
+  `gh pr create` → aguardar o CI (`.github/workflows/ci.yml`, roda build+typecheck+testes de
+  backend e frontend) ficar verde → só então mesclar. Nunca dar `git push` direto pra `main`. Se
+  o time fizer upgrade pro plano Team no futuro, retomar a configuração de branch protection real
+  (PR obrigatório + checks `Backend (build + test)` e `Frontend (build)` obrigatórios, sem
+  aprovação de terceiro exigida, `enforce_admins` ativado) — até lá, essa regra escrita é a única
+  proteção que existe.
 
 ## Trabalho em equipe
 
