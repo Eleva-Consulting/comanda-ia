@@ -246,12 +246,17 @@ abaixo registra o que cada subagente/revisão encontrou).
   no deploy. Antes de qualquer `git push`: rodar `git pull` (ou `git pull --rebase` se o repo local
   tiver commits ainda não enviados) e resolver qualquer conflito localmente antes de pushar. Nunca
   usar `git push --force` em branch compartilhada (`main`) sem confirmar com o time antes.
-- **`main` é protegida (desde 2026-07-19)** — push direto está bloqueado, toda mudança passa por
-  Pull Request. GitHub Actions (`.github/workflows/ci.yml`) roda build+typecheck+testes (backend
-  e frontend) em todo PR contra `main`; os dois checks precisam passar pra habilitar o merge. Sem
-  aprovação de terceiro obrigatória (time pequeno) — revisão acontece quando der, mas não trava o
-  merge. Fluxo: `git checkout -b feat/xyz` → commits → `git push -u origin feat/xyz` →
-  `gh pr create` → aguardar CI verde → mesclar.
+- **`main` NÃO tem proteção de branch técnica (decisão de 2026-07-19)** — a Eleva-Consulting está
+  no plano GitHub Free, que não permite branch protection em repositório privado (exige upgrade
+  pro plano Team, ~$4/usuário/mês). Push direto na `main` continua tecnicamente possível pra quem
+  tem acesso — a regra de sempre usar branch + PR é **só convenção do time**, não é imposta pelo
+  GitHub. GitHub Actions (`.github/workflows/ci.yml`) roda build+typecheck+testes (backend e
+  frontend) em todo PR contra `main` normalmente (isso funciona no plano Free), mas nada obriga o
+  PR a existir nem os checks a passar antes de um push direto. Fluxo recomendado mesmo sem trava:
+  `git checkout -b feat/xyz` → commits → `git push -u origin feat/xyz` → `gh pr create` →
+  aguardar CI verde → mesclar. Se o time fizer upgrade pro plano Team no futuro, retomar a
+  configuração de branch protection real (PR obrigatório + checks `Backend (build + test)` e
+  `Frontend (build)` obrigatórios, sem aprovação de terceiro exigida, `enforce_admins` ativado).
 
 ## Trabalho em equipe
 
@@ -350,8 +355,10 @@ tiver o remote antigo: `git remote set-url origin git@github.com:Eleva-Consultin
     de **antes desta sessão** (criado em 2026-07-13, achado ao tentar convidar de novo) — ainda
     não aceito; falta ele aceitar o convite (verificar se não expirou, convite de org do GitHub
     expira por padrão) pra dar acesso Admin no repo também.
-  - **Branch protection na `main`**: PR obrigatório (push direto bloqueado), exige os checks
-    `backend` e `frontend` do CI verdes, sem aprovação de terceiro obrigatória.
+  - **Branch protection na `main` NÃO foi ativada** — a Eleva-Consulting está no plano GitHub
+    Free, que bloqueia branch protection em repo privado (`403: Upgrade to GitHub Pro or make
+    this repository public`). Decisão do usuário: seguir sem trave técnica por enquanto (fica só
+    convenção documentada), sem custo; upgrade pro plano Team fica como opção pra retomar depois.
   - **Achado de processo**: a concessão de escopo `admin:org` ao token do `gh` CLI (necessária
     pra convidar membros pra org) e o clique final de "Authorize github" na tela de OAuth do
     GitHub não aceitaram clique automatizado via browser (nem mouse nem teclado) — proteção do
