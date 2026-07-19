@@ -11,7 +11,7 @@ aparece na cozinha em tempo real via Socket.IO.
 **Backend:** Node.js 22 + TypeScript + Fastify 5 + Prisma 7 + PostgreSQL
 **Frontend:** React 19 + Vite 7 + Tailwind v4 + React Router 7 + lucide-react + recharts
 **Deploy:** Railway (backend + postgres) + Vercel (frontend)
-**Repo:** github.com/viniciusalvestech/comanda-ia
+**Repo:** github.com/Eleva-Consulting/comanda-ia (migrado de github.com/viniciusalvestech/comanda-ia em 2026-07-19 — ver Log de mudanças)
 
 ## Estrutura do projeto
 
@@ -246,6 +246,12 @@ abaixo registra o que cada subagente/revisão encontrou).
   no deploy. Antes de qualquer `git push`: rodar `git pull` (ou `git pull --rebase` se o repo local
   tiver commits ainda não enviados) e resolver qualquer conflito localmente antes de pushar. Nunca
   usar `git push --force` em branch compartilhada (`main`) sem confirmar com o time antes.
+- **`main` é protegida (desde 2026-07-19)** — push direto está bloqueado, toda mudança passa por
+  Pull Request. GitHub Actions (`.github/workflows/ci.yml`) roda build+typecheck+testes (backend
+  e frontend) em todo PR contra `main`; os dois checks precisam passar pra habilitar o merge. Sem
+  aprovação de terceiro obrigatória (time pequeno) — revisão acontece quando der, mas não trava o
+  merge. Fluxo: `git checkout -b feat/xyz` → commits → `git push -u origin feat/xyz` →
+  `gh pr create` → aguardar CI verde → mesclar.
 
 ## Trabalho em equipe
 
@@ -313,39 +319,48 @@ VITE_API_URL=http://localhost:3000
   local, apontando pro proxy público do Postgres do Railway.
 - Deploy manual Railway: `railway up --detach` (auto-deploy às vezes falha)
 
-## Migração do repositório pra organização do GitHub (pendente, nada executado ainda)
+## Migração do repositório pra organização do GitHub (concluída em 2026-07-19)
 
-> Intenção do usuário (levantada em 2026-07-15): mover `comanda-ia` da conta pessoal
-> `github.com/viniciusalvestech` pra uma organização. **Só foi feita investigação (`gh api`),
-> nenhuma ação de transferência foi executada.**
-
-**Pendência a resolver antes de continuar:** o usuário se referiu à org como "Eleva", mas a
-checagem via `gh api user/orgs` mostrou que a organização da qual ele é membro é
-`Eleva-Consulting` — um login diferente. `gh api orgs/Eleva` também respondeu (login `eleva`,
-name "Eleva"), mas isso pode ser só o perfil público de uma org que não é dele. **Confirmar o
-login exato da organização de destino antes de transferir** (`gh org list` ou conferir em
-github.com/settings/organizations logado).
-
-**Impactos identificados de transferir um repo privado pra uma org (avaliar antes de executar):**
-- **Integrações Railway/Vercel podem quebrar.** Os dois usam GitHub App instalado por
-  conta/org — se o app não estiver autorizado na org de destino, o deploy automático some até
-  reconectar. Plano seguro: autorizar o GitHub App do Railway e da Vercel na org **antes** de
-  transferir, e validar um deploy de teste logo depois.
-- **URL do repo muda** de `github.com/viniciusalvestech/comanda-ia` pra
-  `github.com/<org>/comanda-ia`. O GitHub redireciona a URL antiga automaticamente por um tempo,
-  mas o ideal é todo mundo do time rodar `git remote set-url origin <nova-url>` depois.
-- **Plano da organização importa.** Org no plano Free tem limitações em repo privado (ex:
-  proteção de branch/PR obrigatório) que a conta pessoal do usuário pode já ter de graça — checar
-  o plano da org antes de depender de alguma feature específica de PR/branch protection.
-- **Colaboradores precisam ser adicionados de novo** — acesso dado direto no repo pessoal não
-  migra automaticamente pra permissão de time da org; melhor oportunidade pra organizar por Teams.
-- Transferência em si é rápida e não derruba o repo, mas o **risco real está na reconexão do
-  deploy** — por isso não fazer isso "de qualquer jeito" sem plano, dado que produção depende de
-  push automático.
+Repositório transferido de `github.com/viniciusalvestech/comanda-ia` pra
+`github.com/Eleva-Consulting/comanda-ia` (a org da qual o usuário é admin — a ambiguidade
+"Eleva" vs "Eleva-Consulting" de sessão anterior foi confirmada como `Eleva-Consulting`).
+Detalhes completos na entrada de 2026-07-19 do Log de mudanças abaixo. Se alguém do time ainda
+tiver o remote antigo: `git remote set-url origin git@github.com:Eleva-Consulting/comanda-ia.git`.
 
 ## Log de mudanças
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
+
+### 2026-07-19
+- **Repositório migrado pra Eleva-Consulting + pipeline de CI criado.** Pedido do usuário: dar
+  acesso direto a 2 amigos que passaram a trabalhar no projeto e montar um pipeline. Confirmado
+  antes de tocar em qualquer coisa que a org de destino é `Eleva-Consulting` (o usuário é admin
+  lá) — resolve a ambiguidade "Eleva" vs "Eleva-Consulting" deixada pendente em 2026-07-15.
+  - **Ordem de execução** (pensada pra não derrubar o deploy automático): 1) autorizado o GitHub
+    App do Railway e da Vercel na org, com acesso a todos os repos (não dava pra restringir a
+    `comanda-ia` especificamente porque o repo ainda não existia na org nesse momento); 2)
+    transferência real via API (`POST /repos/{owner}/{repo}/transfer`, já que `gh repo transfer`
+    não existe como subcomando do CLI); 3) colaboradores adicionados; 4) remote local atualizado;
+    5) branch protection configurada só depois do CI existir.
+  - **CI**: `.github/workflows/ci.yml` — dois jobs em paralelo (`backend`: tsc + vitest;
+    `frontend`: tsc + vite build) rodando em todo PR contra `main`. Testes atuais do backend usam
+    mock do Prisma (`vi.mock`), então não precisou de serviço Postgres no workflow.
+  - **Colaboradores**: Ceulyton (`@Ceulyton`) já era membro da org — recebeu Admin no repo na
+    hora. O segundo amigo (email `lfcosta.tech@gmail.com`) já tinha um convite pendente pra org
+    de **antes desta sessão** (criado em 2026-07-13, achado ao tentar convidar de novo) — ainda
+    não aceito; falta ele aceitar o convite (verificar se não expirou, convite de org do GitHub
+    expira por padrão) pra dar acesso Admin no repo também.
+  - **Branch protection na `main`**: PR obrigatório (push direto bloqueado), exige os checks
+    `backend` e `frontend` do CI verdes, sem aprovação de terceiro obrigatória.
+  - **Achado de processo**: a concessão de escopo `admin:org` ao token do `gh` CLI (necessária
+    pra convidar membros pra org) e o clique final de "Authorize github" na tela de OAuth do
+    GitHub não aceitaram clique automatizado via browser (nem mouse nem teclado) — proteção do
+    GitHub contra clique sintético nesse tipo de concessão sensível (admin em organização). O
+    usuário precisou clicar manualmente; o resto do fluxo (device code, preenchimento do
+    formulário) foi automatizado normalmente.
+  - Deploy automático (Railway + Vercel) validado com o push deste mesmo commit direto na
+    `main` — antes de ativar a proteção de branch, pra confirmar que a reconexão dos GitHub Apps
+    funcionou antes de travar push direto.
 
 ### 2026-07-17 (continuação 6)
 - **Modo claro/escuro (`c06298f`).** Botão sol/lua no header (Layout e LayoutAdmin) alterna
