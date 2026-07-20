@@ -143,6 +143,37 @@ npm install
 npm run dev
 ```
 
+## Onboarding de dev novo (sem precisar de segredo nenhum)
+
+> Adicionado em 2026-07-19. Fluxo pensado pra quem só vai codar e testar via ambiente de
+> homologação (staging) — não roda nada local, então não precisa de nenhuma variável de
+> ambiente/segredo compartilhado. Se precisar rodar local de verdade (debug mais profundo,
+> mexer em algo que só reproduz local), usar a seção "Como rodar localmente" acima — aí sim
+> precisa dos segredos, compartilhados por gerenciador de senhas em equipe, nunca em texto puro.
+
+1. **Acesso ao GitHub** — pedir pra ser adicionado à organização Eleva-Consulting (o dono do
+   projeto convida via `gh api orgs/Eleva-Consulting/invitations -X POST -f email=<email> -f
+   role=direct_member`, ou pela UI). Depois, acesso Admin no repo:
+   `gh api repos/Eleva-Consulting/comanda-ia/collaborators/<usuário> -X PUT -f permission=admin`.
+2. **Clonar e instalar** (sem `.env`, sem Docker):
+   ```bash
+   git clone git@github.com:Eleva-Consulting/comanda-ia.git
+   npm install                      # backend
+   cd frontend && npm install       # frontend
+   ```
+3. **Claude Code**: instalar os plugins da seção "Metodologia de trabalho e skills do Claude
+   Code" abaixo (`superpowers` + `everything-claude-code`).
+4. **Fluxo de trabalho** (ver regra completa em "Git / commits / PRs"):
+   - `git checkout -b feat/xyz` a partir de `staging` atualizada
+   - Validar local sem rodar servidor nenhum: `npm run build` + `npm test` no backend (testes
+     são mockados, não tocam banco real — passam sem nenhum segredo) e `npm run build` no
+     frontend
+   - Push → PR contra `staging` → CI roda os mesmos checks → merge → deploy automático de
+     homologação dispara sozinho
+   - Testar a mudança de verdade no ambiente de homologação (URLs e detalhes na seção
+     "Ambiente de homologação (staging)" abaixo), logando com uma credencial de
+     "Credenciais de teste" acima
+
 ## Padrões que usamos
 
 - **Arquivos completos** — nunca entregar trechos parciais, sempre o arquivo inteiro
