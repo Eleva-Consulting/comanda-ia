@@ -11,7 +11,11 @@ aparece na cozinha em tempo real via Socket.IO.
 **Backend:** Node.js 22 + TypeScript + Fastify 5 + Prisma 7 + PostgreSQL
 **Frontend:** React 19 + Vite 7 + Tailwind v4 + React Router 7 + lucide-react + recharts
 **Deploy:** Railway (backend + postgres) + Vercel (frontend)
-**Repo:** github.com/Eleva-Consulting/comanda-ia (migrado de github.com/viniciusalvestech/comanda-ia em 2026-07-19 — ver Log de mudanças)
+**Repo:** github.com/Eleva-Consulting/comanda-ia — **público** desde 2026-07-19 (migrado de
+github.com/viniciusalvestech/comanda-ia, depois tornado público; decisão + motivo completo no
+Log de mudanças). Histórico completo auditado antes de tornar público (gitleaks + grep manual,
+351 commits, zero segredo real). **Nunca commitar segredo real** — GitHub secret scanning +
+push protection estão ativos (bloqueiam push com segredo detectado), mas não confiar só nisso.
 
 ## Estrutura do projeto
 
@@ -139,6 +143,37 @@ npm install
 npm run dev
 ```
 
+## Onboarding de dev novo (sem precisar de segredo nenhum)
+
+> Adicionado em 2026-07-19. Fluxo pensado pra quem só vai codar e testar via ambiente de
+> homologação (staging) — não roda nada local, então não precisa de nenhuma variável de
+> ambiente/segredo compartilhado. Se precisar rodar local de verdade (debug mais profundo,
+> mexer em algo que só reproduz local), usar a seção "Como rodar localmente" acima — aí sim
+> precisa dos segredos, compartilhados por gerenciador de senhas em equipe, nunca em texto puro.
+
+1. **Acesso ao GitHub** — pedir pra ser adicionado à organização Eleva-Consulting (o dono do
+   projeto convida via `gh api orgs/Eleva-Consulting/invitations -X POST -f email=<email> -f
+   role=direct_member`, ou pela UI). Depois, acesso Admin no repo:
+   `gh api repos/Eleva-Consulting/comanda-ia/collaborators/<usuário> -X PUT -f permission=admin`.
+2. **Clonar e instalar** (sem `.env`, sem Docker):
+   ```bash
+   git clone git@github.com:Eleva-Consulting/comanda-ia.git
+   npm install                      # backend
+   cd frontend && npm install       # frontend
+   ```
+3. **Claude Code**: instalar os plugins da seção "Metodologia de trabalho e skills do Claude
+   Code" abaixo (`superpowers` + `everything-claude-code`).
+4. **Fluxo de trabalho** (ver regra completa em "Git / commits / PRs"):
+   - `git checkout -b feat/xyz` a partir de `staging` atualizada
+   - Validar local sem rodar servidor nenhum: `npm run build` + `npm test` no backend (testes
+     são mockados, não tocam banco real — passam sem nenhum segredo) e `npm run build` no
+     frontend
+   - Push → PR contra `staging` → CI roda os mesmos checks → merge → deploy automático de
+     homologação dispara sozinho
+   - Testar a mudança de verdade no ambiente de homologação (URLs e detalhes na seção
+     "Ambiente de homologação (staging)" abaixo), logando com uma credencial de
+     "Credenciais de teste" acima
+
 ## Padrões que usamos
 
 - **Arquivos completos** — nunca entregar trechos parciais, sempre o arquivo inteiro
@@ -246,19 +281,19 @@ abaixo registra o que cada subagente/revisão encontrou).
   no deploy. Antes de qualquer `git push`: rodar `git pull` (ou `git pull --rebase` se o repo local
   tiver commits ainda não enviados) e resolver qualquer conflito localmente antes de pushar. Nunca
   usar `git push --force` em branch compartilhada (`main`) sem confirmar com o time antes.
-- **REGRA: sempre passar por Pull Request antes de mesclar na `main`, mesmo sem trava técnica do
-  GitHub** — a Eleva-Consulting está no plano GitHub Free, que não permite branch protection em
-  repositório privado (exige upgrade pro plano Team, ~$4/usuário/mês). Isso significa que push
-  direto na `main` continua tecnicamente possível pra qualquer colaborador com acesso — **nada no
-  GitHub impede isso**, é puramente disciplina do time. Por isso a regra é obrigatória por
-  convenção pra todo mundo (Vinicius, colaboradores, e qualquer sessão de Claude Code trabalhando
-  neste repo): `git checkout -b feat/xyz` → commits → `git push -u origin feat/xyz` →
-  `gh pr create` → aguardar o CI (`.github/workflows/ci.yml`, roda build+typecheck+testes de
-  backend e frontend) ficar verde → só então mesclar. Nunca dar `git push` direto pra `main`. Se
-  o time fizer upgrade pro plano Team no futuro, retomar a configuração de branch protection real
-  (PR obrigatório + checks `Backend (build + test)` e `Frontend (build)` obrigatórios, sem
-  aprovação de terceiro exigida, `enforce_admins` ativado) — até lá, essa regra escrita é a única
-  proteção que existe.
+- **REGRA: fluxo de branch em duas etapas — feature → `staging` → `main`, com trava técnica real
+  (desde 2026-07-19).** `main` e `staging` têm branch protection ativada de verdade no GitHub
+  (PR obrigatório, checks `Backend (build + test)` e `Frontend (build)` do
+  `.github/workflows/ci.yml` obrigatórios, sem aprovação de terceiro exigida, `enforce_admins`
+  ativado, sem force-push nem deleção) — **push direto está bloqueado pelo próprio GitHub**, não é
+  mais só convenção. Isso só foi possível porque o repositório é **público** (branch protection em
+  repo privado exige plano pago — ver nota sobre visibilidade no topo deste arquivo). Fluxo:
+  1. `git checkout -b feat/xyz` (a partir de `staging` atualizada) → commits → PR contra `staging`
+     → CI verde → merge. Dispara deploy automático do ambiente de homologação — testar lá antes do
+     próximo passo (ver seção "Ambiente de homologação" abaixo).
+  2. Quando validado em staging: PR de `staging` → `main` → CI verde → merge → vai pra produção.
+  Nunca dar `git push` direto pra nenhuma das duas branches — o GitHub vai recusar de qualquer
+  forma, mas a intenção é não depender disso.
 
 ## Trabalho em equipe
 
@@ -301,10 +336,10 @@ NODE_ENV=production
 RESEND_API_KEY=re_...              # emails (Resend)
 VAPID_PUBLIC_KEY=...               # Web Push
 VAPID_PRIVATE_KEY=...              # Web Push
-R2_ENDPOINT=...                    # Cloudflare R2 (fotos)
+R2_ACCOUNT_ID=...                  # Cloudflare R2 (fotos) — nomes confirmados em src/r2.ts
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
-R2_BUCKET=comanda-ia-fotos
+R2_BUCKET_NAME=comanda-ia-fotos
 R2_PUBLIC_URL=...                  # Cloudflare R2 (fotos)
 MP_CLIENT_ID=...                   # Mercado Pago — OAuth (split de pagamentos)
 MP_CLIENT_SECRET=...               # Mercado Pago — OAuth
@@ -326,13 +361,48 @@ VITE_API_URL=http://localhost:3000
   local, apontando pro proxy público do Postgres do Railway.
 - Deploy manual Railway: `railway up --detach` (auto-deploy às vezes falha)
 
+## Ambiente de homologação (staging)
+
+Railway Environment `staging` (mesmo projeto `glorious-playfulness`, id
+`801a3057-ad1d-4f7e-81b3-d1fd2bf9e191`) + Vercel branch deploy da branch `staging`. Criado em
+2026-07-19 — ver Log de mudanças pra detalhes de implementação e achados.
+
+- **Backend:** serviço `comanda-ia-staging` (não `comanda-ia` — nome teve que ser diferente do de
+  produção, Railway exige nomes de serviço únicos por projeto inteiro, não só por environment).
+  Domínio: `https://comanda-ia-staging-staging.up.railway.app`. Banco: serviço
+  `Postgres-staging`, vazio na criação (nunca clonado de produção).
+- **Frontend:** `https://comanda-ia-git-staging-comanda-project.vercel.app` — URL estável gerada
+  automaticamente pelo Vercel pra branch `staging` (não precisa configurar domínio customizado).
+- **Isolado de produção**: banco de dados próprio (só dados sintéticos do `prisma/seed.ts`,
+  populado manualmente na criação — não a cada deploy), `JWT_SECRET` próprio, bucket R2 próprio
+  (`comanda-ia-fotos-staging`, token de API do Cloudflare escopado só pra esse bucket),
+  `RESEND_API_KEY` própria, sem sessão de WhatsApp conectada, sem
+  `MP_CLIENT_ID`/`MP_CLIENT_SECRET`/`MP_REDIRECT_URI` (Mercado Pago fica naturalmente
+  desabilitado — confirmado ao vivo: tela de Configurações mostra "Não conectado", sem erro).
+  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` são os mesmos de produção (sem risco de reuso).
+- **Vercel `VITE_API_URL`**: duas variáveis separadas — uma escopada só pra `Production`
+  (aponta pro backend de produção) e outra escopada só pra Preview da branch `staging` (aponta
+  pro backend de staging). Configurar em Settings → Environment Variables, editando cada uma
+  (não dá pra ter duas variáveis com o mesmo nome cobrindo o mesmo ambiente — precisa remover o
+  overlap primeiro).
+
+Resetar os dados de teste de staging (ex: depois de testes que sujaram os dados):
+
+```bash
+railway environment link staging
+STAGING_DB_PUBLIC_URL=$(railway variable list --service Postgres-staging --environment staging --kv --json | jq -r '.DATABASE_PUBLIC_URL')
+DATABASE_URL="$STAGING_DB_PUBLIC_URL" npx prisma db seed
+railway environment link production
+```
+
 ## Migração do repositório pra organização do GitHub (concluída em 2026-07-19)
 
 Repositório transferido de `github.com/viniciusalvestech/comanda-ia` pra
 `github.com/Eleva-Consulting/comanda-ia` (a org da qual o usuário é admin — a ambiguidade
-"Eleva" vs "Eleva-Consulting" de sessão anterior foi confirmada como `Eleva-Consulting`).
-Detalhes completos na entrada de 2026-07-19 do Log de mudanças abaixo. Se alguém do time ainda
-tiver o remote antigo: `git remote set-url origin git@github.com:Eleva-Consulting/comanda-ia.git`.
+"Eleva" vs "Eleva-Consulting" de sessão anterior foi confirmada como `Eleva-Consulting`), e
+depois tornado **público** (decisão do usuário, motivo completo na entrada de 2026-07-19 do Log
+de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
+`git remote set-url origin git@github.com:Eleva-Consulting/comanda-ia.git`.
 
 ## Log de mudanças
 
@@ -357,10 +427,11 @@ tiver o remote antigo: `git remote set-url origin git@github.com:Eleva-Consultin
     de **antes desta sessão** (criado em 2026-07-13, achado ao tentar convidar de novo) — ainda
     não aceito; falta ele aceitar o convite (verificar se não expirou, convite de org do GitHub
     expira por padrão) pra dar acesso Admin no repo também.
-  - **Branch protection na `main` NÃO foi ativada** — a Eleva-Consulting está no plano GitHub
-    Free, que bloqueia branch protection em repo privado (`403: Upgrade to GitHub Pro or make
-    this repository public`). Decisão do usuário: seguir sem trave técnica por enquanto (fica só
-    convenção documentada), sem custo; upgrade pro plano Team fica como opção pra retomar depois.
+  - **Branch protection na `main` inicialmente NÃO ativada** — a Eleva-Consulting está no plano
+    GitHub Free, que bloqueia branch protection em repo privado (`403: Upgrade to GitHub Pro or
+    make this repository public`). Decisão do usuário nesse momento: seguir sem trava técnica,
+    só convenção documentada. **Revertido mais tarde no mesmo dia** — ver entrada "(continuação)"
+    abaixo: o repo virou público e a branch protection foi ativada de verdade, de graça.
   - **Achado de processo**: a concessão de escopo `admin:org` ao token do `gh` CLI (necessária
     pra convidar membros pra org) e o clique final de "Authorize github" na tela de OAuth do
     GitHub não aceitaram clique automatizado via browser (nem mouse nem teclado) — proteção do
@@ -370,6 +441,81 @@ tiver o remote antigo: `git remote set-url origin git@github.com:Eleva-Consultin
   - Deploy automático (Railway + Vercel) validado com o push deste mesmo commit direto na
     `main` — antes de ativar a proteção de branch, pra confirmar que a reconexão dos GitHub Apps
     funcionou antes de travar push direto.
+
+### 2026-07-19 (continuação — ambiente de homologação + repo público)
+- **Ambiente de homologação (staging) criado** — spec
+  `docs/superpowers/specs/2026-07-19-ambiente-homologacao-design.md`, plano
+  `docs/superpowers/plans/2026-07-19-ambiente-homologacao.md`, executado via
+  subagent-driven-development (9 tasks). Railway Environment `staging` (Postgres vazio +
+  backend próprio, nunca clonado de produção) + Vercel branch deploy da `staging`, fluxo de
+  branch em duas etapas (feature→staging→main). Detalhes técnicos completos na seção "Ambiente
+  de homologação" mais acima neste arquivo (URLs, isolamento de integrações, comando de reset
+  de dados).
+  - **Achado de segurança do processo**: um subagente revisor reproduziu a chave real do Resend
+    (gerada na Task 3) em texto puro na resposta de status — a chave foi revogada e rotacionada
+    na hora pelo controller, copiando o valor novo via clipboard (nunca impresso em texto),
+    sem novo vazamento. Lição registrada: instruções de "não vazar segredo" precisam valer pro
+    revisor também, não só pro implementer.
+  - **Achado real de bug do próprio Railway**: o comando `railway add --repo ... --branch
+    staging` criou o serviço mas na verdade deployou a partir da `main` (branch errada) —
+    confirmado comparando `latestDeployment.meta.branch` no `railway status --json`. Corrigido
+    com `railway service source disconnect` seguido de `railway service source connect
+    --branch staging` (reconectar direto, sem desconectar antes, falhava com "ServiceInstance
+    not found").
+  - **Nomes de serviço tiveram que divergir de produção**: Railway exige nome de serviço único
+    por PROJETO inteiro, não só por environment — os nomes `comanda-ia`/`Postgres` já existiam
+    em produção, então staging ficou `comanda-ia-staging`/`Postgres-staging` (o segundo foi
+    renomeado manualmente no painel depois do Railway gerar um nome automático feio,
+    `Postgres--TON`).
+- **Bloqueio real e sério no Vercel, não coberto pelo plano original**: o recurso "Custom
+  Preview Branch" (escopar env var por branch) falhou com `"There is no GitHub account
+  connected to this Vercel account"` — e o push pra `staging` simplesmente não disparava
+  nenhum deploy (branch nem aparecia como opção no Vercel). Investigação em cadeia:
+  1. Conta pessoal Vercel tinha GitHub conectado normalmente (confirmado em Account →
+     Authentication) — não era isso.
+  2. "Re-authenticate" da conexão GitHub na conta Vercel não resolveu.
+  3. Tentar criar um Deploy Hook revelou a mensagem real:
+     `"Project 'comanda-ia' does not have a connected Git repository"` — mesmo a UI mostrando
+     "Connected". Desconectar e tentar reconectar revelou a causa raiz verdadeira:
+     **`"The repository 'comanda-ia' is private and owned by an organization, which is not
+     supported on the Hobby plan. Upgrade to Pro to continue."`** — limitação de plano da
+     Vercel (Hobby não aceita repo privado de organização), não bug.
+  - **Efeito colateral real**: ao tentar reconectar, o projeto ficou temporariamente SEM Git
+    conectado — produção (deploy automático de push na `main`) ficou pausada até resolver.
+- **Decisão do usuário: tornar `Eleva-Consulting/comanda-ia` PÚBLICO** — resolve de graça tanto
+  essa limitação da Vercel quanto a do GitHub Free pra branch protection (ambas só bloqueiam
+  repo **privado**). Usuário cogitou "não divulgar" o link como proteção; recomendação dada
+  (aceita): isso não protege contra a ameaça real, que é bot de scan automático (GitGuardian,
+  TruffleHog, o próprio secret scanning do GitHub) — esses escaneiam todo repo público
+  continuamente, independente de divulgação. Antes de tornar público:
+  - **Auditoria completa do histórico do git** (não só HEAD) — `gitleaks git --log-opts="--all"`
+    (351 commits) + grep manual por padrões específicos do projeto (chaves Resend `re_...`,
+    credenciais em `postgres://`, chaves AWS-style, `.env` commitado, `JWT_SECRET` real). Zero
+    segredo real encontrado — os 2 achados do gitleaks e os matches do grep manual eram todos
+    placeholder de documentação (`SEU_TOKEN_AQUI`, `cola_aqui_uma_string_aleatoria...`) ou
+    banco local de dev (`senha_local_dev`).
+  - Repo tornado público via API (`PATCH /repos/.../  private:false`).
+  - **GitHub secret scanning + push protection + Dependabot vulnerability alerts ativados**
+    (de graça, só disponível em repo público) — proteção real contra vazamento futuro.
+  - Git reconectado no projeto Vercel com sucesso (repo público não bate mais na limitação do
+    Hobby) — deploy automático de `staging` confirmado funcionando via push real.
+  - `VITE_API_URL` da Vercel configurada como duas variáveis escopadas corretamente
+    (`Production` → backend de produção; `Preview` da branch `staging` → backend de staging).
+  - **Branch protection ativada de verdade em `main` E `staging`** (de graça, repo público) —
+    ver regra formalizada na seção "Git / commits / PRs" acima.
+  - Usuário perguntou se dá pra voltar a privado depois — sim, tecnicamente sem bloqueio, mas
+    o que já ficou exposto/indexado enquanto público não "desexpõe" ao voltar, e as mesmas
+    limitações de plano (branch protection, conexão Vercel) voltam a valer.
+  - Também cogitada a ideia de criar uma conta pessoal nova do GitHub (não organização)
+    dedicada à Eleva, privada — GitHub Pro pessoal (~$4/mês) libera branch protection e Vercel
+    Hobby aceita repo privado de conta pessoal de graça (só bloqueia organização). Tecnicamente
+    mais barato que Team, mas rejeitado por ora: exige identidade nova (email, verificação,
+    2FA) e levanta questão de governança (código da empresa "preso" numa conta pessoal de
+    alguém) — e a solução pública já entregava branch protection de graça sem migrar de novo.
+- Verificação end-to-end feita ao vivo no navegador: login com credencial de teste no frontend
+  de staging, dashboard carregando dados do seed, sem erro de console/CORS, WhatsApp
+  "Desconectado" e Mercado Pago "Não conectado" confirmados na tela de Configurações (isolamento
+  de integrações funcionando exatamente como o spec previa, sem configuração extra precisar).
 
 ### 2026-07-17 (continuação 6)
 - **Modo claro/escuro (`c06298f`).** Botão sol/lua no header (Layout e LayoutAdmin) alterna
