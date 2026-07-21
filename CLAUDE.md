@@ -442,6 +442,12 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
     `main` — antes de ativar a proteção de branch, pra confirmar que a reconexão dos GitHub Apps
     funcionou antes de travar push direto.
 
+### 2026-07-21
+- **Segundo colaborador aceitou o convite pendente da org** — `lfcosta.tech@gmail.com` entrou
+  na Eleva-Consulting como `@lfcostatech-hash`, recebeu Admin no repo
+  (`comanda-ia`) igual ao Ceulyton. Pendência aberta desde 2026-07-13 (e mencionada na entrada
+  de 2026-07-19 abaixo) está resolvida — os dois colaboradores têm acesso completo agora.
+
 ### 2026-07-19 (continuação — ambiente de homologação + repo público)
 - **Ambiente de homologação (staging) criado** — spec
   `docs/superpowers/specs/2026-07-19-ambiente-homologacao-design.md`, plano
