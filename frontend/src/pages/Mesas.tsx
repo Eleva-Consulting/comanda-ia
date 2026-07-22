@@ -264,10 +264,15 @@ export default function Mesas() {
 
   async function recarregarContaAtual() {
     if (!contaSelecionada) return
-    const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}`, {
+    const contaId = contaSelecionada.id
+    const resp = await fetch(`${API_URL}/contas/${contaId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    if (resp.ok) setContaSelecionada(await resp.json())
+    if (!resp.ok) return
+    const dados = await resp.json()
+    // Se o usuário já saiu da tela (ou trocou de conta) enquanto essa resposta
+    // estava a caminho, aplicar esse refetch agora ressuscitaria uma tela fechada.
+    setContaSelecionada((atual) => (atual && atual.id === contaId ? dados : atual))
   }
 
   function adicionarAoCarrinho(item: ItemCardapio, acompanhamento?: string) {
