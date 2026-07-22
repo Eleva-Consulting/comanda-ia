@@ -130,7 +130,6 @@ export default function Mesas() {
   const [abrindoMesaId, setAbrindoMesaId] = useState<string | null>(null)
   const [carregandoConta, setCarregandoConta] = useState(false)
   const [erroGrade, setErroGrade] = useState<string | null>(null)
-  const [mesaParaConfirmarAbertura, setMesaParaConfirmarAbertura] = useState<Mesa | null>(null)
 
   const [contaSelecionada, setContaSelecionada] = useState<Conta | null>(null)
   const [modalItemAberto, setModalItemAberto] = useState<string | null>(null) // comandaId
@@ -648,7 +647,7 @@ export default function Mesas() {
               {mesas.map((mesa) => (
                 <div key={mesa.id} className="relative">
                   <button
-                    onClick={() => mesa.statusMesa === 'livre' ? setMesaParaConfirmarAbertura(mesa) : abrirContaExistente(mesa)}
+                    onClick={() => mesa.statusMesa === 'livre' ? abrirMesa(mesa.id) : abrirContaExistente(mesa)}
                     disabled={abrindoMesaId === mesa.id || carregandoConta}
                     className={`flex w-full flex-col items-center justify-center gap-1 rounded-2xl border p-4 transition disabled:opacity-50 ${corStatusMesa[mesa.statusMesa]}`}
                   >
@@ -1106,28 +1105,6 @@ export default function Mesas() {
                   </li>
                 ))}
             </ul>
-          </div>
-        </div>
-      )}
-
-      {mesaParaConfirmarAbertura && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setMesaParaConfirmarAbertura(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 text-lg font-bold">Abrir Mesa {mesaParaConfirmarAbertura.numero}?</h3>
-            <p className="mb-3 text-sm text-zinc-400">
-              Isso cria uma conta pra mesa e ela passa a aparecer como ocupada. Se for só consultar, clique em Voltar.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { const mesa = mesaParaConfirmarAbertura; setMesaParaConfirmarAbertura(null); abrirMesa(mesa.id) }}
-                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
-              >
-                Abrir mesa
-              </button>
-              <button onClick={() => setMesaParaConfirmarAbertura(null)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
-                Voltar
-              </button>
-            </div>
           </div>
         </div>
       )}
