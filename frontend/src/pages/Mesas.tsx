@@ -218,7 +218,24 @@ export default function Mesas() {
     }
   }
 
-  function fecharDetalhe() {
+  async function fecharDetalhe() {
+    if (contaSelecionada) {
+      const totalItens = contaSelecionada.comandas.reduce((soma, c) => soma + c.itens.length, 0)
+      const totalRascunho = contaSelecionada.comandas.reduce((soma, c) => soma + (c.rascunho?.length ?? 0), 0)
+      // Mesa aberta sem nenhum item enviado nem rascunho anotado: não faz sentido continuar
+      // "ocupada" no vazio — cancela a conta sozinha ao sair, sem exigir ação manual do garçom.
+      if (totalItens === 0 && totalRascunho === 0) {
+        try {
+          await fetch(`${API_URL}/contas/${contaSelecionada.id}/status`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'cancelada' }),
+          })
+        } catch (err) {
+          console.error(err)
+        }
+      }
+    }
     setContaSelecionada(null)
     carregarMesas()
   }
