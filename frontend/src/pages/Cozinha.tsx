@@ -106,9 +106,7 @@ export default function Cozinha() {
   // 'producao:item-novo' (um por item) e deve imprimir uma vez só.
   const rodadasImpressasRef = useRef<Set<string>>(new Set())
 
-  function imprimirRodadaAutomaticamente(rodadaId: string) {
-    if (rodadasImpressasRef.current.has(rodadaId)) return
-    rodadasImpressasRef.current.add(rodadaId)
+  function imprimirRodada(rodadaId: string) {
     const iframe = document.createElement('iframe')
     iframe.style.position = 'fixed'
     iframe.style.top      = '-10000px'
@@ -118,6 +116,12 @@ export default function Cozinha() {
     iframe.src = `/imprimir/rodada/${rodadaId}`
     document.body.appendChild(iframe)
     setTimeout(() => iframe.remove(), 8000)
+  }
+
+  function imprimirRodadaAutomaticamente(rodadaId: string) {
+    if (rodadasImpressasRef.current.has(rodadaId)) return
+    rodadasImpressasRef.current.add(rodadaId)
+    imprimirRodada(rodadaId)
   }
 
   const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
@@ -635,7 +639,7 @@ export default function Cozinha() {
                               </button>
                             )}
                             <button
-                              onClick={() => window.open(`/imprimir/rodada/${grupo.rodadaId}`, '_blank')}
+                              onClick={() => imprimirRodada(grupo.rodadaId!)}
                               className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
                               title="Reimprimir comanda da rodada"
                             >
