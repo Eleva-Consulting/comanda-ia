@@ -1,3 +1,107 @@
+# Sidebar lateral colapsável — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Substituir o header horizontal do painel do restaurante (`Layout.tsx`) por uma sidebar
+lateral colapsável (ícones + labels, colapsa pra só ícones) no desktop, mantendo a nav mobile
+100% inalterada.
+
+**Architecture:** App-shell de duas colunas no breakpoint `sm:` e acima (sidebar de altura cheia
++ coluna com topbar fina e conteúdo rolável), construído com um novo hook de estado
+(`useSidebarColapsada`, mesmo padrão do `useTema` existente) e uma reescrita contida do
+`Layout.tsx`. Abaixo de `sm:`, o `<header>` mobile atual é preservado byte-a-byte, só
+condicionado a `sm:hidden`.
+
+**Tech Stack:** React 19 + TypeScript + Tailwind v4 (classes utilitárias, sem CSS novo) +
+lucide-react (ícone novo: `ChevronLeft`).
+
+## Global Constraints
+
+- Spec de referência: `docs/superpowers/specs/2026-07-22-sidebar-lateral-design.md`.
+- Escopo: só `frontend/src/components/Layout.tsx` (painel restaurante). `LayoutAdmin.tsx` não muda.
+- Nav mobile (< `sm:`) não pode ter NENHUMA mudança visual ou funcional.
+- Não existe framework de teste automatizado no frontend deste projeto (confirmado:
+  `frontend/package.json` não tem vitest/testing-library, nenhum arquivo `*.test.*` existe hoje).
+  A verificação de cada task aqui é **type-check (`tsc -b`) + inspeção visual/manual no
+  navegador**, seguindo o padrão já usado em todas as features de frontend anteriores deste
+  projeto (ver "Log de mudanças" do `CLAUDE.md` — sempre "Verificado ao vivo no navegador").
+- TypeScript strict, sem `any` implícito, sem `@ts-ignore` (padrão do projeto).
+- Reaproveitar a paleta de cores já existente (`zinc-*` + `orange-500`) — o remapeamento
+  claro/escuro em `index.css` já cobre qualquer classe `zinc-*` nova automaticamente, sem
+  precisar de ajuste por tema.
+
+---
+
+### Task 1: Hook `useSidebarColapsada`
+
+**Files:**
+- Create: `frontend/src/hooks/useSidebarColapsada.ts`
+
+**Interfaces:**
+- Consumes: nada (hook isolado, só usa `localStorage` do browser).
+- Produces: `useSidebarColapsada(): { colapsada: boolean; alternar: () => void }` — consumido
+  pela Task 2 dentro de `Layout.tsx`.
+
+- [ ] **Step 1: Instalar dependências do frontend (necessário pra rodar `tsc` nesta e nas
+  próximas tasks)**
+
+Run: `cd frontend && npm install`
+Expected: instala sem erro (gera `frontend/node_modules`).
+
+- [ ] **Step 2: Criar o hook, seguindo o mesmo padrão de `frontend/src/hooks/useTema.ts`**
+
+```typescript
+import { useEffect, useState } from 'react'
+
+function colapsadaSalva(): boolean {
+  return localStorage.getItem('sidebarColapsada') === 'true'
+}
+
+// Colapsa a sidebar pra uma faixa só de ícones e persiste a escolha. Default expandida.
+export function useSidebarColapsada() {
+  const [colapsada, setColapsada] = useState<boolean>(colapsadaSalva)
+
+  useEffect(() => {
+    localStorage.setItem('sidebarColapsada', String(colapsada))
+  }, [colapsada])
+
+  function alternar() {
+    setColapsada((v) => !v)
+  }
+
+  return { colapsada, alternar }
+}
+```
+
+- [ ] **Step 3: Type-check**
+
+Run: `cd frontend && npx tsc -b`
+Expected: sem erros novos relacionados ao arquivo criado (o projeto pode já ter o build limpo
+antes desta task — confirme que continua limpo depois).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add frontend/src/hooks/useSidebarColapsada.ts
+git commit -m "feat: hook useSidebarColapsada pro estado da sidebar lateral"
+```
+
+---
+
+### Task 2: Reescrever `Layout.tsx` com sidebar + topbar (desktop) e mobile inalterado
+
+**Files:**
+- Modify: `frontend/src/components/Layout.tsx` (arquivo inteiro — ver conteúdo abaixo)
+
+**Interfaces:**
+- Consumes: `useSidebarColapsada()` da Task 1 — `{ colapsada, alternar }`.
+- Produces: nada consumido por outra task (é o componente final desta iniciativa). O componente
+  `Layout` continua com a mesma assinatura pública (`{ children, headerExtra }`), então nenhuma
+  página que já usa `<Layout headerExtra={...}>` (ex: `Cozinha.tsx`) precisa mudar.
+
+- [ ] **Step 1: Substituir o conteúdo inteiro de `frontend/src/components/Layout.tsx`**
+
+```tsx
 import type { ReactNode, ComponentType } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
@@ -299,3 +403,96 @@ export default function Layout({ children, headerExtra }: Props) {
     </div>
   )
 }
+```
+
+- [ ] **Step 2: Type-check**
+
+Run: `cd frontend && npx tsc -b`
+Expected: sem erros (nenhum import não usado — `ChevronDown` e o antigo dropdown "Mais" saíram
+junto da lógica removida; `ChevronLeft` é o único ícone novo).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/components/Layout.tsx
+git commit -m "feat: sidebar lateral colapsável no painel do restaurante"
+```
+
+---
+
+### Task 3: Verificação manual no navegador
+
+**Files:** nenhum arquivo novo — só execução e checklist manual.
+
+**Interfaces:**
+- Consumes: app rodando localmente (`npm run dev` no backend e no frontend), login com uma das
+  credenciais de teste do `CLAUDE.md`.
+
+- [ ] **Step 1: Subir o app localmente**
+
+Run (dois terminais):
+```bash
+npm run dev              # backend, na raiz do projeto
+cd frontend && npm run dev  # frontend
+```
+Expected: backend em `http://localhost:3000`, frontend em `http://localhost:5173` (ou porta que
+o Vite indicar).
+
+- [ ] **Step 2: Checklist de verificação no navegador (desktop, viewport >= 640px)**
+
+Login com `vinicius@teste.com` / `senhaforte123` (Galeteria, sem módulo mesas — cobre o caso
+"sem Mesas/Caixa/Estoque") e depois, se possível, com um estabelecimento que tenha os módulos
+`mesas`/`estoque_avancado` ativos (ou ativar temporariamente via Super Admin) pra ver a sidebar
+com todos os itens.
+
+Confirmar, um por um:
+- [ ] Sidebar aparece à esquerda, com logo no topo e os itens agrupados em "Operacional"/"Gestão"
+      (só "Gestão" aparece se houver algum item secundário visível pro papel/módulos ativos).
+- [ ] Clicar no botão de colapsar (chevron na borda da sidebar) encolhe pra só ícones; os labels
+      somem e passar o mouse sobre um ícone mostra o tooltip nativo (`title`) com o nome.
+- [ ] Clicar de novo expande de volta, com transição suave.
+- [ ] Recarregar a página (F5) mantém o estado (colapsada ou expandida) que estava antes —
+      confirma a persistência em `localStorage`.
+- [ ] Cada item de nav navega pra rota certa e fica destacado em laranja quando ativo.
+- [ ] Logar como um OPERADOR com permissões restritas (ex: só `cozinha`) e confirmar que só os
+      itens permitidos aparecem na sidebar — mesma lógica de permissão de antes, sem regressão.
+- [ ] Ir em `/cozinha` e confirmar que o botão "Novo pedido" (`headerExtra`) aparece na topbar
+      fina, ao lado esquerdo, com os ícones de tema/push/sair à direita.
+- [ ] Clicar no ícone de tema (sol/lua) alterna entre claro/escuro, com a sidebar e a topbar
+      respeitando as duas paletas (fundo, texto, bordas continuam legíveis nos dois temas).
+- [ ] Ícone de sair desloga e volta pro login.
+
+- [ ] **Step 3: Checklist de verificação no navegador (mobile, viewport < 640px — usar as
+  ferramentas de dev do navegador em modo responsivo)**
+
+- [ ] A sidebar não aparece; o header de topo (logo + ícones) e a barra de nav com rolagem
+      horizontal abaixo dele continuam exatamente como antes da mudança.
+- [ ] Todos os itens de nav (principais + antigos "Mais") aparecem na rolagem horizontal, na
+      mesma ordem de antes.
+- [ ] `headerExtra` (botão "Novo pedido" na Cozinha) continua aparecendo no header mobile.
+
+- [ ] **Step 4: Rodar o build de produção do frontend, garantindo que não há erro de tipo nem de
+  bundling**
+
+Run: `cd frontend && npm run build`
+Expected: build conclui sem erro.
+
+Se qualquer item do checklist falhar, voltar pra Task 2 e corrigir antes de seguir — não commitar
+por cima, ajustar o mesmo commit da Task 2 só se ainda não foi enviado a nenhum PR, ou criar um
+commit de correção pequeno se já tiver ido além.
+
+---
+
+## Self-Review (checagem feita ao escrever este plano)
+
+1. **Cobertura da spec:** os 6 itens de "Decisões" da spec
+   (`docs/superpowers/specs/2026-07-22-sidebar-lateral-design.md`) estão cobertos — escopo
+   (Task 2 só mexe em `Layout.tsx`), colapsar-pra-ícones (Task 2, classe `w-16`/`w-60` +
+   condicional de label), remoção do dropdown "Mais" (Task 2, `gruposSidebar` substitui o
+   `menuMaisAberto`), persistência (Task 1), estrutura visual opção B (Task 2, sidebar + topbar
+   separados), mobile inalterado (Task 2 preserva o `<header>` mobile igual, Task 3 confirma na
+   prática).
+2. **Placeholders:** nenhum "TBD"/"implementar depois" — todo código de cada step está completo.
+3. **Consistência de tipos:** `useSidebarColapsada()` retorna `{ colapsada: boolean; alternar: () => void }`
+   na Task 1 e é consumido com essa mesma forma (`const { colapsada, alternar: alternarSidebar } = useSidebarColapsada()`)
+   na Task 2 — nomes batem.

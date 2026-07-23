@@ -29,6 +29,7 @@ interface FinanceiroData {
 
 const formaPagamentoLabel: Record<string, string> = {
   pix:            'Pix',
+  pix_maquininha: 'Pix (maquininha)',
   dinheiro:       'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   cartao_debito:  'Cartão de débito',
@@ -104,7 +105,7 @@ export default function Financeiro() {
       <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <h3 className="mb-4 text-lg font-bold">Por forma de pagamento</h3>
         {dados.porFormaPagamento.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nenhum pedido no período selecionado.</p>
+          <p className="text-sm text-zinc-500">Nenhuma venda no período selecionado.</p>
         ) : (
           <div className="space-y-2">
             {dados.porFormaPagamento.map((item) => (
@@ -114,7 +115,7 @@ export default function Financeiro() {
               >
                 <div>
                   <p className="font-medium">{formaPagamentoLabel[item.formaPagamento] ?? item.formaPagamento}</p>
-                  <p className="text-xs text-zinc-500">{item.quantidade} pedido{item.quantidade !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-zinc-500">{item.quantidade} venda{item.quantidade !== 1 ? 's' : ''}</p>
                 </div>
                 <span className="font-bold">{formatarBRL(item.total)}</span>
               </div>
