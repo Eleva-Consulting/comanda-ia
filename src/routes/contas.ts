@@ -271,12 +271,20 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
   // ── PATCH /itens-comanda/:id/status ─────────────────────────────────────────
   fastify.patch('/itens-comanda/:id/status', {
-    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha'), moduloAtivo('mesas')],
+    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha', 'caixa'), moduloAtivo('mesas')],
     schema: { params: ItemComandaParamsSchema, body: AtualizarStatusItemComandaSchema },
   }, async (request, reply) => {
     const { id }     = request.params as { id: string };
     const { status, motivo, senha } = request.body as { status: StatusProducao; motivo?: string; senha?: string };
-    const { estabelecimentoId, userId } = request.user;
+    const { estabelecimentoId, userId, role, permissoes } = request.user;
+
+    // Quem só tem a permissão `caixa` (sem mesas/produção/cozinha) só pode cancelar item
+    // por aqui — avançar status de produção continua exclusivo de quem opera a cozinha.
+    const podeGerenciarProducao =
+      role === 'DONO' || ['mesas', 'producao', 'cozinha'].some((p) => permissoes.includes(p));
+    if (!podeGerenciarProducao && status !== 'cancelado') {
+      return reply.status(403).send({ erro: 'Você não tem permissão para acessar este recurso' });
+    }
 
     const item = await prisma.itemComanda.findFirst({
       where: { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
