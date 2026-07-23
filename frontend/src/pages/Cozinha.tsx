@@ -619,19 +619,29 @@ export default function Cozinha() {
                             )
                           })}
                         </div>
-                        {grupo.rodadaId &&
-                          !rodadasDivididas.has(grupo.rodadaId) &&
-                          grupo.itens.some((i) => labelAvancar[i.status]) && (
-                          <button
-                            onClick={() => avancarRodada(grupo.itens)}
-                            disabled={avancandoRodadaId === grupo.rodadaId}
-                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-orange-500/10 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
-                          >
-                            {avancandoRodadaId === grupo.rodadaId
-                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              : <ChefHat className="h-3.5 w-3.5" />}
-                            Avançar rodada
-                          </button>
+                        {grupo.rodadaId && (
+                          <div className="mt-2 flex items-center gap-1.5">
+                            {!rodadasDivididas.has(grupo.rodadaId) &&
+                              grupo.itens.some((i) => labelAvancar[i.status]) && (
+                              <button
+                                onClick={() => avancarRodada(grupo.itens)}
+                                disabled={avancandoRodadaId === grupo.rodadaId}
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-500/10 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                              >
+                                {avancandoRodadaId === grupo.rodadaId
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <ChefHat className="h-3.5 w-3.5" />}
+                                Avançar rodada
+                              </button>
+                            )}
+                            <button
+                              onClick={() => window.open(`/imprimir/rodada/${grupo.rodadaId}`, '_blank')}
+                              className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                              title="Reimprimir comanda da rodada"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
                       </div>
                       )
