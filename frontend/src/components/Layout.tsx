@@ -1,14 +1,15 @@
 import type { ReactNode, ComponentType } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router'
+import { NavLink, useNavigate } from 'react-router'
 import {
   Bell, BellOff, ChefHat, LogOut, Users, X, Table2, Wallet, ShieldCheck,
-  Package, TrendingUp, Landmark, Home, Flame, BookOpen, History, Settings, ChevronDown,
-  Sun, Moon,
+  Package, TrendingUp, Landmark, Home, Flame, BookOpen, History, Settings,
+  Sun, Moon, ChevronLeft,
 } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
 import { useTema } from '../hooks/useTema'
+import { useSidebarColapsada } from '../hooks/useSidebarColapsada'
 import { getRole } from '../lib/auth'
 import { temPermissao } from '../lib/permissoes'
 import { API_URL } from '../lib/api'
@@ -35,10 +36,6 @@ const linkColorClass = (isActive: boolean) =>
   isActive
     ? 'bg-orange-500/15 text-orange-400'
     : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-
-// Nav desktop: alvo de clique com mouse, padding compacto.
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-1.5 text-sm font-medium transition ${linkColorClass(isActive)}`
 
 // Nav mobile: alvo de toque real (garçom/operador no celular) — mínimo ~44px de altura.
 const linkClassMobile = ({ isActive }: { isActive: boolean }) =>
@@ -121,8 +118,9 @@ export default function Layout({ children, headerExtra }: Props) {
   const mostrarEstoque = podeEstoque && modulosAtivos.includes('estoque_avancado')
   const { ativo: pushAtivo, suportado: pushSuportado, ativar: ativarPush, desativar: desativarPush } = usePush(token)
   const { tema, alternar: alternarTema } = useTema()
+  const { colapsada, alternar: alternarSidebar } = useSidebarColapsada()
 
-  // Itens de uso operacional/frequente — sempre visíveis na barra principal.
+  // Itens de uso operacional/frequente.
   const itensPrincipais: NavItem[] = [
     { to: '/dashboard', label: 'Home',     icon: Home,          show: isDono },
     { to: '/mesas',     label: 'Mesas',    icon: Table2,        show: mostrarMesas },
@@ -131,7 +129,7 @@ export default function Layout({ children, headerExtra }: Props) {
     { to: '/cardapio',  label: 'Cardápio', icon: BookOpen,      show: podeCardapio },
   ].filter((item) => item.show)
 
-  // Itens de gestão/back-office — usados com menos frequência, agrupados no menu "Mais".
+  // Itens de gestão/back-office.
   const itensSecundarios: NavItem[] = [
     { to: '/insumos',       label: 'Estoque',       icon: Package,     show: mostrarEstoque },
     { to: '/estoque',       label: 'Resultados',    icon: TrendingUp,  show: mostrarEstoque },
@@ -142,121 +140,64 @@ export default function Layout({ children, headerExtra }: Props) {
     { to: '/configuracoes', label: 'Configurações', icon: Settings,    show: podeConfiguracoes },
   ].filter((item) => item.show)
 
-  const location = useLocation()
-  const [menuMaisAberto, setMenuMaisAberto] = useState(false)
-  const menuMaisRef = useRef<HTMLDivElement>(null)
-  const maisAtivo = itensSecundarios.some((item) => location.pathname === item.to)
+  const gruposSidebar = [
+    { titulo: 'Operacional', itens: itensPrincipais },
+    { titulo: 'Gestão',      itens: itensSecundarios },
+  ].filter((grupo) => grupo.itens.length > 0)
 
-  useEffect(() => {
-    if (!menuMaisAberto) return
-    function aoClicarFora(e: MouseEvent) {
-      if (menuMaisRef.current && !menuMaisRef.current.contains(e.target as Node)) setMenuMaisAberto(false)
-    }
-    function aoPressionarEscape(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuMaisAberto(false)
-    }
-    document.addEventListener('mousedown', aoClicarFora)
-    document.addEventListener('keydown', aoPressionarEscape)
-    return () => {
-      document.removeEventListener('mousedown', aoClicarFora)
-      document.removeEventListener('keydown', aoPressionarEscape)
-    }
-  }, [menuMaisAberto])
+  const linkClassSidebar = ({ isActive }: { isActive: boolean }) =>
+    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${linkColorClass(isActive)} ${colapsada ? 'justify-center' : ''}`
+
+  // Ícones de ação (tema/push/sair) — reaproveitados no header mobile e na topbar desktop.
+  const acoesIcones = (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={alternarTema}
+        className="rounded-lg p-3 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+        title={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+        aria-label={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+      >
+        {tema === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+      </button>
+      {pushSuportado && (
+        <button
+          onClick={pushAtivo ? desativarPush : ativarPush}
+          className={`rounded-lg p-3 transition hover:bg-zinc-800 ${pushAtivo ? 'text-orange-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+          title={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
+          aria-label={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
+        >
+          {pushAtivo ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
+        </button>
+      )}
+      <button
+        onClick={handleSair}
+        className="rounded-lg p-3 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+        title="Sair"
+        aria-label="Sair"
+      >
+        <LogOut className="h-5 w-5" />
+      </button>
+    </div>
+  )
 
   return (
-    <div className="min-h-dvh bg-zinc-950 font-sans text-zinc-100">
-      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
-        {/* Linha superior: logo + ações */}
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
-
+    <div className="min-h-dvh bg-zinc-950 font-sans text-zinc-100 sm:flex sm:h-dvh sm:overflow-hidden">
+      {/* Header mobile — inalterado, oculto a partir do desktop */}
+      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur sm:hidden">
+        <div className="flex items-center justify-between px-4 py-3">
           <NavLink to="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 sm:h-10 sm:w-10">
-              <ChefHat className="h-5 w-5 text-white sm:h-6 sm:w-6" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500">
+              <ChefHat className="h-5 w-5 text-white" />
             </div>
-            <h1 className="hidden text-lg font-bold leading-tight text-zinc-100 sm:block">Comanda IA</h1>
           </NavLink>
-
-          {/* Nav desktop */}
-          <nav className="hidden min-w-0 items-center gap-1 sm:flex">
-            {itensPrincipais.map((item) => (
-              <NavLink key={item.to} to={item.to} className={linkClass}>
-                <span className="flex items-center gap-1.5">
-                  <item.icon className="h-3.5 w-3.5" />
-                  {item.label}
-                </span>
-              </NavLink>
-            ))}
-
-            {itensSecundarios.length > 0 && (
-              <div className="relative" ref={menuMaisRef}>
-                <button
-                  onClick={() => setMenuMaisAberto((v) => !v)}
-                  aria-haspopup="menu"
-                  aria-expanded={menuMaisAberto}
-                  className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                    maisAtivo ? 'bg-orange-500/15 text-orange-400' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                  }`}
-                >
-                  Mais
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${menuMaisAberto ? 'rotate-180' : ''}`} />
-                </button>
-                {menuMaisAberto && (
-                  <div role="menu" className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-lg">
-                    {itensSecundarios.map((item) => (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        role="menuitem"
-                        onClick={() => setMenuMaisAberto(false)}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                            isActive ? 'bg-orange-500/15 text-orange-400' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
-                          }`
-                        }
-                      >
-                        <item.icon className="h-3.5 w-3.5" />
-                        {item.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </nav>
-
           <div className="flex items-center gap-2">
             {headerExtra}
-            <button
-              onClick={alternarTema}
-              className="rounded-lg p-3 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
-              title={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-              aria-label={tema === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-            >
-              {tema === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
-            {pushSuportado && (
-              <button
-                onClick={pushAtivo ? desativarPush : ativarPush}
-                className={`rounded-lg p-3 transition hover:bg-zinc-800 ${pushAtivo ? 'text-orange-400' : 'text-zinc-400 hover:text-zinc-200'}`}
-                title={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
-                aria-label={pushAtivo ? 'Desativar notificações push' : 'Ativar notificações push'}
-              >
-                {pushAtivo ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
-              </button>
-            )}
-            <button
-              onClick={handleSair}
-              className="rounded-lg p-3 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
-              title="Sair"
-              aria-label="Sair"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
+            {acoesIcones}
           </div>
         </div>
 
-        {/* Nav mobile — rolagem horizontal, sem menu "Mais" (não há problema de espaço num row scrollável) */}
-        <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2 sm:hidden">
+        {/* Nav mobile — rolagem horizontal */}
+        <div className="flex items-center gap-1 overflow-x-auto border-t border-zinc-800/60 px-4 py-2">
           {[...itensPrincipais, ...itensSecundarios].map((item) => (
             <NavLink key={item.to} to={item.to} className={(state) => `shrink-0 ${linkClassMobile(state)}`}>
               <span className="flex items-center gap-1.5">
@@ -268,7 +209,65 @@ export default function Layout({ children, headerExtra }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      {/* Sidebar desktop — oculta abaixo de sm: */}
+      <aside
+        className={`relative hidden shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 transition-all duration-200 sm:flex ${
+          colapsada ? 'w-16' : 'w-60'
+        }`}
+      >
+        <NavLink
+          to="/dashboard"
+          className={`flex items-center gap-2 border-b border-zinc-800 px-4 py-4 ${colapsada ? 'justify-center' : ''}`}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500">
+            <ChefHat className="h-5 w-5 text-white" />
+          </div>
+          {!colapsada && <h1 className="truncate text-base font-bold leading-tight text-zinc-100">Comanda IA</h1>}
+        </NavLink>
+
+        <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 py-4">
+          {gruposSidebar.map((grupo) => (
+            <div key={grupo.titulo}>
+              {colapsada ? (
+                <div className="mx-2 mb-2 border-t border-zinc-800" />
+              ) : (
+                <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                  {grupo.titulo}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {grupo.itens.map((item) => (
+                  <NavLink key={item.to} to={item.to} className={linkClassSidebar} title={item.label}>
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    {!colapsada && <span className="truncate">{item.label}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <button
+          onClick={alternarSidebar}
+          className="absolute -right-3 top-6 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 transition hover:bg-zinc-700"
+          title={colapsada ? 'Expandir menu' : 'Colapsar menu'}
+          aria-label={colapsada ? 'Expandir menu' : 'Colapsar menu'}
+        >
+          <ChevronLeft className={`h-3.5 w-3.5 transition-transform ${colapsada ? 'rotate-180' : ''}`} />
+        </button>
+      </aside>
+
+      {/* Coluna principal desktop: topbar fina + conteúdo rolável */}
+      <div className="sm:flex sm:min-w-0 sm:flex-1 sm:flex-col sm:overflow-hidden">
+        <div className="hidden h-14 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900/80 px-6 backdrop-blur sm:flex">
+          <div>{headerExtra}</div>
+          {acoesIcones}
+        </div>
+
+        <main className="sm:min-h-0 sm:flex-1 sm:overflow-y-auto">
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>
+        </main>
+      </div>
 
       {/* Toasts de novo pedido */}
       {toasts.length > 0 && (
