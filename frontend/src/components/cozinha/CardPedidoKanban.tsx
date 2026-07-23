@@ -4,6 +4,18 @@ import { STATUS_PEDIDO_CONFIG, labelStatusPedido, obterProximaAcao } from '../..
 import type { Pedido } from './tipos'
 import { formaPagamentoLabel, tipoEntregaLabel } from './tipos'
 
+function imprimirPedido(pedidoId: string) {
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.top      = '-10000px'
+  iframe.style.left     = '-10000px'
+  iframe.style.width    = '1px'
+  iframe.style.height   = '1px'
+  iframe.src = `/imprimir/${pedidoId}`
+  document.body.appendChild(iframe)
+  setTimeout(() => iframe.remove(), 8000)
+}
+
 interface Props {
   pedido: Pedido
   agora: number
@@ -83,7 +95,7 @@ export default function CardPedidoKanban({ pedido, agora, avancando, cancelando,
             <Pencil className="h-4 w-4" />
           </button>
           <button
-            onClick={() => window.open(`/imprimir/${pedido.id}`, '_blank')}
+            onClick={() => imprimirPedido(pedido.id)}
             className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
             title="Imprimir comanda"
           >
