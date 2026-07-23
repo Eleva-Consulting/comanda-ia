@@ -3,12 +3,25 @@ import { Loader2, Lock, Wallet } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
-import type { ContaResumida, ResumoConta } from '../components/caixa/tipos'
+import type { ContaResumida, ItemResumo, ResumoConta } from '../components/caixa/tipos'
 import ResumoTotais from '../components/caixa/ResumoTotais'
 import ComandasLeitura from '../components/caixa/ComandasLeitura'
 import ReceberPagamento from '../components/caixa/ReceberPagamento'
 import PagamentosRegistrados from '../components/caixa/PagamentosRegistrados'
 import FormDesconto from '../components/caixa/FormDesconto'
+
+const labelStatusItem: Record<string, string> = {
+  recebido:   'recebido',
+  em_preparo: 'em preparo',
+  pronto:     'pronto',
+  entregue:   'entregue',
+}
+
+// Item ainda "recebido" (cozinha não começou) cancela livre — espelha
+// podeCancelarLivremente do backend.
+function podeCancelarLivre(status: string): boolean {
+  return status === 'recebido'
+}
 
 // Tela de Caixa — grade de contas abertas + tela da conta com o fluxo guiado de
 // recebimento. Nenhum pagamento é registrado fora do wizard (ReceberPagamento).
@@ -26,6 +39,12 @@ export default function Caixa() {
 
   const [fechandoConta, setFechandoConta] = useState(false)
   const [erroFechar, setErroFechar] = useState<string | null>(null)
+
+  const [itemCancelamento, setItemCancelamento] = useState<ItemResumo | null>(null)
+  const [motivoCancelamento, setMotivoCancelamento] = useState('')
+  const [senhaCancelamento, setSenhaCancelamento] = useState('')
+  const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
+  const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
 
   async function carregarContas() {
     setCarregandoContas(true)
@@ -81,6 +100,41 @@ export default function Caixa() {
       setErroFechar('Falha de conexão')
     } finally {
       setFechandoConta(false)
+    }
+  }
+
+  function abrirCancelamentoItem(item: ItemResumo) {
+    setItemCancelamento(item)
+    setMotivoCancelamento('')
+    setSenhaCancelamento('')
+    setErroCancelamento(null)
+  }
+
+  async function confirmarCancelamentoItem() {
+    if (!itemCancelamento || !contaSelecionada) return
+    const precisaSenha = !podeCancelarLivre(itemCancelamento.status)
+    if (precisaSenha && (!motivoCancelamento || !senhaCancelamento)) return
+
+    setErroCancelamento(null)
+    setEnviandoCancelamento(true)
+    try {
+      const resp = await fetch(`${API_URL}/itens-comanda/${itemCancelamento.id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelado',
+          ...(motivoCancelamento ? { motivo: motivoCancelamento } : {}),
+          ...(precisaSenha ? { senha: senhaCancelamento } : {}),
+        }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) { setErroCancelamento(data.erro ?? 'Não foi possível cancelar o item'); return }
+      await carregarResumo(contaSelecionada.id)
+      setItemCancelamento(null)
+    } catch {
+      setErroCancelamento('Falha de conexão')
+    } finally {
+      setEnviandoCancelamento(false)
     }
   }
 
@@ -163,7 +217,7 @@ export default function Caixa() {
         ) : (
           <div className="space-y-4">
             <ResumoTotais resumo={resumo} />
-            <ComandasLeitura comandas={resumo.porComanda} />
+            <ComandasLeitura comandas={resumo.porComanda} onCancelarItem={abrirCancelamentoItem} />
 
             {resumo.saldoDevedor > 0 ? (
               <button
@@ -205,6 +259,52 @@ export default function Caixa() {
           </div>
         )}
       </div>
+
+      {itemCancelamento && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setItemCancelamento(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Cancelar {itemCancelamento.nomeItem}?</h3>
+            {!podeCancelarLivre(itemCancelamento.status) && (
+              <p className="mb-3 text-xs text-zinc-400">
+                Este item já está {labelStatusItem[itemCancelamento.status] ?? itemCancelamento.status} — cancelar exige motivo e senha de supervisor.
+              </p>
+            )}
+            <div className="space-y-2">
+              <input
+                value={motivoCancelamento}
+                onChange={(e) => setMotivoCancelamento(e.target.value)}
+                placeholder={podeCancelarLivre(itemCancelamento.status) ? 'Motivo (opcional)' : 'Motivo (obrigatório)'}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+              />
+              {!podeCancelarLivre(itemCancelamento.status) && (
+                <input
+                  type="password"
+                  value={senhaCancelamento}
+                  onChange={(e) => setSenhaCancelamento(e.target.value)}
+                  placeholder="Senha de supervisor"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                />
+              )}
+            </div>
+            {erroCancelamento && <p className="mt-2 text-sm text-red-400">{erroCancelamento}</p>}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={confirmarCancelamentoItem}
+                disabled={
+                  enviandoCancelamento ||
+                  (!podeCancelarLivre(itemCancelamento.status) && (!motivoCancelamento || !senhaCancelamento))
+                }
+                className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                Confirmar cancelamento
+              </button>
+              <button onClick={() => setItemCancelamento(null)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
+                Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }

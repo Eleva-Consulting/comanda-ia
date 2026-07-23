@@ -1,8 +1,15 @@
-import type { ComandaResumo } from './tipos'
+import { X } from 'lucide-react'
+import type { ComandaResumo, ItemResumo } from './tipos'
 import { formatarReais } from './tipos'
 
-// Cards por comanda, somente leitura — pagar acontece só pelo fluxo "Receber pagamento".
-export default function ComandasLeitura({ comandas }: { comandas: ComandaResumo[] }) {
+interface Props {
+  comandas: ComandaResumo[]
+  onCancelarItem: (item: ItemResumo) => void
+}
+
+// Cards por comanda — leitura dos itens, com a exceção de poder cancelar um item
+// (pagar continua só pelo fluxo "Receber pagamento").
+export default function ComandasLeitura({ comandas, onCancelarItem }: Props) {
   return (
     <>
       {comandas.map((comanda) => (
@@ -19,10 +26,21 @@ export default function ComandasLeitura({ comandas }: { comandas: ComandaResumo[
             {comanda.itens.map((item) => (
               <div
                 key={item.id}
-                className={`flex justify-between text-sm ${item.status === 'cancelado' ? 'text-zinc-600 line-through' : item.pago ? 'text-zinc-500' : 'text-zinc-200'}`}
+                className={`flex items-center justify-between gap-2 text-sm ${item.status === 'cancelado' ? 'text-zinc-600 line-through' : item.pago ? 'text-zinc-500' : 'text-zinc-200'}`}
               >
-                <span>{item.quantidade}x {item.nomeItem} {item.pago && '· pago'}</span>
-                <span>{formatarReais(item.total)}</span>
+                <span className="truncate">{item.quantidade}x {item.nomeItem} {item.pago && '· pago'}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {formatarReais(item.total)}
+                  {item.status !== 'cancelado' && (
+                    <button
+                      onClick={() => onCancelarItem(item)}
+                      className="rounded p-0.5 text-zinc-600 no-underline hover:bg-red-500/10 hover:text-red-400"
+                      title={item.pago ? 'Item pago — estorne o pagamento antes de cancelar' : 'Cancelar item'}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
