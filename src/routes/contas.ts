@@ -119,7 +119,7 @@ export function serializarConta(conta: ContaComComandas) {
 export async function emitirAtualizacaoItemComanda(estabelecimentoId: string, itemId: string) {
   const itemParaProducao = await prisma.itemComanda.findUnique({
     where:   { id: itemId },
-    include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+    include: { setor: true, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
   });
   if (!itemParaProducao) return;
   getIO()
@@ -143,7 +143,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
     const contas = await prisma.conta.findMany({
       where:   { estabelecimentoId: estabelecimentoId!, status: { in: status } },
       orderBy: { abertaEm: 'desc' },
-      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true, categoria: { select: { opcoesAcompanhamento: true } } } } }, orderBy: { criadoEm: 'asc' } } } } },
+      include: { mesa: true, abertaPor: { select: { nome: true } }, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true, categoria: { select: { opcoesAcompanhamento: true } } } } }, orderBy: { criadoEm: 'asc' } } } } },
     });
     return contas.map(serializarConta);
   });
@@ -158,7 +158,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
 
     const conta = await prisma.conta.findFirst({
       where:   { id, estabelecimentoId: estabelecimentoId! },
-      include: { mesa: true, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true, categoria: { select: { opcoesAcompanhamento: true } } } } }, orderBy: { criadoEm: 'asc' } } } } },
+      include: { mesa: true, abertaPor: { select: { nome: true } }, comandas: { include: { itens: true, rascunhoItens: { include: { itemCardapio: { select: { nome: true, preco: true, categoria: { select: { opcoesAcompanhamento: true } } } } }, orderBy: { criadoEm: 'asc' } } } } },
     });
     if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
     return serializarConta(conta);
@@ -171,7 +171,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
     schema: { body: AbrirContaSchema },
   }, async (request, reply) => {
     const { mesaId } = request.body as { mesaId: string };
-    const { estabelecimentoId } = request.user;
+    const { estabelecimentoId, userId } = request.user;
 
     const mesa = await prisma.mesa.findFirst({ where: { id: mesaId, estabelecimentoId: estabelecimentoId!, ativa: true } });
     if (!mesa) return reply.status(404).send({ erro: 'Mesa não encontrada' });
@@ -186,9 +186,10 @@ export async function contasRoutes(fastify: FastifyInstance) {
         data: {
           mesaId,
           estabelecimentoId: estabelecimentoId!,
+          abertaPorUsuarioId: userId,
           comandas: { create: [{ nome: 'Geral' }] },
         },
-        include: { mesa: true, comandas: { include: { itens: true } } },
+        include: { mesa: true, comandas: { include: { itens: true } }, abertaPor: { select: { nome: true } } },
       });
 
       getIO().to(estabelecimentoId!).emit('conta:atualizada', serializarConta(conta));

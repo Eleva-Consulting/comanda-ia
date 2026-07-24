@@ -31,6 +31,7 @@ interface ItemProducao {
   tempoAlvoMinutos: number | null
   mesaNumero: string
   comandaNome: string
+  abertaPorNome: string | null
 }
 
 // ── Helpers visuais ────────────────────────────────────────────────────────
@@ -542,6 +543,7 @@ export default function Cozinha() {
                       <div key={grupo.chave} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                         <p className="mb-2 text-xs text-zinc-500">
                           Mesa {grupo.itens[0].mesaNumero} · {grupo.itens[0].comandaNome}
+                          {grupo.itens[0].abertaPorNome && ` · aberta por ${grupo.itens[0].abertaPorNome}`}
                         </p>
                         <div className="space-y-2">
                           {grupo.itens.map((item) => {

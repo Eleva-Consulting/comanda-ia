@@ -21,7 +21,7 @@ export async function producaoRoutes(fastify: FastifyInstance) {
       },
       include: {
         setor: true,
-        comanda: { include: { conta: { include: { mesa: true } } } },
+        comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } },
       },
       orderBy: { recebidoEm: 'asc' },
     });

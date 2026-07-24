@@ -27,7 +27,7 @@ describe('serializarItemProducao', () => {
       id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
       status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
       setorId: null, rodadaId: 'rodada-1',
-      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' } } },
+      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
     };
     expect(serializarItemProducao(item).rodadaId).toBe('rodada-1');
   });
@@ -37,8 +37,28 @@ describe('serializarItemProducao', () => {
       id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
       status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
       setorId: null, rodadaId: null,
-      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' } } },
+      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
     };
     expect(serializarItemProducao(item).rodadaId).toBe(null);
+  });
+
+  it('inclui o nome de quem abriu a mesa quando a conta tem abertaPor', () => {
+    const item = {
+      id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
+      status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
+      setorId: null, rodadaId: null,
+      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: { nome: 'Maria' } } },
+    };
+    expect(serializarItemProducao(item).abertaPorNome).toBe('Maria');
+  });
+
+  it('abertaPorNome null quando a conta não tem abertaPor registrado (legado)', () => {
+    const item = {
+      id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
+      status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
+      setorId: null, rodadaId: null,
+      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
+    };
+    expect(serializarItemProducao(item).abertaPorNome).toBe(null);
   });
 });
