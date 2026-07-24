@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, ChefHat, Plus, Printer, X } from 'lucide-react'
+import { Loader2, ChefHat, Plus, Printer, X, XCircle } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 import { useSocket } from '../hooks/useSocket'
@@ -130,6 +130,13 @@ export default function Cozinha() {
   const [senhaCancelamento, setSenhaCancelamento] = useState('')
   const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
   const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
+
+  // Cancelar o pedido (rodada) inteiro de uma vez, em vez de item por item.
+  const [rodadaCancelamento, setRodadaCancelamento] = useState<string | null>(null)
+  const [motivoCancelamentoRodada, setMotivoCancelamentoRodada] = useState('')
+  const [senhaCancelamentoRodada, setSenhaCancelamentoRodada] = useState('')
+  const [enviandoCancelamentoRodada, setEnviandoCancelamentoRodada] = useState(false)
+  const [erroCancelamentoRodada, setErroCancelamentoRodada] = useState<string | null>(null)
 
   function carregarItens() {
     fetch(`${API_URL}/producao/itens`, { headers: { Authorization: `Bearer ${token}` } })
@@ -342,6 +349,39 @@ export default function Cozinha() {
       console.error(err)
     } finally {
       setAvancandoRodadaId(null)
+    }
+  }
+
+  function abrirCancelamentoRodada(rodadaId: string) {
+    setRodadaCancelamento(rodadaId)
+    setMotivoCancelamentoRodada('')
+    setSenhaCancelamentoRodada('')
+    setErroCancelamentoRodada(null)
+  }
+
+  async function confirmarCancelamentoRodada(itensDoGrupo: ItemProducao[]) {
+    if (!rodadaCancelamento) return
+    if (!motivoCancelamentoRodada || !senhaCancelamentoRodada) return
+
+    setErroCancelamentoRodada(null)
+    setEnviandoCancelamentoRodada(true)
+    try {
+      const resp = await fetch(`${API_URL}/rodadas/${rodadaCancelamento}/cancelar`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: motivoCancelamentoRodada, senha: senhaCancelamentoRodada }),
+      })
+      const dados = await resp.json()
+      if (!resp.ok) { setErroCancelamentoRodada(dados.erro ?? 'Não foi possível cancelar o pedido'); return }
+      const idsCancelados = new Set<string>(dados.itensCancelados.map((i: { id: string }) => i.id))
+      for (const item of itensDoGrupo) {
+        if (idsCancelados.has(item.id)) atualizarItemLocal({ ...item, status: 'cancelado' })
+      }
+      setRodadaCancelamento(null)
+    } catch {
+      setErroCancelamentoRodada('Falha de conexão')
+    } finally {
+      setEnviandoCancelamentoRodada(false)
     }
   }
 
@@ -626,6 +666,39 @@ export default function Cozinha() {
                           })}
                         </div>
                         {grupo.rodadaId && (
+                          rodadaCancelamento === grupo.rodadaId ? (
+                            <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
+                              <input
+                                value={motivoCancelamentoRodada}
+                                onChange={(e) => setMotivoCancelamentoRodada(e.target.value)}
+                                placeholder="Motivo (obrigatório)"
+                                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                              />
+                              <input
+                                type="password"
+                                value={senhaCancelamentoRodada}
+                                onChange={(e) => setSenhaCancelamentoRodada(e.target.value)}
+                                placeholder="Senha de supervisor"
+                                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
+                              />
+                              {erroCancelamentoRodada && <p className="text-xs text-red-400">{erroCancelamentoRodada}</p>}
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => confirmarCancelamentoRodada(grupo.itens)}
+                                  disabled={enviandoCancelamentoRodada || !motivoCancelamentoRodada || !senhaCancelamentoRodada}
+                                  className="flex-1 rounded bg-red-500 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                                >
+                                  Confirmar cancelamento
+                                </button>
+                                <button
+                                  onClick={() => setRodadaCancelamento(null)}
+                                  className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
                           <div className="mt-2 flex items-center gap-1.5">
                             {!rodadasDivididas.has(grupo.rodadaId) &&
                               grupo.itens.some((i) => labelAvancar[i.status]) && (
@@ -647,7 +720,17 @@ export default function Cozinha() {
                             >
                               <Printer className="h-4 w-4" />
                             </button>
+                            {!rodadasDivididas.has(grupo.rodadaId) && (
+                              <button
+                                onClick={() => abrirCancelamentoRodada(grupo.rodadaId!)}
+                                className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
+                                title="Cancelar pedido inteiro"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
+                          )
                         )}
                       </div>
                       )

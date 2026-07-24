@@ -408,6 +408,34 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-24 (continuação)
+- **Cancelar o pedido (rodada) inteiro de uma vez, na Cozinha.** Pedido do usuário: hoje só
+  dá pra cancelar item por item, pedindo senha em cada um — muito trabalhoso pra cancelar um
+  pedido inteiro. Novo botão "Cancelar pedido inteiro" (ícone `XCircle`) no card da rodada,
+  visível nas 3 colunas (recebido/em preparo/pronto) — some junto com "Avançar rodada" quando
+  a rodada estiver "dividida" entre colunas (mesmo caso raro já tratado antes), pra não
+  cancelar em massa uma visão parcial/inconsistente. Sempre exige motivo + senha de
+  supervisor (decisão do usuário: ação maior que cancelar 1 item, então sempre pede senha,
+  independente da fase — diferente da regra granular por item, onde "recebido" cancela
+  livre). Nova rota `PATCH /rodadas/:id/cancelar`: cancela de uma vez todos os itens ainda
+  ativos da rodada, pulando os que já tiverem pagamento confirmado vinculado (mesma trava do
+  cancelamento por item — reporta em `itensNaoCancelados`, precisa estornar antes).
+  - **Liberação automática da mesa** (ponto de atenção do próprio usuário): depois de
+    cancelar, verifica a CONTA inteira (todas as comandas/rodadas daquela mesa) — só libera a
+    mesa automaticamente se não sobrar nenhum item ativo em lugar nenhum da conta E o saldo
+    devedor estiver zerado. Uma mesa com outro pedido/rodada ainda ativo em paralelo (cenário
+    real: mais de uma comanda por mesa) continua ocupada normalmente. Ao liberar: marca a
+    conta como `cancelada` se nada da mesa chegou a ser consumido/pago, ou `fechada` se algo
+    já tinha sido entregue/pago antes (evita registrar como "cancelado" um atendimento que
+    teve consumo de verdade) — mesa reaparece como "livre" e some do Caixa nos dois casos,
+    já que ambos tiram a conta do filtro `aberta`/`aguardando_pagamento`.
+  - Lógica de decisão extraída em funções puras testáveis
+    (`src/utils/cancelamentoRodada.ts`: `separarItensCancelaveisDaRodada`,
+    `decidirLiberacaoConta`), com 8 testes novos. `buscarContaComResumo` e
+    `emitirContaAtualizada` exportados de `pagamentos.ts` pra reaproveitar em `rodadas.ts`
+    sem duplicar a query de resumo financeiro. Build (backend + frontend) e `npm test`
+    (81 testes) verificados sem regressão.
+
 ### 2026-07-24
 - **Nome de quem abriu a mesa.** Pedido do usuário: saber quem é o operador responsável por
   cada mesa/comanda, visível no sistema e na comanda impressa. Campo novo

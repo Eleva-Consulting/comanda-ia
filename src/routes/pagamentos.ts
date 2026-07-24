@@ -78,7 +78,7 @@ function paraContaParaResumo(conta: ContaComResumoPrisma): ContaParaResumo {
   };
 }
 
-async function buscarContaComResumo(estabelecimentoId: string, contaId: string) {
+export async function buscarContaComResumo(estabelecimentoId: string, contaId: string) {
   const conta = await prisma.conta.findFirst({
     where: { id: contaId, estabelecimentoId },
     include: CONTA_INCLUDE_RESUMO,
@@ -87,7 +87,7 @@ async function buscarContaComResumo(estabelecimentoId: string, contaId: string) 
   return { conta, resumo: calcularResumoConta(paraContaParaResumo(conta)) };
 }
 
-async function emitirContaAtualizada(estabelecimentoId: string, contaId: string) {
+export async function emitirContaAtualizada(estabelecimentoId: string, contaId: string) {
   const contaCompleta = await prisma.conta.findUnique({
     where: { id: contaId },
     include: { mesa: true, comandas: { include: { itens: true } } },
