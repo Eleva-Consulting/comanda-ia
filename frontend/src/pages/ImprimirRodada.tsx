@@ -11,11 +11,12 @@ interface ItemRodada {
 }
 
 interface Rodada {
-  id:          string
-  criadaEm:    string
-  mesaNumero:  string | null
-  comandaNome: string
-  itens:       ItemRodada[]
+  id:            string
+  criadaEm:      string
+  mesaNumero:    string | null
+  comandaNome:   string
+  numeroPessoas: number | null
+  itens:         ItemRodada[]
 }
 
 interface Estabelecimento {
@@ -88,6 +89,7 @@ export default function ImprimirRodada() {
         {rodada.mesaNumero ? `Mesa ${rodada.mesaNumero}` : 'Sem mesa'} · {rodada.comandaNome}
       </p>
       <p className="center">{dataStr} {horaStr}</p>
+      {rodada.numeroPessoas && <p className="center">Pessoas na mesa: {rodada.numeroPessoas}</p>}
       <div className="linha" />
 
       {rodada.itens.map((item) => (

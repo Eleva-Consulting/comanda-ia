@@ -106,11 +106,12 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
     if (!rodada) return reply.status(404).send({ erro: 'Rodada não encontrada' });
 
     return {
-      id:          rodada.id,
-      criadaEm:    rodada.criadaEm,
-      mesaNumero:  rodada.comanda.conta.mesa?.numero ?? null,
-      comandaNome: rodada.comanda.nome,
-      itens:       rodada.itens.map(serializarItemComanda),
+      id:            rodada.id,
+      criadaEm:      rodada.criadaEm,
+      mesaNumero:    rodada.comanda.conta.mesa?.numero ?? null,
+      comandaNome:   rodada.comanda.nome,
+      numeroPessoas: rodada.comanda.conta.numeroPessoas,
+      itens:         rodada.itens.map(serializarItemComanda),
     };
   });
 
