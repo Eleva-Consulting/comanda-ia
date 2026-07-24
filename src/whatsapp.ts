@@ -140,13 +140,14 @@ class WhatsAppManager {
     })
 
     if (conversaAtiva) {
-      // Sessão em andamento: atualiza timestamp e manda só o link (sem repetir o boas-vindas)
+      // Sessão em andamento: já mandou o link na primeira mensagem — não repete a cada
+      // mensagem nova do cliente (o bot não entende o conteúdo, então ficar respondendo
+      // "aqui está o link" pra qualquer coisa que a pessoa diga soa quebrado). Só
+      // atualiza o timestamp pra manter a sessão viva; só volta a responder depois de
+      // 24h sem contato (decisão do usuário em 2026-07-24).
       await prisma.conversa.update({
         where: { id: conversaAtiva.id },
         data:  { status: 'ativa' }, // força @updatedAt para manter a sessão viva
-      })
-      await socket.sendMessage(jid, {
-        text: `Aqui está o link do cardápio:\n\n🛒 ${menuLink}\n\nDepois de fazer o pedido, você recebe a confirmação automaticamente por aqui! 😊`,
       })
       return
     }
