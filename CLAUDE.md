@@ -408,6 +408,19 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-23
+- **Observação por item do carrinho na tela de Mesas.** Pedido do usuário: poder registrar
+  ("prato de picanha sem macarrão") uma observação por item ao montar o pedido de uma comanda,
+  visível na Cozinha e na comanda impressa. Achado ao investigar: `ItemComanda.observacao` já
+  existia no schema e já estava 100% funcional em todo o resto do pipeline (validação no
+  `POST /comandas/:id/rascunho`, `criarRodadaDeItens`, serialização, Kanban da Cozinha e
+  `ImprimirRodada`) — construído junto da feature de rascunho por mesa de 2026-07-17, só nunca
+  exposto na UI. **Única lacuna real:** o carrinho da tela de Mesas (`ItemCarrinho`) não tinha
+  campo nem input de observação. Adicionado input de texto (opcional, até 300 caracteres) por
+  linha do carrinho, incluído no payload do rascunho, e exibido nas duas telas de revisão do
+  rascunho (por comanda e da mesa inteira) — sem migration, sem mudança de backend. Build do
+  frontend e `npm test` do backend (71 testes) verificados sem regressão.
+
 ### 2026-07-19
 - **Repositório migrado pra Eleva-Consulting + pipeline de CI criado.** Pedido do usuário: dar
   acesso direto a 2 amigos que passaram a trabalhar no projeto e montar um pipeline. Confirmado
