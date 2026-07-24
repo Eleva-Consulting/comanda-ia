@@ -1,15 +1,23 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { resolverAcompanhamento } from '../utils/acompanhamento.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
 import { transicaoProducaoValida, proximoStatusAtivo } from '../utils/statusProducao.js';
+import { separarItensCancelaveisDaRodada, decidirLiberacaoConta } from '../utils/cancelamentoRodada.js';
 import { serializarItemComanda, emitirAtualizacaoItemComanda } from './contas.js';
+import { buscarContaComResumo, emitirContaAtualizada } from './pagamentos.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 const RodadaParamsSchema  = Type.Object({ id: Type.String() });
+
+const CancelarRodadaSchema = Type.Object({
+  motivo: Type.String({ minLength: 1, maxLength: 200 }),
+  senha:  Type.String({ minLength: 1 }),
+});
 
 export interface EntradaItemRodada {
   itemCardapioId: string;
@@ -155,5 +163,102 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
     }
 
     return { rodadaId: id, itensAtualizados };
+  });
+
+  // ── PATCH /rodadas/:id/cancelar ────────────────────────────────────────────
+  // Cancela de uma vez todos os itens ainda ativos (recebido/em_preparo/pronto) da
+  // rodada — alternativa ao cancelamento item a item na Cozinha. Sempre exige motivo
+  // + senha de supervisor (ação maior que cancelar 1 item só). Itens já cobertos por
+  // pagamento confirmado são ignorados (reportados em itensNaoCancelados — precisa
+  // estornar o pagamento antes). Depois de cancelar, se não sobrar nenhum item ativo
+  // na CONTA inteira (outras comandas/rodadas da mesma mesa) e o saldo devedor
+  // estiver zerado, libera a mesa automaticamente: 'fechada' se algo já foi
+  // entregue/pago antes, 'cancelada' se nada da mesa chegou a ser consumido.
+  fastify.patch('/rodadas/:id/cancelar', {
+    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha', 'caixa'), moduloAtivo('mesas')],
+    schema: { params: RodadaParamsSchema, body: CancelarRodadaSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { motivo, senha } = request.body as { motivo: string; senha: string };
+    const { estabelecimentoId, userId } = request.user;
+
+    const rodada = await prisma.rodadaComanda.findFirst({
+      where:   { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+      include: { itens: true, comanda: { include: { conta: true } } },
+    });
+    if (!rodada) return reply.status(404).send({ erro: 'Rodada não encontrada' });
+
+    const conta = rodada.comanda.conta;
+    if (conta.status !== 'aberta' && conta.status !== 'aguardando_pagamento') {
+      return reply.status(422).send({ erro: 'Não é possível cancelar pedido de uma conta fechada ou cancelada' });
+    }
+
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+    if (!estabelecimento?.senhaReabrirPedido) {
+      return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de cancelar o pedido' });
+    }
+    const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
+    if (!senhaCorreta) return reply.status(403).send({ erro: 'Senha incorreta' });
+
+    const pagamentosConfirmados = await prisma.pagamentoItem.findMany({
+      where:  { itemComandaId: { in: rodada.itens.map((i) => i.id) }, pagamento: { status: 'confirmado' } },
+      select: { itemComandaId: true },
+    });
+    const itensJaPagosIds = new Set(pagamentosConfirmados.map((p) => p.itemComandaId));
+
+    const { itensAtivos, itensCancelaveis, itensNaoCancelados } = separarItensCancelaveisDaRodada(rodada.itens, itensJaPagosIds);
+    if (itensAtivos.length === 0) {
+      return reply.status(400).send({ erro: 'Nenhum item ativo pra cancelar nessa rodada' });
+    }
+
+    if (itensCancelaveis.length === 0) {
+      return reply.status(422).send({ erro: 'Todos os itens ativos dessa rodada já foram pagos — estorne o pagamento antes de cancelar', itensNaoCancelados });
+    }
+
+    const agora = new Date();
+    const itensCancelados = [];
+    for (const item of itensCancelaveis) {
+      const atualizado = await prisma.itemComanda.update({
+        where: { id: item.id },
+        data:  { status: 'cancelado', canceladoEm: agora },
+      });
+      const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
+      getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+      await emitirAtualizacaoItemComanda(estabelecimentoId!, atualizado.id);
+      itensCancelados.push(serializado);
+    }
+
+    await prisma.logAuditoria.create({
+      data: {
+        acao:         'rodada:cancelada',
+        entidadeTipo: 'RodadaComanda',
+        entidadeId:   id,
+        motivo,
+        dadosAntes:   { itens: itensCancelaveis.map((i) => ({ id: i.id, status: i.status })) },
+        dadosDepois:  { status: 'cancelado' },
+        estabelecimentoId: estabelecimentoId!,
+        usuarioId:    userId,
+      },
+    });
+
+    const itensPendentes = await prisma.itemComanda.count({
+      where: { comanda: { contaId: conta.id }, status: { notIn: ['entregue', 'cancelado'] } },
+    });
+    const encontrada = await buscarContaComResumo(estabelecimentoId!, conta.id);
+    const itensEntreguesNaConta = await prisma.itemComanda.count({
+      where: { comanda: { contaId: conta.id }, status: 'entregue' },
+    });
+    const contaLiberada = decidirLiberacaoConta({
+      itensPendentes,
+      podeFechar: encontrada?.resumo.podeFechar ?? false,
+      itensEntreguesNaConta,
+      totalPago: encontrada?.resumo.totalPago ?? 0,
+    });
+    if (contaLiberada) {
+      await prisma.conta.update({ where: { id: conta.id }, data: { status: contaLiberada, fechadaEm: agora } });
+      await emitirContaAtualizada(estabelecimentoId!, conta.id);
+    }
+
+    return { rodadaId: id, itensCancelados, itensNaoCancelados, contaLiberada };
   });
 }
