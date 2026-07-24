@@ -52,6 +52,7 @@ interface Conta {
   status: 'aberta' | 'aguardando_pagamento' | 'fechada' | 'cancelada'
   mesa: Mesa
   comandas: Comanda[]
+  numeroPessoas: number | null
 }
 
 interface OpcaoAcompanhamento {
@@ -142,6 +143,7 @@ export default function Mesas() {
   // Tela de revisão da MESA inteira: o garçom anota tudo em rascunho (todas as comandas),
   // revisa aqui e envia pra cozinha de uma vez só (pedido do usuário em 2026-07-17).
   const [revisandoMesa, setRevisandoMesa] = useState(false)
+  const [numeroPessoas, setNumeroPessoas] = useState(1)
   const [enviandoPedido, setEnviandoPedido] = useState(false)
   const [erroPedido, setErroPedido] = useState<string | null>(null)
 
@@ -355,7 +357,8 @@ export default function Mesas() {
     try {
       const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/rascunho/enviar`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numeroPessoas }),
       })
       const dados = await resp.json().catch(() => ({}))
       if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
@@ -806,7 +809,7 @@ export default function Mesas() {
           {/* Barra da mesa: revisar e enviar TODO o rascunho de uma vez */}
           {totalItensRascunho > 0 && (
             <button
-              onClick={() => { setErroPedido(null); setRevisandoMesa(true) }}
+              onClick={() => { setErroPedido(null); setNumeroPessoas(contaSelecionada?.numeroPessoas ?? 1); setRevisandoMesa(true) }}
               className="sticky bottom-4 mt-4 w-full rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600"
             >
               Revisar e enviar pedido ({totalItensRascunho} {totalItensRascunho === 1 ? 'item' : 'itens'})
@@ -823,6 +826,22 @@ export default function Mesas() {
               <div>
                 <h3 className="text-lg font-bold">Confirmar pedido</h3>
                 <p className="text-xs text-zinc-400">Mesa {contaSelecionada.mesa.numero} · toda a mesa</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-zinc-400">Pessoas na mesa</span>
+                  <button
+                    onClick={() => setNumeroPessoas((n) => Math.max(1, n - 1))}
+                    className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700"
+                  >
+                    −
+                  </button>
+                  <span className="w-4 text-center text-sm font-semibold">{numeroPessoas}</span>
+                  <button
+                    onClick={() => setNumeroPessoas((n) => n + 1)}
+                    className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
               <button onClick={() => setRevisandoMesa(false)}><X className="h-5 w-5 text-zinc-400" /></button>
             </div>

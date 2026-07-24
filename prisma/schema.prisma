@@ -371,6 +371,7 @@ model Conta {
 
   descontoValor  Decimal? @db.Decimal(10, 2)
   descontoMotivo String?
+  numeroPessoas  Int?
 
   mesaId String?
   mesa   Mesa?   @relation(fields: [mesaId], references: [id])

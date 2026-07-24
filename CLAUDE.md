@@ -408,6 +408,21 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-23 (continuação)
+- **Número de pessoas na mesa.** Pedido do usuário: registrar quantas pessoas estão numa mesa,
+  informativo por enquanto (não alimenta a divisão de conta no Caixa), visível ao confirmar o
+  pedido e na comanda impressa. Campo novo `Conta.numeroPessoas` (inteiro opcional, migration
+  manual — sem Docker/Postgres local disponível na sessão pra gerar via `prisma migrate dev`;
+  seguiu o padrão exato da migration de `descontoValor`/`descontoMotivo` de 2026-07-07, a
+  validação real acontece no `prisma migrate deploy` automático do Railway). Contador +/- no
+  modal "Confirmar pedido" (revisão da mesa inteira antes de enviar pra cozinha), pré-preenchido
+  com o valor já salvo na conta; enviado junto no `POST /contas/:id/rascunho/enviar`, que agora
+  aceita `numeroPessoas` opcional no body. `GET /rodadas/:id` (fonte da tela de impressão) passou
+  a devolver `numeroPessoas` da conta; `ImprimirRodada.tsx` imprime "Pessoas na mesa: N" quando
+  presente. Escopo deliberado: só a mesa como um todo (`Conta`), não por comanda/item; não
+  aparece no Kanban da Cozinha (só confirmação + impressão, por pedido do usuário). Build do
+  frontend e backend + `npm test` (71 testes) verificados sem regressão.
+
 ### 2026-07-23
 - **Observação por item do carrinho na tela de Mesas.** Pedido do usuário: poder registrar
   ("prato de picanha sem macarrão") uma observação por item ao montar o pedido de uma comanda,
