@@ -53,6 +53,7 @@ interface Conta {
   mesa: Mesa
   comandas: Comanda[]
   numeroPessoas: number | null
+  abertaPor: { nome: string } | null
 }
 
 interface OpcaoAcompanhamento {
@@ -702,6 +703,9 @@ export default function Mesas() {
               </button>
             </div>
           </div>
+          {contaSelecionada.abertaPor && (
+            <p className="-mt-4 mb-4 text-xs text-zinc-500">Aberta por {contaSelecionada.abertaPor.nome}</p>
+          )}
 
           <button
             onClick={() => setNovaComandaAberta(true)}

@@ -101,7 +101,7 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
 
     const rodada = await prisma.rodadaComanda.findFirst({
       where:   { id, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
-      include: { comanda: { include: { conta: { include: { mesa: true } } } }, itens: true },
+      include: { comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } }, itens: true },
     });
     if (!rodada) return reply.status(404).send({ erro: 'Rodada não encontrada' });
 
@@ -111,6 +111,7 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
       mesaNumero:    rodada.comanda.conta.mesa?.numero ?? null,
       comandaNome:   rodada.comanda.nome,
       numeroPessoas: rodada.comanda.conta.numeroPessoas,
+      abertaPorNome: rodada.comanda.conta.abertaPor?.nome ?? null,
       itens:         rodada.itens.map(serializarItemComanda),
     };
   });

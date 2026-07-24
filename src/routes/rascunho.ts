@@ -156,7 +156,7 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
     }
     const paraProducao = await prisma.itemComanda.findMany({
       where: { id: { in: itensCriadosTotal.map((i) => i.id) } },
-      include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+      include: { setor: true, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
     });
     for (const item of paraProducao) {
       getIO().to(salaProducao(estabelecimentoId!, item.setorId)).emit('producao:item-novo', serializarItemProducao(item));

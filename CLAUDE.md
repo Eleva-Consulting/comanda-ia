@@ -408,6 +408,21 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-24
+- **Nome de quem abriu a mesa.** Pedido do usuário: saber quem é o operador responsável por
+  cada mesa/comanda, visível no sistema e na comanda impressa. Campo novo
+  `Conta.abertaPorUsuarioId` (relação opcional pra `Usuario`, migration manual seguindo o
+  padrão de `Usuario.setorId`/`ItemComanda.criadoPorUsuarioId`) — nível de granularidade é a
+  mesa inteira (quem abriu a `Conta`), não por comanda individual (decisão do usuário: mais de
+  uma comanda pode ser criada na mesma mesa depois, mas o "responsável" registrado é sempre
+  quem abriu). Gravado em `POST /contas` (abrir mesa) a partir do usuário autenticado. Exibido
+  em três lugares: tela de Mesas (subtítulo "Aberta por X" no cabeçalho da mesa aberta), Kanban
+  da Cozinha (linha da mesa/comanda no card da rodada), e comanda impressa ("Aberta por: X").
+  `serializarItemProducao` ganhou `abertaPorNome` (com 2 testes novos). Sem migration de
+  Docker/Postgres local disponível (mesma limitação das duas últimas features) — validado no
+  `prisma migrate deploy` automático do Railway ao subir em homologação. Build (backend +
+  frontend) e `npm test` (73 testes) verificados sem regressão.
+
 ### 2026-07-23 (continuação)
 - **Número de pessoas na mesa.** Pedido do usuário: registrar quantas pessoas estão numa mesa,
   informativo por enquanto (não alimenta a divisão de conta no Caixa), visível ao confirmar o

@@ -187,6 +187,7 @@ model Usuario {
   pagamentosRegistrados Pagamento[]
   logsAuditoria         LogAuditoria[]
   movimentacoesEstoque  MovimentacaoEstoque[]
+  contasAbertas         Conta[]
 
   @@map("usuarios")
 }
@@ -378,6 +379,9 @@ model Conta {
 
   estabelecimentoId String
   estabelecimento   Estabelecimento @relation(fields: [estabelecimentoId], references: [id])
+
+  abertaPorUsuarioId String?
+  abertaPor          Usuario? @relation(fields: [abertaPorUsuarioId], references: [id])
 
   comandas   Comanda[]
   pagamentos Pagamento[]

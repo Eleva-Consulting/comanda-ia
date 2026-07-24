@@ -16,6 +16,7 @@ interface Rodada {
   mesaNumero:    string | null
   comandaNome:   string
   numeroPessoas: number | null
+  abertaPorNome: string | null
   itens:         ItemRodada[]
 }
 
@@ -90,6 +91,7 @@ export default function ImprimirRodada() {
       </p>
       <p className="center">{dataStr} {horaStr}</p>
       {rodada.numeroPessoas && <p className="center">Pessoas na mesa: {rodada.numeroPessoas}</p>}
+      {rodada.abertaPorNome && <p className="center">Aberta por: {rodada.abertaPorNome}</p>}
       <div className="linha" />
 
       {rodada.itens.map((item) => (
