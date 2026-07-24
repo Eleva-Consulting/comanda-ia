@@ -52,6 +52,8 @@ interface Conta {
   status: 'aberta' | 'aguardando_pagamento' | 'fechada' | 'cancelada'
   mesa: Mesa
   comandas: Comanda[]
+  numeroPessoas: number | null
+  abertaPor: { nome: string } | null
 }
 
 interface OpcaoAcompanhamento {
@@ -74,6 +76,7 @@ interface ItemCarrinho {
   preco: number
   quantidade: number
   acompanhamento?: string
+  observacao?: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -141,6 +144,7 @@ export default function Mesas() {
   // Tela de revisão da MESA inteira: o garçom anota tudo em rascunho (todas as comandas),
   // revisa aqui e envia pra cozinha de uma vez só (pedido do usuário em 2026-07-17).
   const [revisandoMesa, setRevisandoMesa] = useState(false)
+  const [numeroPessoas, setNumeroPessoas] = useState(1)
   const [enviandoPedido, setEnviandoPedido] = useState(false)
   const [erroPedido, setErroPedido] = useState<string | null>(null)
 
@@ -293,6 +297,10 @@ export default function Mesas() {
       .filter((c) => c.quantidade > 0))
   }
 
+  function alterarObservacaoCarrinho(chave: string, observacao: string) {
+    setCarrinho((prev) => prev.map((c) => c.chave === chave ? { ...c, observacao } : c))
+  }
+
   // Adiciona os itens do carrinho ao RASCUNHO da comanda (não vai pra cozinha).
   async function adicionarRascunho() {
     if (!modalItemAberto || carrinho.length === 0) return
@@ -307,6 +315,7 @@ export default function Mesas() {
             itemCardapioId: c.itemCardapioId,
             quantidade: c.quantidade,
             ...(c.acompanhamento ? { acompanhamento: c.acompanhamento } : {}),
+            ...(c.observacao?.trim() ? { observacao: c.observacao.trim() } : {}),
           })),
         }),
       })
@@ -349,7 +358,8 @@ export default function Mesas() {
     try {
       const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/rascunho/enviar`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numeroPessoas }),
       })
       const dados = await resp.json().catch(() => ({}))
       if (!resp.ok) { setErroPedido(dados.erro ?? 'Não foi possível enviar o pedido'); return }
@@ -693,6 +703,9 @@ export default function Mesas() {
               </button>
             </div>
           </div>
+          {contaSelecionada.abertaPor && (
+            <p className="-mt-4 mb-4 text-xs text-zinc-500">Aberta por {contaSelecionada.abertaPor.nome}</p>
+          )}
 
           <button
             onClick={() => setNovaComandaAberta(true)}
@@ -778,6 +791,7 @@ export default function Mesas() {
                           <div className="min-w-0">
                             <span className="font-medium">{r.quantidade}x {r.nomeItem}</span>
                             {r.acompanhamento && <p className="text-xs font-medium text-orange-400">Acompanhamento: {r.acompanhamento}</p>}
+                            {r.observacao && <p className="text-xs italic text-zinc-500">{r.observacao}</p>}
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
                             <button onClick={() => alterarQtdRascunho(r.id, r.quantidade - 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
@@ -799,7 +813,7 @@ export default function Mesas() {
           {/* Barra da mesa: revisar e enviar TODO o rascunho de uma vez */}
           {totalItensRascunho > 0 && (
             <button
-              onClick={() => { setErroPedido(null); setRevisandoMesa(true) }}
+              onClick={() => { setErroPedido(null); setNumeroPessoas(contaSelecionada?.numeroPessoas ?? 1); setRevisandoMesa(true) }}
               className="sticky bottom-4 mt-4 w-full rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600"
             >
               Revisar e enviar pedido ({totalItensRascunho} {totalItensRascunho === 1 ? 'item' : 'itens'})
@@ -816,6 +830,22 @@ export default function Mesas() {
               <div>
                 <h3 className="text-lg font-bold">Confirmar pedido</h3>
                 <p className="text-xs text-zinc-400">Mesa {contaSelecionada.mesa.numero} · toda a mesa</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-zinc-400">Pessoas na mesa</span>
+                  <button
+                    onClick={() => setNumeroPessoas((n) => Math.max(1, n - 1))}
+                    className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700"
+                  >
+                    −
+                  </button>
+                  <span className="w-4 text-center text-sm font-semibold">{numeroPessoas}</span>
+                  <button
+                    onClick={() => setNumeroPessoas((n) => n + 1)}
+                    className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
               <button onClick={() => setRevisandoMesa(false)}><X className="h-5 w-5 text-zinc-400" /></button>
             </div>
@@ -830,6 +860,7 @@ export default function Mesas() {
                         <div className="min-w-0">
                           <p className="font-semibold text-zinc-100">{r.quantidade}x {r.nomeItem}</p>
                           {r.acompanhamento && <p className="text-xs font-medium text-orange-400">Acompanhamento: {r.acompanhamento}</p>}
+                          {r.observacao && <p className="text-xs italic text-zinc-500">{r.observacao}</p>}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <button onClick={() => alterarQtdRascunho(r.id, r.quantidade - 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
@@ -941,16 +972,25 @@ export default function Mesas() {
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Pedido</p>
                     <ul className="mb-3 space-y-1.5">
                       {carrinho.map((c) => (
-                        <li key={c.chave} className="flex items-center justify-between gap-2 text-sm">
-                          <div className="min-w-0">
-                            <span>{c.nome}</span>
-                            {c.acompanhamento && <span className="ml-1 text-xs text-orange-400">({c.acompanhamento})</span>}
+                        <li key={c.chave} className="space-y-1 text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span>{c.nome}</span>
+                              {c.acompanhamento && <span className="ml-1 text-xs text-orange-400">({c.acompanhamento})</span>}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button onClick={() => alterarQuantidadeCarrinho(c.chave, -1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
+                              <span className="w-4 text-center">{c.quantidade}</span>
+                              <button onClick={() => alterarQuantidadeCarrinho(c.chave, 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
+                            </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <button onClick={() => alterarQuantidadeCarrinho(c.chave, -1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">−</button>
-                            <span className="w-4 text-center">{c.quantidade}</span>
-                            <button onClick={() => alterarQuantidadeCarrinho(c.chave, 1)} className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700">+</button>
-                          </div>
+                          <input
+                            value={c.observacao ?? ''}
+                            onChange={(e) => alterarObservacaoCarrinho(c.chave, e.target.value)}
+                            placeholder="Observação (ex: sem macarrão)"
+                            maxLength={300}
+                            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600"
+                          />
                         </li>
                       ))}
                     </ul>

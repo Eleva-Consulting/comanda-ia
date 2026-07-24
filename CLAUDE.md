@@ -408,6 +408,49 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-24
+- **Nome de quem abriu a mesa.** Pedido do usuário: saber quem é o operador responsável por
+  cada mesa/comanda, visível no sistema e na comanda impressa. Campo novo
+  `Conta.abertaPorUsuarioId` (relação opcional pra `Usuario`, migration manual seguindo o
+  padrão de `Usuario.setorId`/`ItemComanda.criadoPorUsuarioId`) — nível de granularidade é a
+  mesa inteira (quem abriu a `Conta`), não por comanda individual (decisão do usuário: mais de
+  uma comanda pode ser criada na mesma mesa depois, mas o "responsável" registrado é sempre
+  quem abriu). Gravado em `POST /contas` (abrir mesa) a partir do usuário autenticado. Exibido
+  em três lugares: tela de Mesas (subtítulo "Aberta por X" no cabeçalho da mesa aberta), Kanban
+  da Cozinha (linha da mesa/comanda no card da rodada), e comanda impressa ("Aberta por: X").
+  `serializarItemProducao` ganhou `abertaPorNome` (com 2 testes novos). Sem migration de
+  Docker/Postgres local disponível (mesma limitação das duas últimas features) — validado no
+  `prisma migrate deploy` automático do Railway ao subir em homologação. Build (backend +
+  frontend) e `npm test` (73 testes) verificados sem regressão.
+
+### 2026-07-23 (continuação)
+- **Número de pessoas na mesa.** Pedido do usuário: registrar quantas pessoas estão numa mesa,
+  informativo por enquanto (não alimenta a divisão de conta no Caixa), visível ao confirmar o
+  pedido e na comanda impressa. Campo novo `Conta.numeroPessoas` (inteiro opcional, migration
+  manual — sem Docker/Postgres local disponível na sessão pra gerar via `prisma migrate dev`;
+  seguiu o padrão exato da migration de `descontoValor`/`descontoMotivo` de 2026-07-07, a
+  validação real acontece no `prisma migrate deploy` automático do Railway). Contador +/- no
+  modal "Confirmar pedido" (revisão da mesa inteira antes de enviar pra cozinha), pré-preenchido
+  com o valor já salvo na conta; enviado junto no `POST /contas/:id/rascunho/enviar`, que agora
+  aceita `numeroPessoas` opcional no body. `GET /rodadas/:id` (fonte da tela de impressão) passou
+  a devolver `numeroPessoas` da conta; `ImprimirRodada.tsx` imprime "Pessoas na mesa: N" quando
+  presente. Escopo deliberado: só a mesa como um todo (`Conta`), não por comanda/item; não
+  aparece no Kanban da Cozinha (só confirmação + impressão, por pedido do usuário). Build do
+  frontend e backend + `npm test` (71 testes) verificados sem regressão.
+
+### 2026-07-23
+- **Observação por item do carrinho na tela de Mesas.** Pedido do usuário: poder registrar
+  ("prato de picanha sem macarrão") uma observação por item ao montar o pedido de uma comanda,
+  visível na Cozinha e na comanda impressa. Achado ao investigar: `ItemComanda.observacao` já
+  existia no schema e já estava 100% funcional em todo o resto do pipeline (validação no
+  `POST /comandas/:id/rascunho`, `criarRodadaDeItens`, serialização, Kanban da Cozinha e
+  `ImprimirRodada`) — construído junto da feature de rascunho por mesa de 2026-07-17, só nunca
+  exposto na UI. **Única lacuna real:** o carrinho da tela de Mesas (`ItemCarrinho`) não tinha
+  campo nem input de observação. Adicionado input de texto (opcional, até 300 caracteres) por
+  linha do carrinho, incluído no payload do rascunho, e exibido nas duas telas de revisão do
+  rascunho (por comanda e da mesa inteira) — sem migration, sem mudança de backend. Build do
+  frontend e `npm test` do backend (71 testes) verificados sem regressão.
+
 ### 2026-07-19
 - **Repositório migrado pra Eleva-Consulting + pipeline de CI criado.** Pedido do usuário: dar
   acesso direto a 2 amigos que passaram a trabalhar no projeto e montar um pipeline. Confirmado

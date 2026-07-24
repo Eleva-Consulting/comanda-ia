@@ -22,6 +22,10 @@ const AdicionarRascunhoSchema = Type.Object({
 
 const AtualizarRascunhoSchema = Type.Object({ quantidade: Type.Integer({ minimum: 1, maximum: 100 }) });
 
+const EnviarRascunhoSchema = Type.Object({
+  numeroPessoas: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+});
+
 // Avisa quem está com a mesa aberta (em qualquer aparelho) que o rascunho mudou — Mesas
 // refetcha a conta em `conta:atualizada`. Reusa o evento existente, sem evento novo.
 async function emitirContaDaComanda(estabelecimentoId: string, comandaId: string) {
@@ -102,9 +106,10 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
   // tem rascunho. Reaproveita criarRodadaDeItens (mesma validação/descarte de POST /rodadas).
   fastify.post('/contas/:id/rascunho/enviar', {
     onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
-    schema: { params: ContaParams },
+    schema: { params: ContaParams, body: Type.Optional(EnviarRascunhoSchema) },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { numeroPessoas } = (request.body ?? {}) as { numeroPessoas?: number };
     const { estabelecimentoId, userId } = request.user;
 
     const conta = await prisma.conta.findFirst({
@@ -115,6 +120,10 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
 
     const comandasComRascunho = conta.comandas.filter((c) => c.rascunhoItens.length > 0);
     if (comandasComRascunho.length === 0) return reply.status(400).send({ erro: 'Nenhum item em rascunho pra enviar' });
+
+    if (numeroPessoas !== undefined) {
+      await prisma.conta.update({ where: { id }, data: { numeroPessoas } });
+    }
 
     const { itensCriadosTotal, itensDescartados } = await prisma.$transaction(async (tx) => {
       const itensCriadosTotal: Awaited<ReturnType<typeof criarRodadaDeItens>>['itensCriados'] = [];
@@ -147,7 +156,7 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
     }
     const paraProducao = await prisma.itemComanda.findMany({
       where: { id: { in: itensCriadosTotal.map((i) => i.id) } },
-      include: { setor: true, comanda: { include: { conta: { include: { mesa: true } } } } },
+      include: { setor: true, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
     });
     for (const item of paraProducao) {
       getIO().to(salaProducao(estabelecimentoId!, item.setorId)).emit('producao:item-novo', serializarItemProducao(item));
