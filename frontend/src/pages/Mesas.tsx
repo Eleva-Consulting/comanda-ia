@@ -156,6 +156,10 @@ export default function Mesas() {
   const [nomeRenomeacao, setNomeRenomeacao] = useState('')
   const [transferindoItemId, setTransferindoItemId] = useState<string | null>(null)
   const [cancelandoConta, setCancelandoConta] = useState(false)
+  const [confirmandoCancelamentoMesa, setConfirmandoCancelamentoMesa] = useState(false)
+  const [motivoCancelamentoMesa, setMotivoCancelamentoMesa] = useState('')
+  const [senhaCancelamentoMesa, setSenhaCancelamentoMesa] = useState('')
+  const [erroCancelamentoMesa, setErroCancelamentoMesa] = useState<string | null>(null)
 
   const [itemCancelamento, setItemCancelamento] = useState<ItemComanda | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
@@ -555,18 +559,35 @@ export default function Mesas() {
     }
   }
 
-  async function cancelarConta() {
+  // Itens ainda ativos (recebido/em_preparo/pronto) em qualquer comanda da mesa — usado
+  // pra decidir se "Cancelar mesa" precisa de motivo+senha (mesma regra do cancelamento
+  // de item avulso: livre só se tudo ainda está "recebido").
+  const itensAtivosDaMesa = contaSelecionada?.comandas.flatMap((c) => c.itens).filter(
+    (i) => i.status === 'recebido' || i.status === 'em_preparo' || i.status === 'pronto'
+  ) ?? []
+  const cancelamentoMesaPrecisaSenha = itensAtivosDaMesa.some((i) => !podeCancelarLivre(i.status))
+
+  async function confirmarCancelamentoMesa() {
     if (!contaSelecionada) return
+    if (cancelamentoMesaPrecisaSenha && (!motivoCancelamentoMesa || !senhaCancelamentoMesa)) return
+    setErroCancelamentoMesa(null)
     setCancelandoConta(true)
     try {
       const resp = await fetch(`${API_URL}/contas/${contaSelecionada.id}/status`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'cancelada' }),
+        body: JSON.stringify({
+          status: 'cancelada',
+          ...(motivoCancelamentoMesa ? { motivo: motivoCancelamentoMesa } : {}),
+          ...(cancelamentoMesaPrecisaSenha ? { senha: senhaCancelamentoMesa } : {}),
+        }),
       })
-      if (resp.ok) fecharDetalhe()
-    } catch (err) {
-      console.error(err)
+      const dados = await resp.json().catch(() => ({}))
+      if (!resp.ok) { setErroCancelamentoMesa(dados.erro ?? 'Não foi possível cancelar a mesa'); return }
+      setConfirmandoCancelamentoMesa(false)
+      fecharDetalhe()
+    } catch {
+      setErroCancelamentoMesa('Falha de conexão')
     } finally {
       setCancelandoConta(false)
     }
@@ -694,7 +715,12 @@ export default function Mesas() {
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-extrabold">Mesa {contaSelecionada.mesa.numero}</h2>
               <button
-                onClick={cancelarConta}
+                onClick={() => {
+                  setConfirmandoCancelamentoMesa(true)
+                  setMotivoCancelamentoMesa('')
+                  setSenhaCancelamentoMesa('')
+                  setErroCancelamentoMesa(null)
+                }}
                 disabled={cancelandoConta}
                 className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
                 title="Cancelar mesa"
@@ -1150,6 +1176,50 @@ export default function Mesas() {
                   </li>
                 ))}
             </ul>
+          </div>
+        </div>
+      )}
+
+      {confirmandoCancelamentoMesa && contaSelecionada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setConfirmandoCancelamentoMesa(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-lg font-bold">Cancelar Mesa {contaSelecionada.mesa.numero}?</h3>
+            {itensAtivosDaMesa.length > 0 && (
+              <p className="mb-3 text-xs text-zinc-400">
+                Isso vai cancelar {itensAtivosDaMesa.length} {itensAtivosDaMesa.length === 1 ? 'item' : 'itens'} ainda ativo{itensAtivosDaMesa.length === 1 ? '' : 's'} na cozinha.
+                {cancelamentoMesaPrecisaSenha && ' Algum já está em preparo/pronto — exige motivo e senha de supervisor.'}
+              </p>
+            )}
+            {cancelamentoMesaPrecisaSenha && (
+              <div className="space-y-2">
+                <input
+                  value={motivoCancelamentoMesa}
+                  onChange={(e) => setMotivoCancelamentoMesa(e.target.value)}
+                  placeholder="Motivo (obrigatório)"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                />
+                <input
+                  type="password"
+                  value={senhaCancelamentoMesa}
+                  onChange={(e) => setSenhaCancelamentoMesa(e.target.value)}
+                  placeholder="Senha de supervisor"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
+                />
+              </div>
+            )}
+            {erroCancelamentoMesa && <p className="mt-2 text-sm text-red-400">{erroCancelamentoMesa}</p>}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={confirmarCancelamentoMesa}
+                disabled={cancelandoConta || (cancelamentoMesaPrecisaSenha && (!motivoCancelamentoMesa || !senhaCancelamentoMesa))}
+                className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                Confirmar cancelamento
+              </button>
+              <button onClick={() => setConfirmandoCancelamentoMesa(false)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
+                Voltar
+              </button>
+            </div>
           </div>
         </div>
       )}
