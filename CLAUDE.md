@@ -408,6 +408,39 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-26 (continuação 3)
+- **Corrige item "órfão" preso na Cozinha quando a mesa é cancelada (e vice-versa).**
+  Achado real em produção: usuário reportou erro "não é possível cancelar pedido de uma
+  conta fechada ou cancelada" tentando cancelar um item ainda em "recebido" na Cozinha,
+  com a mesa já aparecendo "livre" em todo lugar (Mesas/Caixa). Investigação direto no
+  banco de produção (`itemComanda.findMany` filtrando item ativo + conta
+  fechada/cancelada) confirmou: Mesa 01, comanda "Cláudio" — item criado às 01:29,
+  conta cancelada (via "Cancelar mesa") às 01:52, sem o item ter sido tocado. Causa raiz
+  dupla, corrigida nos dois sentidos:
+  - **`PATCH /contas/:id/status` (Cancelar mesa)** — cancelar a conta agora cancela
+    junto qualquer item ainda ativo (recebido/em_preparo/pronto) em qualquer comanda
+    dela, em vez de deixar órfão. Mesma trava de senha do cancelamento de item avulso
+    (livre se tudo ainda "recebido"; exige motivo+senha se algo já em preparo/pronto) —
+    bloqueia com 422 se houver item já pago (pedir pra resolver pelo Caixa antes).
+    Frontend: "Cancelar mesa" (Mesas.tsx) deixou de ser um clique único sem confirmação —
+    agora abre um modal listando quantos itens ativos serão cancelados junto, com
+    motivo+senha quando necessário.
+  - **`PATCH /itens-comanda/:id/status`** — cancelar um item avulso (lixeira em
+    Mesas/Cozinha/Caixa) agora verifica, depois de cancelar, se a conta ficou sem
+    nenhum item ativo em lugar nenhum e sem saldo devedor — se sim, libera a mesa
+    sozinha (mesma lógica `decidirLiberacaoConta` já usada em
+    `PATCH /rodadas/:id/cancelar`, reaproveitada aqui).
+  - Achado curioso durante a investigação: o item específico do incidente **já tinha se
+    "auto-resolvido"** entre o diagnóstico e a correção — alguém da cozinha avançou ele
+    manualmente até `entregue` (avançar status nunca teve a trava de conta
+    fechada/cancelada, só cancelar tinha), então ele já tinha saído do Kanban sozinho.
+    Nenhuma correção pontual de dado foi necessária.
+  - `buscarContaComResumo`/`emitirContaAtualizada` (pagamentos.ts) importados em
+    contas.ts — import circular entre os dois arquivos (contas.ts↔pagamentos.ts),
+    confirmado seguro em runtime (só usado dentro de handlers, nunca no top-level do
+    módulo) via smoke test rodando `node dist/index.js` localmente. Build (backend +
+    frontend) e `npm test` (83 testes) verificados sem regressão.
+
 ### 2026-07-26 (continuação 2)
 - **Ticket único na impressão de envios com várias comandas.** Dois ajustes de feedback do
   usuário depois de testar o agrupamento por envio (acima): (1) a etiqueta de comanda por
