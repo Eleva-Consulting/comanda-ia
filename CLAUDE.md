@@ -408,6 +408,28 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-26
+- **Comandas enviadas juntas aparecem agrupadas por mesa na Cozinha.** Pedido do usuário:
+  quando o pedido de uma mesa é feito por comandas separadas, hoje cada comanda vira um card
+  independente no Kanban — o ideal é que fiquem juntas, avançando a mesa inteira de uma vez.
+  Confirmado com o usuário: só agrupa o que foi enviado no mesmo clique de "Confirmar e
+  enviar tudo pra cozinha" (não junta comandas enviadas em momentos diferentes); se uma
+  comanda do grupo avançar mais que a outra, mesmo tratamento de hoje pra rodada dividida
+  (bloqueia ação em lote até resincronizar).
+  - Campo novo `RodadaComanda.envioId` (opcional, sem FK — só correlação opaca): o mesmo
+    valor é gerado uma vez em `POST /contas/:id/rascunho/enviar` e atribuído a toda rodada
+    criada naquele envio (uma por comanda com rascunho).
+    `serializarItemProducao` passou a expor `envioId` (via join com a rodada).
+  - Kanban da Cozinha: chave de agrupamento dos cards passou de `rodadaId` pra
+    `envioId ?? rodadaId ?? id` — comandas do mesmo envio caem no mesmo card, com o nome de
+    cada comanda ao lado do item quando há mais de uma no grupo. "Avançar pedido",
+    "Reimprimir" e "Cancelar pedido inteiro" continuam chamando as rotas de rodada
+    individual (`PATCH /rodadas/:id/avancar`/`/cancelar`, `/imprimir/rodada/:id`), só que
+    agora em loop pelas rodadas distintas do grupo — sem rota nova no backend pra isso.
+    Detecção de "grupo dividido" generalizada da mesma forma (antes só por `rodadaId`).
+  - 2 testes novos pra serialização do `envioId` (com/sem rodada). Build (backend +
+    frontend) e `npm test` (83 testes) verificados sem regressão.
+
 ### 2026-07-25
 - **Adicionar item direto no Caixa, sem passar pela cozinha.** Pedido do usuário: na hora de
   fechar a conta, poder adicionar um item esquecido de lançar em qualquer comanda da mesa,

@@ -81,7 +81,7 @@ export function montarItensParaCriar(
 // Reaproveitado pela criação direta e pelo envio do rascunho da mesa.
 export async function criarRodadaDeItens(
   tx: Prisma.TransactionClient,
-  params: { comandaId: string; estabelecimentoId: string; userId: string | null; itens: EntradaItemRodada[] },
+  params: { comandaId: string; estabelecimentoId: string; userId: string | null; itens: EntradaItemRodada[]; envioId?: string | null },
 ) {
   const cardapio = await tx.itemCardapio.findMany({
     where: { id: { in: params.itens.map((i) => i.itemCardapioId) }, estabelecimentoId: params.estabelecimentoId, disponivel: true },
@@ -93,7 +93,9 @@ export async function criarRodadaDeItens(
 
   const itensCriados = [];
   if (itensParaCriar.length > 0) {
-    const rodada = await tx.rodadaComanda.create({ data: { comandaId: params.comandaId, criadoPorUsuarioId: params.userId } });
+    const rodada = await tx.rodadaComanda.create({
+      data: { comandaId: params.comandaId, criadoPorUsuarioId: params.userId, envioId: params.envioId ?? null },
+    });
     for (const item of itensParaCriar) {
       itensCriados.push(await tx.itemComanda.create({ data: { ...item, comandaId: params.comandaId, rodadaId: rodada.id, criadoPorUsuarioId: params.userId } }));
     }
