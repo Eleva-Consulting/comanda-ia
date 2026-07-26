@@ -13,6 +13,7 @@ import { buscarContaComResumo, emitirContaAtualizada } from './pagamentos.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 const RodadaParamsSchema  = Type.Object({ id: Type.String() });
+const EnvioParamsSchema   = Type.Object({ envioId: Type.String() });
 const ComandaParamsSchema = Type.Object({ id: Type.String() });
 
 const CancelarRodadaSchema = Type.Object({
@@ -131,6 +132,37 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
       numeroPessoas: rodada.comanda.conta.numeroPessoas,
       abertaPorNome: rodada.comanda.conta.abertaPor?.nome ?? null,
       itens:         rodada.itens.map(serializarItemComanda),
+    };
+  });
+
+  // ── GET /rodadas/envio/:envioId ────────────────────────────────────────────────
+  // Usada pela tela de impressão agrupada (ImprimirEnvio.tsx) — um ticket só com todas
+  // as comandas enviadas juntas no mesmo clique de "Confirmar e enviar tudo pra cozinha".
+  fastify.get('/rodadas/envio/:envioId', {
+    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha'), moduloAtivo('mesas')],
+    schema: { params: EnvioParamsSchema },
+  }, async (request, reply) => {
+    const { envioId } = request.params as { envioId: string };
+    const { estabelecimentoId } = request.user;
+
+    const rodadas = await prisma.rodadaComanda.findMany({
+      where:   { envioId, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+      include: { comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } }, itens: true },
+      orderBy: { criadaEm: 'asc' },
+    });
+    if (rodadas.length === 0) return reply.status(404).send({ erro: 'Envio não encontrado' });
+
+    const primeira = rodadas[0];
+    return {
+      envioId,
+      criadaEm:      primeira.criadaEm,
+      mesaNumero:    primeira.comanda.conta.mesa?.numero ?? null,
+      numeroPessoas: primeira.comanda.conta.numeroPessoas,
+      abertaPorNome: primeira.comanda.conta.abertaPor?.nome ?? null,
+      comandas:      rodadas.map((r) => ({
+        nome:  r.comanda.nome,
+        itens: r.itens.map(serializarItemComanda),
+      })),
     };
   });
 
