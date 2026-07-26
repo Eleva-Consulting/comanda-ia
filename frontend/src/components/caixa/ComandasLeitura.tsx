@@ -1,15 +1,17 @@
-import { X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import type { ComandaResumo, ItemResumo } from './tipos'
 import { formatarReais } from './tipos'
 
 interface Props {
   comandas: ComandaResumo[]
   onCancelarItem: (item: ItemResumo) => void
+  onAdicionarItem: (comandaId: string) => void
 }
 
 // Cards por comanda — leitura dos itens, com a exceção de poder cancelar um item
-// (pagar continua só pelo fluxo "Receber pagamento").
-export default function ComandasLeitura({ comandas, onCancelarItem }: Props) {
+// (pagar continua só pelo fluxo "Receber pagamento") e adicionar um item esquecido
+// direto na conta (sem passar pela cozinha).
+export default function ComandasLeitura({ comandas, onCancelarItem, onAdicionarItem }: Props) {
   return (
     <>
       {comandas.map((comanda) => (
@@ -44,6 +46,12 @@ export default function ComandasLeitura({ comandas, onCancelarItem }: Props) {
               </div>
             ))}
           </div>
+          <button
+            onClick={() => onAdicionarItem(comanda.comandaId)}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-medium text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          >
+            <Plus className="h-3.5 w-3.5" /> Adicionar item
+          </button>
         </div>
       ))}
     </>
