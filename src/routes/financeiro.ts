@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, apenasDono } from '../plugins/auth.js';
-import { resolverIntervaloPeriodo, calcularVendasPorDia, agruparPorMesa } from '../utils/periodoRelatorio.js';
+import { resolverIntervaloPeriodo, calcularVendasPorDia, agruparPorMesa, agruparMaisEMenosVendidos } from '../utils/periodoRelatorio.js';
 
 const PeriodoQuerySchema = Type.Object({
   inicio: Type.Optional(Type.String({ minLength: 10, maxLength: 10 })),
@@ -23,7 +23,7 @@ export async function financeiroRoutes(fastify: FastifyInstance) {
     // módulo de Mesas — mesmo par que o Dashboard já soma pro "hoje" (2026-07-16), agora
     // também no período escolhido aqui. Estabelecimento que vende só por mesa (sem nenhum
     // Pedido) até então não tinha nenhuma tela pra ver o histórico financeiro.
-    const [agregadoPedidos, agregadoMesas, pedidosPeriodo, pagamentosMesasPeriodo] = await Promise.all([
+    const [agregadoPedidos, agregadoMesas, pedidosPeriodo, pagamentosMesasPeriodo, itensPedidoPeriodo, itensComandaPeriodo] = await Promise.all([
       prisma.pedido.groupBy({
         by: ['formaPagamento'],
         where: {
@@ -59,6 +59,24 @@ export async function financeiroRoutes(fastify: FastifyInstance) {
           criadoEm: { gte: inicioUTC, lte: fimUTC },
         },
         select: { criadoEm: true, valor: true, conta: { select: { mesa: { select: { numero: true } } } } },
+      }),
+      prisma.itemPedido.findMany({
+        where: {
+          pedido: {
+            estabelecimentoId: estabelecimentoId!,
+            status: { not: 'cancelado' },
+            criadoEm: { gte: inicioUTC, lte: fimUTC },
+          },
+        },
+        select: { nomeItem: true, quantidade: true },
+      }),
+      prisma.itemComanda.findMany({
+        where: {
+          comanda: { conta: { estabelecimentoId: estabelecimentoId! } },
+          status: { not: 'cancelado' },
+          recebidoEm: { gte: inicioUTC, lte: fimUTC },
+        },
+        select: { nomeItem: true, quantidade: true },
       }),
     ]);
 
@@ -96,6 +114,11 @@ export async function financeiroRoutes(fastify: FastifyInstance) {
       pagamentosMesasPeriodo.map((p) => ({ valor: Number(p.valor), mesaNumero: p.conta.mesa?.numero ?? null })),
     );
 
+    const { maisVendidos, menosVendidos } = agruparMaisEMenosVendidos([
+      ...itensPedidoPeriodo,
+      ...itensComandaPeriodo,
+    ]);
+
     return {
       periodo: { inicio: inicioLabel, fim: fimLabel },
       porFormaPagamento,
@@ -103,6 +126,8 @@ export async function financeiroRoutes(fastify: FastifyInstance) {
       vendasPorDia,
       topDias,
       porMesa,
+      maisVendidos,
+      menosVendidos,
     };
   });
 }

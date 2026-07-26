@@ -91,3 +91,29 @@ export function agruparPorMesa(pagamentos: PagamentoParaMesa[]): Array<{ mesaNum
 
   return Object.values(porMesaMap).sort((a, b) => b.total - a.total);
 }
+
+interface ItemParaRanking {
+  nomeItem:   string;
+  quantidade: number;
+}
+
+/** Ranking dos itens mais e menos vendidos no período, por quantidade (unidades), somando as
+ *  duas origens (Pedido balcão/delivery/link + ItemComanda do módulo de Mesas) — agrupado por
+ *  nomeItem (nem todo item tem itemCardapioId, ex.: ItemPedido nunca tem). "Menos vendidos" só
+ *  ranqueia entre itens que tiveram pelo menos 1 unidade vendida — nunca inclui item do
+ *  cardápio com zero venda no período. */
+export function agruparMaisEMenosVendidos(itens: ItemParaRanking[], limite = 5): {
+  maisVendidos:  Array<{ nomeItem: string; quantidade: number }>;
+  menosVendidos: Array<{ nomeItem: string; quantidade: number }>;
+} {
+  const porItemMap = itens.reduce<Record<string, number>>((acc, i) => {
+    acc[i.nomeItem] = (acc[i.nomeItem] ?? 0) + i.quantidade;
+    return acc;
+  }, {});
+  const lista = Object.entries(porItemMap).map(([nomeItem, quantidade]) => ({ nomeItem, quantidade }));
+
+  const maisVendidos  = [...lista].sort((a, b) => b.quantidade - a.quantidade).slice(0, limite);
+  const menosVendidos = [...lista].sort((a, b) => a.quantidade - b.quantidade).slice(0, limite);
+
+  return { maisVendidos, menosVendidos };
+}
