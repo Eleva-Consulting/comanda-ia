@@ -13,10 +13,19 @@ import { buscarContaComResumo, emitirContaAtualizada } from './pagamentos.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 const RodadaParamsSchema  = Type.Object({ id: Type.String() });
+const EnvioParamsSchema   = Type.Object({ envioId: Type.String() });
+const ComandaParamsSchema = Type.Object({ id: Type.String() });
 
 const CancelarRodadaSchema = Type.Object({
   motivo: Type.String({ minLength: 1, maxLength: 200 }),
   senha:  Type.String({ minLength: 1 }),
+});
+
+const AdicionarItemDiretoSchema = Type.Object({
+  itemCardapioId: Type.String({ minLength: 1 }),
+  quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+  observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+  acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
 });
 
 export interface EntradaItemRodada {
@@ -73,7 +82,7 @@ export function montarItensParaCriar(
 // Reaproveitado pela criação direta e pelo envio do rascunho da mesa.
 export async function criarRodadaDeItens(
   tx: Prisma.TransactionClient,
-  params: { comandaId: string; estabelecimentoId: string; userId: string | null; itens: EntradaItemRodada[] },
+  params: { comandaId: string; estabelecimentoId: string; userId: string | null; itens: EntradaItemRodada[]; envioId?: string | null },
 ) {
   const cardapio = await tx.itemCardapio.findMany({
     where: { id: { in: params.itens.map((i) => i.itemCardapioId) }, estabelecimentoId: params.estabelecimentoId, disponivel: true },
@@ -85,7 +94,9 @@ export async function criarRodadaDeItens(
 
   const itensCriados = [];
   if (itensParaCriar.length > 0) {
-    const rodada = await tx.rodadaComanda.create({ data: { comandaId: params.comandaId, criadoPorUsuarioId: params.userId } });
+    const rodada = await tx.rodadaComanda.create({
+      data: { comandaId: params.comandaId, criadoPorUsuarioId: params.userId, envioId: params.envioId ?? null },
+    });
     for (const item of itensParaCriar) {
       itensCriados.push(await tx.itemComanda.create({ data: { ...item, comandaId: params.comandaId, rodadaId: rodada.id, criadoPorUsuarioId: params.userId } }));
     }
@@ -121,6 +132,37 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
       numeroPessoas: rodada.comanda.conta.numeroPessoas,
       abertaPorNome: rodada.comanda.conta.abertaPor?.nome ?? null,
       itens:         rodada.itens.map(serializarItemComanda),
+    };
+  });
+
+  // ── GET /rodadas/envio/:envioId ────────────────────────────────────────────────
+  // Usada pela tela de impressão agrupada (ImprimirEnvio.tsx) — um ticket só com todas
+  // as comandas enviadas juntas no mesmo clique de "Confirmar e enviar tudo pra cozinha".
+  fastify.get('/rodadas/envio/:envioId', {
+    onRequest: [autenticar, temPermissao('mesas', 'producao', 'cozinha'), moduloAtivo('mesas')],
+    schema: { params: EnvioParamsSchema },
+  }, async (request, reply) => {
+    const { envioId } = request.params as { envioId: string };
+    const { estabelecimentoId } = request.user;
+
+    const rodadas = await prisma.rodadaComanda.findMany({
+      where:   { envioId, comanda: { conta: { estabelecimentoId: estabelecimentoId! } } },
+      include: { comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } }, itens: true },
+      orderBy: { criadaEm: 'asc' },
+    });
+    if (rodadas.length === 0) return reply.status(404).send({ erro: 'Envio não encontrado' });
+
+    const primeira = rodadas[0];
+    return {
+      envioId,
+      criadaEm:      primeira.criadaEm,
+      mesaNumero:    primeira.comanda.conta.mesa?.numero ?? null,
+      numeroPessoas: primeira.comanda.conta.numeroPessoas,
+      abertaPorNome: primeira.comanda.conta.abertaPor?.nome ?? null,
+      comandas:      rodadas.map((r) => ({
+        nome:  r.comanda.nome,
+        itens: r.itens.map(serializarItemComanda),
+      })),
     };
   });
 
@@ -260,5 +302,56 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
     }
 
     return { rodadaId: id, itensCancelados, itensNaoCancelados, contaLiberada };
+  });
+
+  // ── POST /comandas/:id/item-direto ───────────────────────────────────────────
+  // Adiciona um item já como "entregue" direto na comanda, sem passar pela cozinha —
+  // uso do Caixa na hora de fechar a conta (item esquecido de lançar, não precisa de
+  // preparo). Não cria RodadaComanda nem dispara evento de produção/Kanban, só
+  // avisa que a conta mudou (mesmo padrão de conta:atualizada usado em toda parte).
+  fastify.post('/comandas/:id/item-direto', {
+    onRequest: [autenticar, temPermissao('caixa'), moduloAtivo('mesas')],
+    schema: { params: ComandaParamsSchema, body: AdicionarItemDiretoSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { estabelecimentoId, userId } = request.user;
+    const entrada = request.body as {
+      itemCardapioId: string; quantidade: number; observacao?: string; acompanhamento?: string;
+    };
+
+    const comanda = await prisma.comanda.findFirst({
+      where:   { id, conta: { estabelecimentoId: estabelecimentoId! } },
+      include: { conta: true },
+    });
+    if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
+    if (comanda.conta.status !== 'aberta' && comanda.conta.status !== 'aguardando_pagamento') {
+      return reply.status(422).send({ erro: 'Não é possível adicionar item numa conta fechada ou cancelada' });
+    }
+
+    const cardapio = await prisma.itemCardapio.findMany({
+      where:   { id: entrada.itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+      include: { categoria: { select: { opcoesAcompanhamento: true } } },
+    });
+    const cardapioPorId = new Map<string, ItemCardapioComCategoria>(cardapio.map((i) => [i.id, i]));
+    const { itensParaCriar, itensDescartados } = montarItensParaCriar(cardapioPorId, [entrada]);
+    if (itensParaCriar.length === 0) {
+      return reply.status(422).send({ erro: itensDescartados[0]?.motivo ?? 'Não foi possível adicionar o item' });
+    }
+
+    const agora = new Date();
+    const criado = await prisma.itemComanda.create({
+      data: {
+        ...itensParaCriar[0],
+        comandaId:          id,
+        status:             'entregue',
+        entregueEm:         agora,
+        criadoPorUsuarioId: userId,
+      },
+    });
+    const serializado = { ...criado, precoUnit: Number(criado.precoUnit) };
+    getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
+    await emitirContaAtualizada(estabelecimentoId!, comanda.contaId);
+
+    return reply.status(201).send(serializado);
   });
 }

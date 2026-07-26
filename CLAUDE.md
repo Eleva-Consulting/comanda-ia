@@ -408,6 +408,65 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-26 (continuação 2)
+- **Ticket único na impressão de envios com várias comandas.** Dois ajustes de feedback do
+  usuário depois de testar o agrupamento por envio (acima): (1) a etiqueta de comanda por
+  item virou uma "pill" azul no fim da linha, ao lado do cronômetro, em vez de texto cinza
+  entre parênteses grudado no nome do item — mais legível; (2) tanto a impressão automática
+  quanto o botão "Reimprimir" agora geram **um papel só** com todas as comandas do envio
+  juntas (cada comanda com seu próprio sub-título no ticket), em vez de um papel separado
+  por comanda.
+  - Nova rota `GET /rodadas/envio/:envioId`: busca todas as rodadas daquele envio e devolve
+    `{ envioId, mesaNumero, numeroPessoas, abertaPorNome, comandas: [{ nome, itens }] }`.
+  - Nova página `ImprimirEnvio.tsx` (rota `/imprimir/envio/:envioId`), mesmo estilo de
+    `ImprimirRodada.tsx`, com um sub-título por comanda antes dos itens dela.
+    `imprimirRodada`/`imprimirRodadaAutomaticamente` em `Cozinha.tsx` agora decidem entre
+    `/imprimir/envio/:envioId` (quando a rodada tem envioId) ou `/imprimir/rodada/:id`
+    (fallback pra rodada legada sem envioId) — mesmo dedupe de antes, só que agora
+    considera o envioId sempre que existir.
+  - Sem migration (só rota e página novas). Build (backend + frontend) verificado sem
+    regressão.
+
+### 2026-07-26
+- **Comandas enviadas juntas aparecem agrupadas por mesa na Cozinha.** Pedido do usuário:
+  quando o pedido de uma mesa é feito por comandas separadas, hoje cada comanda vira um card
+  independente no Kanban — o ideal é que fiquem juntas, avançando a mesa inteira de uma vez.
+  Confirmado com o usuário: só agrupa o que foi enviado no mesmo clique de "Confirmar e
+  enviar tudo pra cozinha" (não junta comandas enviadas em momentos diferentes); se uma
+  comanda do grupo avançar mais que a outra, mesmo tratamento de hoje pra rodada dividida
+  (bloqueia ação em lote até resincronizar).
+  - Campo novo `RodadaComanda.envioId` (opcional, sem FK — só correlação opaca): o mesmo
+    valor é gerado uma vez em `POST /contas/:id/rascunho/enviar` e atribuído a toda rodada
+    criada naquele envio (uma por comanda com rascunho).
+    `serializarItemProducao` passou a expor `envioId` (via join com a rodada).
+  - Kanban da Cozinha: chave de agrupamento dos cards passou de `rodadaId` pra
+    `envioId ?? rodadaId ?? id` — comandas do mesmo envio caem no mesmo card, com o nome de
+    cada comanda ao lado do item quando há mais de uma no grupo. "Avançar pedido",
+    "Reimprimir" e "Cancelar pedido inteiro" continuam chamando as rotas de rodada
+    individual (`PATCH /rodadas/:id/avancar`/`/cancelar`, `/imprimir/rodada/:id`), só que
+    agora em loop pelas rodadas distintas do grupo — sem rota nova no backend pra isso.
+    Detecção de "grupo dividido" generalizada da mesma forma (antes só por `rodadaId`).
+  - 2 testes novos pra serialização do `envioId` (com/sem rodada). Build (backend +
+    frontend) e `npm test` (83 testes) verificados sem regressão.
+
+### 2026-07-25
+- **Adicionar item direto no Caixa, sem passar pela cozinha.** Pedido do usuário: na hora de
+  fechar a conta, poder adicionar um item esquecido de lançar em qualquer comanda da mesa,
+  direto pelo Caixa. Decisões confirmadas: o item entra já como `entregue` (não passa por
+  rascunho/Kanban/preparo — é pra item que não precisa de cozinha, tipo "esqueceram de
+  lançar"), e basta ter a permissão `caixa` (não precisa também de `mesas`).
+  - Nova rota `POST /comandas/:id/item-direto` (`temPermissao('caixa')`) — reaproveita a
+    função pura `montarItensParaCriar` (mesma validação contra o cardápio/acompanhamento já
+    usada no envio de rascunho), mas cria o `ItemComanda` direto com `status: 'entregue'` e
+    sem `RodadaComanda` nenhuma — não dispara evento de produção, só `conta:atualizada`.
+    Bloqueia se a conta estiver `fechada`/`cancelada`.
+  - Novo componente `frontend/src/components/caixa/AdicionarItem.tsx`: busca no cardápio,
+    escolhe acompanhamento (se a categoria tiver), quantidade e observação — botão "+
+    Adicionar item" novo em cada card de comanda em `ComandasLeitura.tsx`. Fecha e recarrega
+    o resumo da conta ao confirmar.
+  - Sem migration (só rota nova + Model já existente). Build (backend + frontend) e
+    `npm test` (81 testes) verificados sem regressão.
+
 ### 2026-07-24 (continuação)
 - **Cancelar o pedido (rodada) inteiro de uma vez, na Cozinha.** Pedido do usuário: hoje só
   dá pra cancelar item por item, pedindo senha em cada um — muito trabalhoso pra cancelar um

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
@@ -125,6 +126,11 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
       await prisma.conta.update({ where: { id }, data: { numeroPessoas } });
     }
 
+    // Mesmo envioId pra todas as rodadas criadas aqui — permite a Cozinha agrupar num
+    // card só as comandas enviadas juntas nesse clique (ver PATCH /rodadas/:id/avancar
+    // e /cancelar, que continuam operando por rodada individual).
+    const envioId = randomUUID();
+
     const { itensCriadosTotal, itensDescartados } = await prisma.$transaction(async (tx) => {
       const itensCriadosTotal: Awaited<ReturnType<typeof criarRodadaDeItens>>['itensCriados'] = [];
       const itensDescartados: { itemCardapioId: string; motivo: string; refId?: string }[] = [];
@@ -133,6 +139,7 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
           comandaId: comanda.id,
           estabelecimentoId: estabelecimentoId!,
           userId,
+          envioId,
           itens: comanda.rascunhoItens.map((r) => ({
             itemCardapioId: r.itemCardapioId,
             quantidade: r.quantidade,
@@ -156,7 +163,7 @@ export async function rascunhoRoutes(fastify: FastifyInstance) {
     }
     const paraProducao = await prisma.itemComanda.findMany({
       where: { id: { in: itensCriadosTotal.map((i) => i.id) } },
-      include: { setor: true, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
+      include: { setor: true, rodada: { select: { envioId: true } }, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
     });
     for (const item of paraProducao) {
       getIO().to(salaProducao(estabelecimentoId!, item.setorId)).emit('producao:item-novo', serializarItemProducao(item));

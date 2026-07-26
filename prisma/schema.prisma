@@ -432,6 +432,13 @@ model RodadaComanda {
   id       String   @id @default(uuid())
   criadaEm DateTime @default(now())
 
+  // Id compartilhado entre as rodadas criadas no mesmo clique de "Confirmar e enviar tudo
+  // pra cozinha" (POST /contas/:id/rascunho/enviar) — uma rodada por comanda com rascunho,
+  // todas com o mesmo envioId. Usado só pra agrupar visualmente na Cozinha (Kanban) e nas
+  // ações em lote (avançar/reimprimir/cancelar todas de uma vez); sem tabela própria, é só
+  // uma correlação opaca (não é FK).
+  envioId String?
+
   comandaId String
   comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
 
