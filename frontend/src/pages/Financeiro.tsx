@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Landmark, Loader2, Calendar } from 'lucide-react'
+import { Landmark, Loader2, Calendar, Table2 } from 'lucide-react'
 import {
   BarChart,
   Bar,
@@ -25,6 +25,7 @@ interface FinanceiroData {
   totalGeral: number
   vendasPorDia: VendaDia[]
   topDias: Array<{ data: string; faturamento: number }>
+  porMesa: Array<{ mesaNumero: string; quantidade: number; total: number }>
 }
 
 const formaPagamentoLabel: Record<string, string> = {
@@ -123,6 +124,26 @@ export default function Financeiro() {
           </div>
         )}
       </div>
+
+      {/* Vendas por mesa */}
+      {dados.porMesa.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
+            <Table2 className="h-5 w-5 text-orange-400" /> Vendas por mesa
+          </h3>
+          <div className="space-y-2">
+            {dados.porMesa.map((m) => (
+              <div key={m.mesaNumero} className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-3">
+                <div>
+                  <p className="font-medium">{m.mesaNumero === 'Sem mesa' ? m.mesaNumero : `Mesa ${m.mesaNumero}`}</p>
+                  <p className="text-xs text-zinc-500">{m.quantidade} pagamento{m.quantidade !== 1 ? 's' : ''}</p>
+                </div>
+                <span className="font-bold">{formatarBRL(m.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Top 5 dias */}
       {dados.topDias.length > 0 && (

@@ -408,6 +408,27 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-27
+- **Relatório "Vendas por mesa" na tela Financeiro.** Pedido do usuário: ver no módulo
+  Financeiro todas as vendas do dia agrupadas por mesa. Decisões confirmadas: resumo
+  agregado por número de mesa (não uma linha por atendimento — mesa usada por clientes
+  diferentes no mesmo dia soma tudo junto), e "venda" conta como pagamento confirmado no
+  período (mesmo critério já usado no resto da tela — não espera a conta fechar por
+  completo). Respeita o mesmo filtro de período (`FiltroPeriodo`) que o resto da tela
+  já usa, não é fixo em "hoje" (hoje continua sendo o padrão inicial).
+  - Backend: `GET /meu-estabelecimento/financeiro` ganhou `porMesa` na resposta,
+    reaproveitando a mesma query de `Pagamento` confirmado que já existia (só ampliada
+    pra trazer `conta.mesa.numero` junto). Nova função pura `agruparPorMesa` em
+    `periodoRelatorio.ts` (Prisma `groupBy` não atravessa relação, por isso o
+    agrupamento é feito em JS, mesmo padrão de `calcularVendasPorDia`) — pagamento sem
+    mesa vinculada (não deveria acontecer na prática, mas defensivo) cai em "Sem mesa"
+    em vez de quebrar. 4 testes novos.
+  - Frontend: novo card "Vendas por mesa" em `Financeiro.tsx`, mesmo estilo visual do
+    card "Por forma de pagamento" — só aparece quando há pelo menos uma venda de mesa no
+    período (estabelecimento só-balcão não vê o card vazio).
+  - Sem migration. Build (backend + frontend) e `npm test` (87 testes) verificados sem
+    regressão.
+
 ### 2026-07-26 (continuação 3)
 - **Corrige item "órfão" preso na Cozinha quando a mesa é cancelada (e vice-versa).**
   Achado real em produção: usuário reportou erro "não é possível cancelar pedido de uma
