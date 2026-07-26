@@ -108,22 +108,25 @@ export default function Cozinha() {
   // 'producao:item-novo' (um por item) e deve imprimir uma vez só.
   const rodadasImpressasRef = useRef<Set<string>>(new Set())
 
-  function imprimirRodada(rodadaId: string) {
+  // Com envioId: imprime um ticket só com todas as comandas daquele envio juntas.
+  // Sem envioId (rodada legada, de antes dessa funcionalidade): imprime só aquela rodada.
+  function imprimirRodada(envioId: string | null, rodadaId: string) {
     const iframe = document.createElement('iframe')
     iframe.style.position = 'fixed'
     iframe.style.top      = '-10000px'
     iframe.style.left     = '-10000px'
     iframe.style.width    = '1px'
     iframe.style.height   = '1px'
-    iframe.src = `/imprimir/rodada/${rodadaId}`
+    iframe.src = envioId ? `/imprimir/envio/${envioId}` : `/imprimir/rodada/${rodadaId}`
     document.body.appendChild(iframe)
     setTimeout(() => iframe.remove(), 8000)
   }
 
-  function imprimirRodadaAutomaticamente(rodadaId: string) {
-    if (rodadasImpressasRef.current.has(rodadaId)) return
-    rodadasImpressasRef.current.add(rodadaId)
-    imprimirRodada(rodadaId)
+  function imprimirRodadaAutomaticamente(envioId: string | null, rodadaId: string) {
+    const chave = envioId ?? rodadaId
+    if (rodadasImpressasRef.current.has(chave)) return
+    rodadasImpressasRef.current.add(chave)
+    imprimirRodada(envioId, rodadaId)
   }
 
   const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
@@ -426,7 +429,7 @@ export default function Cozinha() {
     if (!socket) return
 
     function aoReceberItemNovo(item: ItemProducao) {
-      if (item.rodadaId) imprimirRodadaAutomaticamente(item.rodadaId)
+      if (item.rodadaId) imprimirRodadaAutomaticamente(item.envioId, item.rodadaId)
       atualizarItemLocal(item)
     }
 
@@ -744,7 +747,11 @@ export default function Cozinha() {
                               </button>
                             )}
                             <button
-                              onClick={() => grupo.rodadaIds.forEach((rodadaId) => imprimirRodada(rodadaId))}
+                              onClick={() => {
+                                const envioId = grupo.itens[0]?.envioId ?? null
+                                if (envioId) imprimirRodada(envioId, grupo.rodadaIds[0])
+                                else grupo.rodadaIds.forEach((rodadaId) => imprimirRodada(null, rodadaId))
+                              }}
                               className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
                               title="Reimprimir comanda(s) do pedido"
                             >

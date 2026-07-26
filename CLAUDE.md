@@ -408,6 +408,25 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-26 (continuação 2)
+- **Ticket único na impressão de envios com várias comandas.** Dois ajustes de feedback do
+  usuário depois de testar o agrupamento por envio (acima): (1) a etiqueta de comanda por
+  item virou uma "pill" azul no fim da linha, ao lado do cronômetro, em vez de texto cinza
+  entre parênteses grudado no nome do item — mais legível; (2) tanto a impressão automática
+  quanto o botão "Reimprimir" agora geram **um papel só** com todas as comandas do envio
+  juntas (cada comanda com seu próprio sub-título no ticket), em vez de um papel separado
+  por comanda.
+  - Nova rota `GET /rodadas/envio/:envioId`: busca todas as rodadas daquele envio e devolve
+    `{ envioId, mesaNumero, numeroPessoas, abertaPorNome, comandas: [{ nome, itens }] }`.
+  - Nova página `ImprimirEnvio.tsx` (rota `/imprimir/envio/:envioId`), mesmo estilo de
+    `ImprimirRodada.tsx`, com um sub-título por comanda antes dos itens dela.
+    `imprimirRodada`/`imprimirRodadaAutomaticamente` em `Cozinha.tsx` agora decidem entre
+    `/imprimir/envio/:envioId` (quando a rodada tem envioId) ou `/imprimir/rodada/:id`
+    (fallback pra rodada legada sem envioId) — mesmo dedupe de antes, só que agora
+    considera o envioId sempre que existir.
+  - Sem migration (só rota e página novas). Build (backend + frontend) verificado sem
+    regressão.
+
 ### 2026-07-26
 - **Comandas enviadas juntas aparecem agrupadas por mesa na Cozinha.** Pedido do usuário:
   quando o pedido de uma mesa é feito por comandas separadas, hoje cada comanda vira um card
