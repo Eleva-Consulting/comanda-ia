@@ -5,8 +5,10 @@ import { prisma } from '../database.js';
 import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
+import { decidirLiberacaoConta } from '../utils/cancelamentoRodada.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
 import { paraOpcoesAcompanhamento } from '../utils/acompanhamento.js';
+import { buscarContaComResumo, emitirContaAtualizada } from './pagamentos.js';
 import type { StatusConta, StatusProducao } from '../generated/prisma/enums.js';
 import { Prisma } from '../generated/prisma/client.js';
 
@@ -50,6 +52,8 @@ const AtualizarStatusContaSchema = Type.Object({
     Type.Literal('aguardando_pagamento'),
     Type.Literal('cancelada'),
   ]),
+  motivo: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  senha:  Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const transicoesContaPermitidas: Record<StatusConta, StatusConta[]> = {
@@ -207,13 +211,18 @@ export async function contasRoutes(fastify: FastifyInstance) {
   });
 
   // ── PATCH /contas/:id/status ────────────────────────────────────────────────
+  // Cancelar a mesa ('cancelada') também cancela junto qualquer item ainda ativo
+  // (recebido/em_preparo/pronto) em qualquer comanda da conta — antes o item ficava
+  // "órfão" (ativo na Cozinha pra sempre, já que a conta-mãe tinha sumido do Caixa e a
+  // mesa aparecia livre). Mesma trava de senha do cancelamento de item avulso: livre se
+  // tudo ainda está "recebido", exige motivo+senha se algo já avançou.
   fastify.patch('/contas/:id/status', {
     onRequest: [autenticar, temPermissao('mesas'), moduloAtivo('mesas')],
     schema: { params: ContaParamsSchema, body: AtualizarStatusContaSchema },
   }, async (request, reply) => {
-    const { id }     = request.params as { id: string };
-    const { status } = request.body as { status: StatusConta };
-    const { estabelecimentoId } = request.user;
+    const { id } = request.params as { id: string };
+    const { status, motivo, senha } = request.body as { status: StatusConta; motivo?: string; senha?: string };
+    const { estabelecimentoId, userId } = request.user;
 
     const conta = await prisma.conta.findFirst({ where: { id, estabelecimentoId: estabelecimentoId! } });
     if (!conta) return reply.status(404).send({ erro: 'Conta não encontrada' });
@@ -222,11 +231,67 @@ export async function contasRoutes(fastify: FastifyInstance) {
       return reply.status(422).send({ erro: 'Transição de status não permitida' });
     }
 
-    const atualizada = await prisma.conta.update({
-      where:   { id },
-      data:    { status, fechadaEm: status === 'cancelada' ? new Date() : null },
-      include: { mesa: true, comandas: { include: { itens: true } } },
+    let itensParaCancelar: { id: string; status: StatusProducao }[] = [];
+    if (status === 'cancelada') {
+      itensParaCancelar = await prisma.itemComanda.findMany({
+        where:  { comanda: { contaId: id }, status: { in: ['recebido', 'em_preparo', 'pronto'] } },
+        select: { id: true, status: true },
+      });
+
+      if (itensParaCancelar.length > 0) {
+        const algumJaPago = await prisma.pagamentoItem.findFirst({
+          where: { itemComandaId: { in: itensParaCancelar.map((i) => i.id) }, pagamento: { status: 'confirmado' } },
+        });
+        if (algumJaPago) {
+          return reply.status(422).send({ erro: 'Há item(ns) já pago(s) nesta mesa — resolva pelo Caixa (estorno) antes de cancelar' });
+        }
+
+        if (!itensParaCancelar.every((i) => podeCancelarLivremente(i.status))) {
+          if (!motivo) return reply.status(400).send({ erro: 'Motivo é obrigatório pra cancelar mesa com item já em produção' });
+          if (!senha) return reply.status(400).send({ erro: 'Senha de supervisor é obrigatória pra cancelar mesa com item já em produção' });
+
+          const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId! } });
+          if (!estabelecimento?.senhaReabrirPedido) {
+            return reply.status(400).send({ erro: 'Configure a senha de supervisor em Configurações antes de cancelar mesa com item em produção' });
+          }
+          const senhaCorreta = await bcrypt.compare(senha, estabelecimento.senhaReabrirPedido);
+          if (!senhaCorreta) return reply.status(403).send({ erro: 'Senha incorreta' });
+        }
+      }
+    }
+
+    const agora = new Date();
+    const atualizada = await prisma.$transaction(async (tx) => {
+      if (itensParaCancelar.length > 0) {
+        await tx.itemComanda.updateMany({
+          where: { id: { in: itensParaCancelar.map((i) => i.id) } },
+          data:  { status: 'cancelado', canceladoEm: agora },
+        });
+      }
+      return tx.conta.update({
+        where:   { id },
+        data:    { status, fechadaEm: status === 'cancelada' ? agora : null },
+        include: { mesa: true, comandas: { include: { itens: true } } },
+      });
     });
+
+    if (itensParaCancelar.length > 0) {
+      await prisma.logAuditoria.create({
+        data: {
+          acao:         'conta:cancelada',
+          entidadeTipo: 'Conta',
+          entidadeId:   id,
+          motivo:       motivo ?? null,
+          dadosAntes:   { itensAtivos: itensParaCancelar },
+          dadosDepois:  { status: 'cancelado' },
+          estabelecimentoId: estabelecimentoId!,
+          usuarioId:    userId,
+        },
+      });
+      for (const item of itensParaCancelar) {
+        await emitirAtualizacaoItemComanda(estabelecimentoId!, item.id);
+      }
+    }
 
     getIO().to(estabelecimentoId!).emit('conta:atualizada', serializarConta(atualizada));
     return serializarConta(atualizada);
@@ -354,6 +419,29 @@ export async function contasRoutes(fastify: FastifyInstance) {
           usuarioId:    userId,
         },
       });
+
+      // Se esse cancelamento deixou a conta (mesa) sem nenhum item ativo em lugar
+      // nenhum e sem saldo devedor, libera ela sozinha — mesma lógica de
+      // PATCH /rodadas/:id/cancelar, pra não deixar a mesa "presa" ocupada por causa
+      // de um item que já nem existe mais.
+      const contaId = item.comanda.contaId;
+      const itensPendentes = await prisma.itemComanda.count({
+        where: { comanda: { contaId }, status: { notIn: ['entregue', 'cancelado'] } },
+      });
+      const encontrada = await buscarContaComResumo(estabelecimentoId!, contaId);
+      const itensEntreguesNaConta = await prisma.itemComanda.count({
+        where: { comanda: { contaId }, status: 'entregue' },
+      });
+      const contaLiberada = decidirLiberacaoConta({
+        itensPendentes,
+        podeFechar: encontrada?.resumo.podeFechar ?? false,
+        itensEntreguesNaConta,
+        totalPago: encontrada?.resumo.totalPago ?? 0,
+      });
+      if (contaLiberada) {
+        await prisma.conta.update({ where: { id: contaId }, data: { status: contaLiberada, fechadaEm: new Date() } });
+        await emitirContaAtualizada(estabelecimentoId!, contaId);
+      }
     }
 
     await emitirAtualizacaoItemComanda(estabelecimentoId!, atualizado.id);
