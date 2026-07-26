@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Landmark, Loader2, Calendar, Table2 } from 'lucide-react'
+import { Landmark, Loader2, Calendar, Table2, TrendingUp, TrendingDown } from 'lucide-react'
 import {
   BarChart,
   Bar,
@@ -26,6 +26,8 @@ interface FinanceiroData {
   vendasPorDia: VendaDia[]
   topDias: Array<{ data: string; faturamento: number }>
   porMesa: Array<{ mesaNumero: string; quantidade: number; total: number }>
+  maisVendidos: Array<{ nomeItem: string; quantidade: number }>
+  menosVendidos: Array<{ nomeItem: string; quantidade: number }>
 }
 
 const formaPagamentoLabel: Record<string, string> = {
@@ -142,6 +144,48 @@ export default function Financeiro() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Itens mais e menos vendidos */}
+      {(dados.maisVendidos.length > 0 || dados.menosVendidos.length > 0) && (
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {dados.maisVendidos.length > 0 && (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
+                <TrendingUp className="h-5 w-5 text-emerald-400" /> Mais vendidos
+              </h3>
+              <div className="space-y-2">
+                {dados.maisVendidos.map((item, i) => (
+                  <div key={item.nomeItem} className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-2.5">
+                    <span className="truncate text-sm text-zinc-300">
+                      <span className="mr-2 text-zinc-600">#{i + 1}</span>
+                      {item.nomeItem}
+                    </span>
+                    <span className="shrink-0 font-bold text-emerald-400">{item.quantidade}x</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {dados.menosVendidos.length > 0 && (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
+                <TrendingDown className="h-5 w-5 text-red-400" /> Menos vendidos
+              </h3>
+              <div className="space-y-2">
+                {dados.menosVendidos.map((item, i) => (
+                  <div key={item.nomeItem} className="flex items-center justify-between rounded-xl bg-zinc-950 px-4 py-2.5">
+                    <span className="truncate text-sm text-zinc-300">
+                      <span className="mr-2 text-zinc-600">#{i + 1}</span>
+                      {item.nomeItem}
+                    </span>
+                    <span className="shrink-0 font-bold text-red-400">{item.quantidade}x</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

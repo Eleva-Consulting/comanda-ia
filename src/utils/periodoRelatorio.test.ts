@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diaSaoPaulo, resolverIntervaloPeriodo, calcularVendasPorDia, agruparPorMesa } from './periodoRelatorio.js';
+import { diaSaoPaulo, resolverIntervaloPeriodo, calcularVendasPorDia, agruparPorMesa, agruparMaisEMenosVendidos } from './periodoRelatorio.js';
 
 describe('diaSaoPaulo', () => {
   it('converte um horário UTC de madrugada (ainda dia anterior em Brasília) pro dia certo', () => {
@@ -112,5 +112,51 @@ describe('agruparPorMesa', () => {
 
   it('devolve array vazio quando não há pagamentos', () => {
     expect(agruparPorMesa([])).toEqual([]);
+  });
+});
+
+describe('agruparMaisEMenosVendidos', () => {
+  it('soma quantidade do mesmo item vindo de origens diferentes (Pedido + ItemComanda)', () => {
+    const itens = [
+      { nomeItem: 'Galeto', quantidade: 3 },
+      { nomeItem: 'Galeto', quantidade: 2 },
+      { nomeItem: 'Pizza', quantidade: 1 },
+    ];
+    const { maisVendidos } = agruparMaisEMenosVendidos(itens);
+    expect(maisVendidos).toEqual([
+      { nomeItem: 'Galeto', quantidade: 5 },
+      { nomeItem: 'Pizza', quantidade: 1 },
+    ]);
+  });
+
+  it('maisVendidos traz no máximo o limite informado, do maior pro menor', () => {
+    const itens = [
+      { nomeItem: 'A', quantidade: 10 },
+      { nomeItem: 'B', quantidade: 50 },
+      { nomeItem: 'C', quantidade: 30 },
+      { nomeItem: 'D', quantidade: 5 },
+      { nomeItem: 'E', quantidade: 40 },
+      { nomeItem: 'F', quantidade: 60 },
+    ];
+    const { maisVendidos } = agruparMaisEMenosVendidos(itens, 5);
+    expect(maisVendidos).toHaveLength(5);
+    expect(maisVendidos.map((i) => i.quantidade)).toEqual([60, 50, 40, 30, 10]);
+  });
+
+  it('menosVendidos traz do menor pro maior, nunca item com zero venda', () => {
+    const itens = [
+      { nomeItem: 'A', quantidade: 10 },
+      { nomeItem: 'B', quantidade: 1 },
+      { nomeItem: 'C', quantidade: 3 },
+    ];
+    const { menosVendidos } = agruparMaisEMenosVendidos(itens);
+    expect(menosVendidos.map((i) => i.nomeItem)).toEqual(['B', 'C', 'A']);
+    expect(menosVendidos.every((i) => i.quantidade > 0)).toBe(true);
+  });
+
+  it('devolve listas vazias quando não há itens', () => {
+    const { maisVendidos, menosVendidos } = agruparMaisEMenosVendidos([]);
+    expect(maisVendidos).toEqual([]);
+    expect(menosVendidos).toEqual([]);
   });
 });

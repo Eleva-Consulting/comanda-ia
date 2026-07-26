@@ -408,6 +408,27 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-27 (continuação)
+- **Relatório "Mais vendidos" / "Menos vendidos" na tela Financeiro.** Pedido do usuário:
+  lista dos 5 itens que mais saíram e dos 5 que menos saíram no período. Decisões
+  confirmadas: ranking por quantidade vendida (unidades, não faturamento), somando as
+  duas origens (`ItemPedido` de balcão/delivery/link + `ItemComanda` do módulo de
+  Mesas — mesmo critério de combinar origens já usado no resto do Financeiro), e
+  "menos vendidos" só ranqueia entre itens que tiveram pelo menos 1 venda (nunca lista
+  item do cardápio com zero saída no período).
+  - Agrupamento por `nomeItem` (não por `itemCardapioId`) porque `ItemPedido` nunca tem
+    esse campo — só `ItemComanda` tem. Item cancelado (`ItemComanda.status: 'cancelado'`
+    ou `Pedido.status: 'cancelado'`) não conta.
+  - Nova função pura `agruparMaisEMenosVendidos` em `periodoRelatorio.ts`, com 4 testes
+    novos. Duas queries novas em `GET /meu-estabelecimento/financeiro` (itens de pedido
+    e de comanda no período), reaproveitando o mesmo `resolverIntervaloPeriodo` de
+    sempre.
+  - Frontend: dois cards lado a lado ("Mais vendidos"/"Menos vendidos", ícones verde/
+    vermelho) em `Financeiro.tsx`, só aparecem quando há pelo menos um item vendido no
+    período.
+  - Sem migration. Build (backend + frontend) e `npm test` (91 testes) verificados sem
+    regressão.
+
 ### 2026-07-27
 - **Relatório "Vendas por mesa" na tela Financeiro.** Pedido do usuário: ver no módulo
   Financeiro todas as vendas do dia agrupadas por mesa. Decisões confirmadas: resumo
