@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diaSaoPaulo, resolverIntervaloPeriodo, calcularVendasPorDia } from './periodoRelatorio.js';
+import { diaSaoPaulo, resolverIntervaloPeriodo, calcularVendasPorDia, agruparPorMesa } from './periodoRelatorio.js';
 
 describe('diaSaoPaulo', () => {
   it('converte um horário UTC de madrugada (ainda dia anterior em Brasília) pro dia certo', () => {
@@ -77,5 +77,40 @@ describe('calcularVendasPorDia', () => {
     const { vendasPorDia, topDias } = calcularVendasPorDia([]);
     expect(vendasPorDia).toEqual([]);
     expect(topDias).toEqual([]);
+  });
+});
+
+describe('agruparPorMesa', () => {
+  it('soma pagamentos da mesma mesa, mesmo vindo de contas/atendimentos diferentes', () => {
+    const pagamentos = [
+      { valor: 50, mesaNumero: '5' },
+      { valor: 30, mesaNumero: '5' },
+      { valor: 100, mesaNumero: '3' },
+    ];
+    const resultado = agruparPorMesa(pagamentos);
+    expect(resultado).toEqual([
+      { mesaNumero: '3', quantidade: 1, total: 100 },
+      { mesaNumero: '5', quantidade: 2, total: 80 },
+    ]);
+  });
+
+  it('ordena do maior faturamento pro menor', () => {
+    const pagamentos = [
+      { valor: 10, mesaNumero: '1' },
+      { valor: 90, mesaNumero: '2' },
+      { valor: 50, mesaNumero: '3' },
+    ];
+    const resultado = agruparPorMesa(pagamentos);
+    expect(resultado.map((m) => m.mesaNumero)).toEqual(['2', '3', '1']);
+  });
+
+  it('agrupa pagamento sem mesa vinculada como "Sem mesa"', () => {
+    const pagamentos = [{ valor: 20, mesaNumero: null }];
+    const resultado = agruparPorMesa(pagamentos);
+    expect(resultado).toEqual([{ mesaNumero: 'Sem mesa', quantidade: 1, total: 20 }]);
+  });
+
+  it('devolve array vazio quando não há pagamentos', () => {
+    expect(agruparPorMesa([])).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { prisma } from '../database.js';
 import { autenticar, apenasDono } from '../plugins/auth.js';
-import { resolverIntervaloPeriodo, calcularVendasPorDia } from '../utils/periodoRelatorio.js';
+import { resolverIntervaloPeriodo, calcularVendasPorDia, agruparPorMesa } from '../utils/periodoRelatorio.js';
 
 const PeriodoQuerySchema = Type.Object({
   inicio: Type.Optional(Type.String({ minLength: 10, maxLength: 10 })),
@@ -58,7 +58,7 @@ export async function financeiroRoutes(fastify: FastifyInstance) {
           status: 'confirmado',
           criadoEm: { gte: inicioUTC, lte: fimUTC },
         },
-        select: { criadoEm: true, valor: true },
+        select: { criadoEm: true, valor: true, conta: { select: { mesa: { select: { numero: true } } } } },
       }),
     ]);
 
@@ -92,12 +92,17 @@ export async function financeiroRoutes(fastify: FastifyInstance) {
 
     const { vendasPorDia, topDias } = calcularVendasPorDia(registrosParaVendas);
 
+    const porMesa = agruparPorMesa(
+      pagamentosMesasPeriodo.map((p) => ({ valor: Number(p.valor), mesaNumero: p.conta.mesa?.numero ?? null })),
+    );
+
     return {
       periodo: { inicio: inicioLabel, fim: fimLabel },
       porFormaPagamento,
       totalGeral,
       vendasPorDia,
       topDias,
+      porMesa,
     };
   });
 }
