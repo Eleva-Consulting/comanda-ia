@@ -616,10 +616,16 @@ export default function Cozinha() {
                                 <div className="mb-1 flex items-center justify-between gap-2">
                                   <span className="text-sm font-semibold text-zinc-100">
                                     {item.quantidade}x {item.nomeItem}
-                                    {multiplasComandas && <span className="ml-1 text-xs font-normal text-zinc-500">({item.comandaNome})</span>}
                                   </span>
-                                  <span className={`flex items-center gap-1 text-xs font-medium ${corCronometro(minutos, item.tempoAlvoMinutos)}`}>
-                                    {minutos}min
+                                  <span className="flex shrink-0 items-center gap-1.5">
+                                    {multiplasComandas && (
+                                      <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
+                                        {item.comandaNome}
+                                      </span>
+                                    )}
+                                    <span className={`flex items-center gap-1 text-xs font-medium ${corCronometro(minutos, item.tempoAlvoMinutos)}`}>
+                                      {minutos}min
+                                    </span>
                                   </span>
                                 </div>
                                 {item.acompanhamento && (
