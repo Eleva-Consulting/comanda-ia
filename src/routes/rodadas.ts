@@ -13,10 +13,18 @@ import { buscarContaComResumo, emitirContaAtualizada } from './pagamentos.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 const RodadaParamsSchema  = Type.Object({ id: Type.String() });
+const ComandaParamsSchema = Type.Object({ id: Type.String() });
 
 const CancelarRodadaSchema = Type.Object({
   motivo: Type.String({ minLength: 1, maxLength: 200 }),
   senha:  Type.String({ minLength: 1 }),
+});
+
+const AdicionarItemDiretoSchema = Type.Object({
+  itemCardapioId: Type.String({ minLength: 1 }),
+  quantidade:     Type.Integer({ minimum: 1, maximum: 100 }),
+  observacao:     Type.Optional(Type.String({ maxLength: 300 })),
+  acompanhamento: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
 });
 
 export interface EntradaItemRodada {
@@ -260,5 +268,56 @@ export async function rodadasRoutes(fastify: FastifyInstance) {
     }
 
     return { rodadaId: id, itensCancelados, itensNaoCancelados, contaLiberada };
+  });
+
+  // ── POST /comandas/:id/item-direto ───────────────────────────────────────────
+  // Adiciona um item já como "entregue" direto na comanda, sem passar pela cozinha —
+  // uso do Caixa na hora de fechar a conta (item esquecido de lançar, não precisa de
+  // preparo). Não cria RodadaComanda nem dispara evento de produção/Kanban, só
+  // avisa que a conta mudou (mesmo padrão de conta:atualizada usado em toda parte).
+  fastify.post('/comandas/:id/item-direto', {
+    onRequest: [autenticar, temPermissao('caixa'), moduloAtivo('mesas')],
+    schema: { params: ComandaParamsSchema, body: AdicionarItemDiretoSchema },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { estabelecimentoId, userId } = request.user;
+    const entrada = request.body as {
+      itemCardapioId: string; quantidade: number; observacao?: string; acompanhamento?: string;
+    };
+
+    const comanda = await prisma.comanda.findFirst({
+      where:   { id, conta: { estabelecimentoId: estabelecimentoId! } },
+      include: { conta: true },
+    });
+    if (!comanda) return reply.status(404).send({ erro: 'Comanda não encontrada' });
+    if (comanda.conta.status !== 'aberta' && comanda.conta.status !== 'aguardando_pagamento') {
+      return reply.status(422).send({ erro: 'Não é possível adicionar item numa conta fechada ou cancelada' });
+    }
+
+    const cardapio = await prisma.itemCardapio.findMany({
+      where:   { id: entrada.itemCardapioId, estabelecimentoId: estabelecimentoId!, disponivel: true },
+      include: { categoria: { select: { opcoesAcompanhamento: true } } },
+    });
+    const cardapioPorId = new Map<string, ItemCardapioComCategoria>(cardapio.map((i) => [i.id, i]));
+    const { itensParaCriar, itensDescartados } = montarItensParaCriar(cardapioPorId, [entrada]);
+    if (itensParaCriar.length === 0) {
+      return reply.status(422).send({ erro: itensDescartados[0]?.motivo ?? 'Não foi possível adicionar o item' });
+    }
+
+    const agora = new Date();
+    const criado = await prisma.itemComanda.create({
+      data: {
+        ...itensParaCriar[0],
+        comandaId:          id,
+        status:             'entregue',
+        entregueEm:         agora,
+        criadoPorUsuarioId: userId,
+      },
+    });
+    const serializado = { ...criado, precoUnit: Number(criado.precoUnit) };
+    getIO().to(estabelecimentoId!).emit('item-comanda:novo', serializado);
+    await emitirContaAtualizada(estabelecimentoId!, comanda.contaId);
+
+    return reply.status(201).send(serializado);
   });
 }

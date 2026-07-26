@@ -408,6 +408,24 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-25
+- **Adicionar item direto no Caixa, sem passar pela cozinha.** Pedido do usuário: na hora de
+  fechar a conta, poder adicionar um item esquecido de lançar em qualquer comanda da mesa,
+  direto pelo Caixa. Decisões confirmadas: o item entra já como `entregue` (não passa por
+  rascunho/Kanban/preparo — é pra item que não precisa de cozinha, tipo "esqueceram de
+  lançar"), e basta ter a permissão `caixa` (não precisa também de `mesas`).
+  - Nova rota `POST /comandas/:id/item-direto` (`temPermissao('caixa')`) — reaproveita a
+    função pura `montarItensParaCriar` (mesma validação contra o cardápio/acompanhamento já
+    usada no envio de rascunho), mas cria o `ItemComanda` direto com `status: 'entregue'` e
+    sem `RodadaComanda` nenhuma — não dispara evento de produção, só `conta:atualizada`.
+    Bloqueia se a conta estiver `fechada`/`cancelada`.
+  - Novo componente `frontend/src/components/caixa/AdicionarItem.tsx`: busca no cardápio,
+    escolhe acompanhamento (se a categoria tiver), quantidade e observação — botão "+
+    Adicionar item" novo em cada card de comanda em `ComandasLeitura.tsx`. Fecha e recarrega
+    o resumo da conta ao confirmar.
+  - Sem migration (só rota nova + Model já existente). Build (backend + frontend) e
+    `npm test` (81 testes) verificados sem regressão.
+
 ### 2026-07-24 (continuação)
 - **Cancelar o pedido (rodada) inteiro de uma vez, na Cozinha.** Pedido do usuário: hoje só
   dá pra cancelar item por item, pedindo senha em cada um — muito trabalhoso pra cancelar um

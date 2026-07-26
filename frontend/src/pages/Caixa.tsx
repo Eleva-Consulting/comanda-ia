@@ -6,6 +6,7 @@ import { useSocket } from '../hooks/useSocket'
 import type { ContaResumida, ItemResumo, ResumoConta } from '../components/caixa/tipos'
 import ResumoTotais from '../components/caixa/ResumoTotais'
 import ComandasLeitura from '../components/caixa/ComandasLeitura'
+import AdicionarItem from '../components/caixa/AdicionarItem'
 import ReceberPagamento from '../components/caixa/ReceberPagamento'
 import PagamentosRegistrados from '../components/caixa/PagamentosRegistrados'
 import FormDesconto from '../components/caixa/FormDesconto'
@@ -39,6 +40,8 @@ export default function Caixa() {
 
   const [fechandoConta, setFechandoConta] = useState(false)
   const [erroFechar, setErroFechar] = useState<string | null>(null)
+
+  const [comandaAdicionandoItem, setComandaAdicionandoItem] = useState<string | null>(null)
 
   const [itemCancelamento, setItemCancelamento] = useState<ItemResumo | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
@@ -217,7 +220,11 @@ export default function Caixa() {
         ) : (
           <div className="space-y-4">
             <ResumoTotais resumo={resumo} />
-            <ComandasLeitura comandas={resumo.porComanda} onCancelarItem={abrirCancelamentoItem} />
+            <ComandasLeitura
+              comandas={resumo.porComanda}
+              onCancelarItem={abrirCancelamentoItem}
+              onAdicionarItem={setComandaAdicionandoItem}
+            />
 
             {resumo.saldoDevedor > 0 ? (
               <button
@@ -259,6 +266,15 @@ export default function Caixa() {
           </div>
         )}
       </div>
+
+      {comandaAdicionandoItem && (
+        <AdicionarItem
+          comandaId={comandaAdicionandoItem}
+          token={token!}
+          onAdicionado={() => contaSelecionada && carregarResumo(contaSelecionada.id)}
+          onFechar={() => setComandaAdicionandoItem(null)}
+        />
+      )}
 
       {itemCancelamento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setItemCancelamento(null)}>
