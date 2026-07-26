@@ -119,7 +119,7 @@ export function serializarConta(conta: ContaComComandas) {
 export async function emitirAtualizacaoItemComanda(estabelecimentoId: string, itemId: string) {
   const itemParaProducao = await prisma.itemComanda.findUnique({
     where:   { id: itemId },
-    include: { setor: true, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
+    include: { setor: true, rodada: { select: { envioId: true } }, comanda: { include: { conta: { include: { mesa: true, abertaPor: { select: { nome: true } } } } } } },
   });
   if (!itemParaProducao) return;
   getIO()

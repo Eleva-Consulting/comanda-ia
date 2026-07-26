@@ -27,7 +27,7 @@ describe('serializarItemProducao', () => {
       id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
       status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
       setorId: null, rodadaId: 'rodada-1',
-      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
+      setor: null, rodada: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
     };
     expect(serializarItemProducao(item).rodadaId).toBe('rodada-1');
   });
@@ -37,7 +37,7 @@ describe('serializarItemProducao', () => {
       id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
       status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
       setorId: null, rodadaId: null,
-      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
+      setor: null, rodada: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
     };
     expect(serializarItemProducao(item).rodadaId).toBe(null);
   });
@@ -47,7 +47,7 @@ describe('serializarItemProducao', () => {
       id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
       status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
       setorId: null, rodadaId: null,
-      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: { nome: 'Maria' } } },
+      setor: null, rodada: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: { nome: 'Maria' } } },
     };
     expect(serializarItemProducao(item).abertaPorNome).toBe('Maria');
   });
@@ -57,8 +57,28 @@ describe('serializarItemProducao', () => {
       id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
       status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
       setorId: null, rodadaId: null,
-      setor: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
+      setor: null, rodada: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
     };
     expect(serializarItemProducao(item).abertaPorNome).toBe(null);
+  });
+
+  it('inclui o envioId da rodada quando presente', () => {
+    const item = {
+      id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
+      status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
+      setorId: null, rodadaId: 'rodada-1',
+      setor: null, rodada: { envioId: 'envio-1' }, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
+    };
+    expect(serializarItemProducao(item).envioId).toBe('envio-1');
+  });
+
+  it('envioId null quando a rodada não tem envioId (legado) ou o item não pertence a rodada', () => {
+    const item = {
+      id: '1', nomeItem: 'Galeto', quantidade: 1, observacao: null, acompanhamento: null,
+      status: 'recebido' as const, recebidoEm: new Date('2026-01-01T12:00:00Z'),
+      setorId: null, rodadaId: null,
+      setor: null, rodada: null, comanda: { nome: 'Geral', conta: { mesa: { numero: '5' }, abertaPor: null } },
+    };
+    expect(serializarItemProducao(item).envioId).toBe(null);
   });
 });

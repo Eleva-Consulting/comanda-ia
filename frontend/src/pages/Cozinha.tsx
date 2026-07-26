@@ -27,6 +27,7 @@ interface ItemProducao {
   recebidoEm: string
   setorId: string | null
   rodadaId: string | null
+  envioId: string | null
   setorNome: string | null
   tempoAlvoMinutos: number | null
   mesaNumero: string
@@ -326,24 +327,34 @@ export default function Cozinha() {
   // campos visuais. O evento de socket 'producao:item-atualizado' já traz a versão
   // completa; aqui só garantimos a atualização otimista do status, no mesmo padrão
   // já usado em avancarStatus.
-  async function avancarRodada(itensDoGrupo: ItemProducao[]) {
-    const rodadaId = itensDoGrupo[0]?.rodadaId
-    if (!rodadaId) return
-    setAvancandoRodadaId(rodadaId)
+  // `chave` identifica o grupo no Kanban (envioId quando várias comandas foram enviadas
+  // juntas, senão o rodadaId sozinho) — as ações em si continuam operando por rodada
+  // individual no backend, então iteramos as rodadas distintas presentes no grupo.
+  function rodadaIdsDoGrupo(itensDoGrupo: ItemProducao[]): string[] {
+    return [...new Set(itensDoGrupo.map((i) => i.rodadaId).filter((r): r is string => !!r))]
+  }
+
+  async function avancarRodada(chave: string, itensDoGrupo: ItemProducao[]) {
+    const rodadaIds = rodadaIdsDoGrupo(itensDoGrupo)
+    if (rodadaIds.length === 0) return
+    setAvancandoRodadaId(chave)
     try {
-      const resp = await fetch(`${API_URL}/rodadas/${rodadaId}/avancar`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (resp.ok) {
-        const dados = await resp.json()
-        const statusPorId = new Map<string, StatusProducao>(
-          dados.itensAtualizados.map((i: { id: string; status: StatusProducao }) => [i.id, i.status])
-        )
-        for (const item of itensDoGrupo) {
-          const novoStatus = statusPorId.get(item.id)
-          if (novoStatus) atualizarItemLocal({ ...item, status: novoStatus })
+      const statusPorId = new Map<string, StatusProducao>()
+      for (const rodadaId of rodadaIds) {
+        const resp = await fetch(`${API_URL}/rodadas/${rodadaId}/avancar`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (resp.ok) {
+          const dados = await resp.json()
+          for (const i of dados.itensAtualizados as { id: string; status: StatusProducao }[]) {
+            statusPorId.set(i.id, i.status)
+          }
         }
+      }
+      for (const item of itensDoGrupo) {
+        const novoStatus = statusPorId.get(item.id)
+        if (novoStatus) atualizarItemLocal({ ...item, status: novoStatus })
       }
     } catch (err) {
       console.error(err)
@@ -352,8 +363,8 @@ export default function Cozinha() {
     }
   }
 
-  function abrirCancelamentoRodada(rodadaId: string) {
-    setRodadaCancelamento(rodadaId)
+  function abrirCancelamentoRodada(chave: string) {
+    setRodadaCancelamento(chave)
     setMotivoCancelamentoRodada('')
     setSenhaCancelamentoRodada('')
     setErroCancelamentoRodada(null)
@@ -363,17 +374,21 @@ export default function Cozinha() {
     if (!rodadaCancelamento) return
     if (!motivoCancelamentoRodada || !senhaCancelamentoRodada) return
 
+    const rodadaIds = rodadaIdsDoGrupo(itensDoGrupo)
     setErroCancelamentoRodada(null)
     setEnviandoCancelamentoRodada(true)
     try {
-      const resp = await fetch(`${API_URL}/rodadas/${rodadaCancelamento}/cancelar`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ motivo: motivoCancelamentoRodada, senha: senhaCancelamentoRodada }),
-      })
-      const dados = await resp.json()
-      if (!resp.ok) { setErroCancelamentoRodada(dados.erro ?? 'Não foi possível cancelar o pedido'); return }
-      const idsCancelados = new Set<string>(dados.itensCancelados.map((i: { id: string }) => i.id))
+      const idsCancelados = new Set<string>()
+      for (const rodadaId of rodadaIds) {
+        const resp = await fetch(`${API_URL}/rodadas/${rodadaId}/cancelar`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ motivo: motivoCancelamentoRodada, senha: senhaCancelamentoRodada }),
+        })
+        const dados = await resp.json()
+        if (!resp.ok) { setErroCancelamentoRodada(dados.erro ?? 'Não foi possível cancelar o pedido'); return }
+        for (const i of dados.itensCancelados as { id: string }[]) idsCancelados.add(i.id)
+      }
       for (const item of itensDoGrupo) {
         if (idsCancelados.has(item.id)) atualizarItemLocal({ ...item, status: 'cancelado' })
       }
@@ -456,25 +471,27 @@ export default function Cozinha() {
     return () => clearInterval(intervalo)
   }, [])
 
-  // Uma rodada "dividida" tem itens não-terminais (não entregue/cancelado) espalhados
-  // por mais de uma coluna de status — acontece quando o operador avança só um item
-  // específico via "(só este)" em vez da rodada inteira. Nesse caso o botão "Avançar
-  // rodada" precisa sumir em todos os fragmentos da rodada: ele chama
-  // PATCH /rodadas/:id/avancar, que avança TODOS os itens elegíveis da rodada no
-  // backend (por design), não só os itens visíveis no card daquela coluna — mostrar o
-  // botão em apenas um fragmento sugeriria (erroneamente) que ele afeta só aquele card.
-  const rodadasDivididas = new Set<string>()
+  // Um grupo (rodada, ou várias rodadas do mesmo envioId agrupadas) "dividido" tem itens
+  // não-terminais (não entregue/cancelado) espalhados por mais de uma coluna de status —
+  // acontece quando o operador avança só um item específico via "(só este)" em vez do
+  // grupo inteiro. Nesse caso o botão "Avançar" precisa sumir em todos os fragmentos do
+  // grupo: ele chama PATCH /rodadas/:id/avancar (uma vez por rodada do grupo), que avança
+  // TODOS os itens elegíveis de cada rodada no backend (por design), não só os itens
+  // visíveis no card daquela coluna — mostrar o botão em apenas um fragmento sugeriria
+  // (erroneamente) que ele afeta só aquele card.
+  const gruposDivididos = new Set<string>()
   {
-    const statusPorRodada = new Map<string, Set<StatusProducao>>()
+    const statusPorGrupo = new Map<string, Set<StatusProducao>>()
     for (const item of itens) {
-      if (!item.rodadaId) continue
+      const chave = item.envioId ?? item.rodadaId
+      if (!chave) continue
       if (item.status === 'entregue' || item.status === 'cancelado') continue
-      const statusSet = statusPorRodada.get(item.rodadaId) ?? new Set<StatusProducao>()
+      const statusSet = statusPorGrupo.get(chave) ?? new Set<StatusProducao>()
       statusSet.add(item.status)
-      statusPorRodada.set(item.rodadaId, statusSet)
+      statusPorGrupo.set(chave, statusSet)
     }
-    for (const [rodadaId, statusSet] of statusPorRodada) {
-      if (statusSet.size > 1) rodadasDivididas.add(rodadaId)
+    for (const [chave, statusSet] of statusPorGrupo) {
+      if (statusSet.size > 1) gruposDivididos.add(chave)
     }
   }
 
@@ -525,12 +542,16 @@ export default function Cozinha() {
               .filter((i) => i.status === coluna.status)
               .sort((a, b) => new Date(a.recebidoEm).getTime() - new Date(b.recebidoEm).getTime())
 
-            const gruposDaColuna: { chave: string; rodadaId: string | null; itens: ItemProducao[] }[] = []
+            const gruposDaColuna: { chave: string; rodadaIds: string[]; itens: ItemProducao[] }[] = []
             for (const item of itensDaColuna) {
-              const chave = item.rodadaId ?? item.id
+              const chave = item.envioId ?? item.rodadaId ?? item.id
               const grupoExistente = gruposDaColuna.find((g) => g.chave === chave)
-              if (grupoExistente) grupoExistente.itens.push(item)
-              else gruposDaColuna.push({ chave, rodadaId: item.rodadaId, itens: [item] })
+              if (grupoExistente) {
+                grupoExistente.itens.push(item)
+                if (item.rodadaId && !grupoExistente.rodadaIds.includes(item.rodadaId)) grupoExistente.rodadaIds.push(item.rodadaId)
+              } else {
+                gruposDaColuna.push({ chave, rodadaIds: item.rodadaId ? [item.rodadaId] : [], itens: [item] })
+              }
             }
 
             const pedidosDaColuna = pedidos
@@ -579,10 +600,12 @@ export default function Cozinha() {
                         )
                       }
                       const grupo = card.grupo
+                      const comandaNomesDoGrupo = [...new Set(grupo.itens.map((i) => i.comandaNome))]
+                      const multiplasComandas = comandaNomesDoGrupo.length > 1
                       return (
                       <div key={grupo.chave} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                         <p className="mb-2 text-xs text-zinc-500">
-                          Mesa {grupo.itens[0].mesaNumero} · {grupo.itens[0].comandaNome}
+                          Mesa {grupo.itens[0].mesaNumero} · {comandaNomesDoGrupo.join(', ')}
                           {grupo.itens[0].abertaPorNome && ` · aberta por ${grupo.itens[0].abertaPorNome}`}
                         </p>
                         <div className="space-y-2">
@@ -593,6 +616,7 @@ export default function Cozinha() {
                                 <div className="mb-1 flex items-center justify-between gap-2">
                                   <span className="text-sm font-semibold text-zinc-100">
                                     {item.quantidade}x {item.nomeItem}
+                                    {multiplasComandas && <span className="ml-1 text-xs font-normal text-zinc-500">({item.comandaNome})</span>}
                                   </span>
                                   <span className={`flex items-center gap-1 text-xs font-medium ${corCronometro(minutos, item.tempoAlvoMinutos)}`}>
                                     {minutos}min
@@ -665,8 +689,8 @@ export default function Cozinha() {
                             )
                           })}
                         </div>
-                        {grupo.rodadaId && (
-                          rodadaCancelamento === grupo.rodadaId ? (
+                        {grupo.rodadaIds.length > 0 && (
+                          rodadaCancelamento === grupo.chave ? (
                             <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
                               <input
                                 value={motivoCancelamentoRodada}
@@ -700,29 +724,29 @@ export default function Cozinha() {
                             </div>
                           ) : (
                           <div className="mt-2 flex items-center gap-1.5">
-                            {!rodadasDivididas.has(grupo.rodadaId) &&
+                            {!gruposDivididos.has(grupo.chave) &&
                               grupo.itens.some((i) => labelAvancar[i.status]) && (
                               <button
-                                onClick={() => avancarRodada(grupo.itens)}
-                                disabled={avancandoRodadaId === grupo.rodadaId}
+                                onClick={() => avancarRodada(grupo.chave, grupo.itens)}
+                                disabled={avancandoRodadaId === grupo.chave}
                                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-500/10 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
                               >
-                                {avancandoRodadaId === grupo.rodadaId
+                                {avancandoRodadaId === grupo.chave
                                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   : <ChefHat className="h-3.5 w-3.5" />}
-                                Avançar rodada
+                                Avançar pedido
                               </button>
                             )}
                             <button
-                              onClick={() => imprimirRodada(grupo.rodadaId!)}
+                              onClick={() => grupo.rodadaIds.forEach((rodadaId) => imprimirRodada(rodadaId))}
                               className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
-                              title="Reimprimir comanda da rodada"
+                              title="Reimprimir comanda(s) do pedido"
                             >
                               <Printer className="h-4 w-4" />
                             </button>
-                            {!rodadasDivididas.has(grupo.rodadaId) && (
+                            {!gruposDivididos.has(grupo.chave) && (
                               <button
-                                onClick={() => abrirCancelamentoRodada(grupo.rodadaId!)}
+                                onClick={() => abrirCancelamentoRodada(grupo.chave)}
                                 className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
                                 title="Cancelar pedido inteiro"
                               >
