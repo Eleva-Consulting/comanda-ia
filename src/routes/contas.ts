@@ -6,6 +6,7 @@ import { autenticar, temPermissao, moduloAtivo } from '../plugins/auth.js';
 import { getIO } from '../socket.js';
 import { transicaoProducaoValida, podeCancelarLivremente } from '../utils/statusProducao.js';
 import { decidirLiberacaoConta } from '../utils/cancelamentoRodada.js';
+import { calcularDivisaoCancelamento } from '../utils/cancelamentoItem.js';
 import { serializarItemProducao, salaProducao } from '../utils/producao.js';
 import { paraOpcoesAcompanhamento } from '../utils/acompanhamento.js';
 import { buscarContaComResumo, emitirContaAtualizada } from './pagamentos.js';
@@ -40,6 +41,11 @@ const AtualizarStatusItemComandaSchema = Type.Object({
   ]),
   motivo: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   senha: Type.Optional(Type.String({ minLength: 1 })),
+  // Só relevante quando status === 'cancelado'. Omitido (ou igual à quantidade atual do
+  // item) cancela o item inteiro, igual sempre foi; um valor menor cancela só essa fração
+  // — o item original fica com o restante ativo e a fração cancelada vira um novo
+  // ItemComanda próprio (ver calcularDivisaoCancelamento).
+  quantidade: Type.Optional(Type.Integer({ minimum: 1 })),
 });
 
 const TransferirItemComandaSchema = Type.Object({
@@ -341,7 +347,7 @@ export async function contasRoutes(fastify: FastifyInstance) {
     schema: { params: ItemComandaParamsSchema, body: AtualizarStatusItemComandaSchema },
   }, async (request, reply) => {
     const { id }     = request.params as { id: string };
-    const { status, motivo, senha } = request.body as { status: StatusProducao; motivo?: string; senha?: string };
+    const { status, motivo, senha, quantidade } = request.body as { status: StatusProducao; motivo?: string; senha?: string; quantidade?: number };
     const { estabelecimentoId, userId, role, permissoes } = request.user;
 
     // Quem só tem a permissão `caixa` (sem mesas/produção/cozinha) só pode cancelar item
@@ -397,14 +403,59 @@ export async function contasRoutes(fastify: FastifyInstance) {
       }
     }
 
+    let divisao: { restante: number; dividir: boolean } = { restante: 0, dividir: false };
+    if (status === 'cancelado') {
+      try {
+        divisao = calcularDivisaoCancelamento(item.quantidade, quantidade ?? item.quantidade);
+      } catch (err) {
+        return reply.status(400).send({ erro: (err as Error).message });
+      }
+    }
+
     const timestamps: { prontoEm?: Date; entregueEm?: Date; canceladoEm?: Date } = {};
     if (status === 'pronto')    timestamps.prontoEm    = new Date();
     if (status === 'entregue')  timestamps.entregueEm  = new Date();
     if (status === 'cancelado') timestamps.canceladoEm = new Date();
 
-    const atualizado = await prisma.itemComanda.update({ where: { id }, data: { status, ...timestamps } });
+    let atualizado;
+    let itemCanceladoCriado: Awaited<ReturnType<typeof prisma.itemComanda.create>> | null = null;
+    if (status === 'cancelado' && divisao.dividir) {
+      // Cancelamento parcial: o item original fica com a quantidade restante ativa (mesmo
+      // status/timestamps de antes) e a fração cancelada vira um novo ItemComanda próprio,
+      // já nascendo cancelado — preserva rastro de quando/por quê essa fração específica
+      // saiu, sem mexer no histórico do que continua ativo.
+      const quantidadeCancelada = item.quantidade - divisao.restante;
+      [atualizado, itemCanceladoCriado] = await prisma.$transaction([
+        prisma.itemComanda.update({ where: { id }, data: { quantidade: divisao.restante } }),
+        prisma.itemComanda.create({
+          data: {
+            nomeItem:           item.nomeItem,
+            quantidade:         quantidadeCancelada,
+            precoUnit:          item.precoUnit,
+            observacao:         item.observacao,
+            acompanhamento:     item.acompanhamento,
+            status:             'cancelado',
+            recebidoEm:         item.recebidoEm,
+            prontoEm:           item.prontoEm,
+            entregueEm:         item.entregueEm,
+            canceladoEm:        timestamps.canceladoEm,
+            comandaId:          item.comandaId,
+            itemCardapioId:     item.itemCardapioId,
+            setorId:            item.setorId,
+            rodadaId:           item.rodadaId,
+            criadoPorUsuarioId: item.criadoPorUsuarioId,
+          },
+        }),
+      ]);
+    } else {
+      atualizado = await prisma.itemComanda.update({ where: { id }, data: { status, ...timestamps } });
+    }
+
     const serializado = { ...atualizado, precoUnit: Number(atualizado.precoUnit) };
     getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', serializado);
+    if (itemCanceladoCriado) {
+      getIO().to(estabelecimentoId!).emit('item-comanda:atualizado', { ...itemCanceladoCriado, precoUnit: Number(itemCanceladoCriado.precoUnit) });
+    }
 
     if (status === 'cancelado') {
       await prisma.logAuditoria.create({
@@ -413,8 +464,10 @@ export async function contasRoutes(fastify: FastifyInstance) {
           entidadeTipo: 'ItemComanda',
           entidadeId:   id,
           motivo:       motivo ?? null,
-          dadosAntes:   { status: item.status },
-          dadosDepois:  { status: 'cancelado' },
+          dadosAntes:   { status: item.status, quantidade: item.quantidade },
+          dadosDepois:  divisao.dividir
+            ? { quantidadeCancelada: item.quantidade - divisao.restante, quantidadeRestante: divisao.restante, novoItemCanceladoId: itemCanceladoCriado!.id }
+            : { status: 'cancelado' },
           estabelecimentoId: estabelecimentoId!,
           usuarioId:    userId,
         },
@@ -445,6 +498,9 @@ export async function contasRoutes(fastify: FastifyInstance) {
     }
 
     await emitirAtualizacaoItemComanda(estabelecimentoId!, atualizado.id);
+    if (itemCanceladoCriado) {
+      await emitirAtualizacaoItemComanda(estabelecimentoId!, itemCanceladoCriado.id);
+    }
 
     return serializado;
   });

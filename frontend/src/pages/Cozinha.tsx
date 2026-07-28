@@ -132,6 +132,7 @@ export default function Cozinha() {
   const [itemCancelamento, setItemCancelamento] = useState<ItemProducao | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [senhaCancelamento, setSenhaCancelamento] = useState('')
+  const [quantidadeCancelamento, setQuantidadeCancelamento] = useState(1)
   const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
   const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
 
@@ -270,6 +271,7 @@ export default function Cozinha() {
     setItemCancelamento(item)
     setMotivoCancelamento('')
     setSenhaCancelamento('')
+    setQuantidadeCancelamento(item.quantidade)
     setErroCancelamento(null)
   }
 
@@ -286,13 +288,17 @@ export default function Cozinha() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'cancelado',
+          quantidade: quantidadeCancelamento,
           ...(motivoCancelamento ? { motivo: motivoCancelamento } : {}),
           ...(precisaSenha ? { senha: senhaCancelamento } : {}),
         }),
       })
       const data = await resp.json()
       if (!resp.ok) { setErroCancelamento(data.erro ?? 'Não foi possível cancelar o item'); return }
-      atualizarItemLocal({ ...itemCancelamento, status: data.status })
+      // Cancelamento parcial: o item continua ativo (mesmo status), só com a quantidade
+      // reduzida — `data` é sempre o item original (nunca o registro novo da fração
+      // cancelada), então isso cobre os dois casos (parcial e total) corretamente.
+      atualizarItemLocal({ ...itemCancelamento, status: data.status, quantidade: data.quantidade })
       setItemCancelamento(null)
     } catch {
       setErroCancelamento('Falha de conexão')
@@ -651,6 +657,27 @@ export default function Cozinha() {
                                 )}
                                 {itemCancelamento?.id === item.id ? (
                                   <div className="mt-2 space-y-1.5 rounded-lg border border-red-500/30 bg-red-500/5 p-2">
+                                    {item.quantidade > 1 && (
+                                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                        <span>Cancelar:</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setQuantidadeCancelamento((q) => Math.max(1, q - 1))}
+                                          className="h-5 w-5 rounded bg-zinc-800 text-xs font-bold text-zinc-300 hover:bg-zinc-700"
+                                        >
+                                          −
+                                        </button>
+                                        <span className="w-4 text-center font-medium">{quantidadeCancelamento}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setQuantidadeCancelamento((q) => Math.min(item.quantidade, q + 1))}
+                                          className="h-5 w-5 rounded bg-zinc-800 text-xs font-bold text-zinc-300 hover:bg-zinc-700"
+                                        >
+                                          +
+                                        </button>
+                                        <span>de {item.quantidade}</span>
+                                      </div>
+                                    )}
                                     <input
                                       value={motivoCancelamento}
                                       onChange={(e) => setMotivoCancelamento(e.target.value)}
@@ -676,7 +703,7 @@ export default function Cozinha() {
                                         }
                                         className="flex-1 rounded bg-red-500 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
                                       >
-                                        Confirmar
+                                        {quantidadeCancelamento < item.quantidade ? `Cancelar ${quantidadeCancelamento} de ${item.quantidade}` : 'Confirmar'}
                                       </button>
                                       <button
                                         onClick={() => setItemCancelamento(null)}

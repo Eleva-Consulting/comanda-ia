@@ -46,6 +46,7 @@ export default function Caixa() {
   const [itemCancelamento, setItemCancelamento] = useState<ItemResumo | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [senhaCancelamento, setSenhaCancelamento] = useState('')
+  const [quantidadeCancelamento, setQuantidadeCancelamento] = useState(1)
   const [enviandoCancelamento, setEnviandoCancelamento] = useState(false)
   const [erroCancelamento, setErroCancelamento] = useState<string | null>(null)
 
@@ -110,6 +111,7 @@ export default function Caixa() {
     setItemCancelamento(item)
     setMotivoCancelamento('')
     setSenhaCancelamento('')
+    setQuantidadeCancelamento(item.quantidade)
     setErroCancelamento(null)
   }
 
@@ -126,6 +128,7 @@ export default function Caixa() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'cancelado',
+          quantidade: quantidadeCancelamento,
           ...(motivoCancelamento ? { motivo: motivoCancelamento } : {}),
           ...(precisaSenha ? { senha: senhaCancelamento } : {}),
         }),
@@ -285,6 +288,28 @@ export default function Caixa() {
                 Este item já está {labelStatusItem[itemCancelamento.status] ?? itemCancelamento.status} — cancelar exige motivo e senha de supervisor.
               </p>
             )}
+            {itemCancelamento.quantidade > 1 && (
+              <div className="mb-3">
+                <p className="mb-1 text-xs text-zinc-400">Quantas unidades cancelar? (de {itemCancelamento.quantidade})</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuantidadeCancelamento((q) => Math.max(1, q - 1))}
+                    className="h-8 w-8 rounded-lg bg-zinc-800 text-lg font-bold text-zinc-300 hover:bg-zinc-700"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-medium">{quantidadeCancelamento}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantidadeCancelamento((q) => Math.min(itemCancelamento.quantidade, q + 1))}
+                    className="h-8 w-8 rounded-lg bg-zinc-800 text-lg font-bold text-zinc-300 hover:bg-zinc-700"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <input
                 value={motivoCancelamento}
@@ -312,7 +337,9 @@ export default function Caixa() {
                 }
                 className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
               >
-                Confirmar cancelamento
+                {quantidadeCancelamento < itemCancelamento.quantidade
+                  ? `Cancelar ${quantidadeCancelamento} de ${itemCancelamento.quantidade}`
+                  : 'Confirmar cancelamento'}
               </button>
               <button onClick={() => setItemCancelamento(null)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700">
                 Voltar
