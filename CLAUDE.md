@@ -408,6 +408,46 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-07-28
+- **Auditoria de segurança completa do sistema (PR #38, `docs/auditoria-seguranca-2026-07-28.md`).**
+  Pedido do usuário: achar vulnerabilidades reais e pontos de melhoria de segurança, sem escopo
+  prévio de branch/PR (repositório estava com working tree limpo, nada pendente). Executada via
+  5 revisões em paralelo (auth/sessão, isolamento multi-tenant/IDOR, endpoints públicos/webhooks,
+  upload/integrações/segredos, frontend/dependências), cada achado confirmado lendo o código real
+  antes de entrar no relatório. **Resultado principal: isolamento multi-tenant (o ponto
+  estruturalmente mais arriscado do produto) está sólido** — todas as ~70 rotas autenticadas com
+  `:id` de recurso filtram por `estabelecimentoId`, sem exceção encontrada. Achados reais, por
+  prioridade: (1) nenhum rate limiting em rota nenhuma do backend (login e endpoints públicos
+  abertos a força bruta/flood); (2) `Estabelecimento.mpAccessToken`/`mpRefreshToken` (Mercado
+  Pago) e `WhatsAppSession.creds`/`keys` gravados em texto puro no banco — vazamento do Postgres
+  expõe as duas integrações de todos os tenants de uma vez; (3) `POST /push/subscribe`
+  (`src/routes/push.ts:25`) sobrescreve as chaves de push de outro usuário sem checar dono (o
+  `DELETE /unsubscribe` já filtra certo por `usuarioId`, o `subscribe` não); (4) JWT sem
+  revogação (7 dias, sem `tokenVersion`); mais 4 achados menores (sem cooldown no reset de senha,
+  HTML de cliente não escapado nos templates de email, `nodemailer` instalado e nunca usado, rota
+  morta `/webhook/simular` sem auth). Nenhuma correção de código foi aplicada nesta sessão — só o
+  documento, com plano de ação priorizado. Fica para uma sessão futura: implementar rate limiting
+  e o fix do `push/subscribe` (triviais) e decidir a estratégia de criptografia em repouso para
+  os dois segredos de integração (mais custoso — precisa de chave de aplicação dedicada e migração
+  do dado já persistido).
+- **`npm audit fix` no backend e frontend (PR #39).** Motivado por um dado que apareceu de graça
+  no push do PR acima: o Dependabot do GitHub reportava 35 alertas na branch padrão (14 high, 19
+  moderate, 2 low) — bem mais que o `npm audit --omit=dev` local havia sinalizado (esse ignora
+  devDependencies, e boa parte dos alertas do Dependabot eram do `hono`/`@hono/node-server`
+  transitivos via `@prisma/dev`, ferramenta de dev do Prisma 7, não código de produção). Puxada a
+  lista completa via `gh api repos/.../dependabot/alerts`, cruzada com `npm audit` local dos dois
+  projetos. **13 de 14 vulnerabilidades do backend corrigidas** (`ws`, `nodemailer`,
+  `find-my-way`, `fast-uri`, `protobufjs`, `hono`/`@hono/node-server`/`valibot` via `@prisma/dev`)
+  e **4 de 5 do frontend** (`ws`, `vite`, `postcss`, `brace-expansion`) — só bump de versão dentro
+  do range já declarado em `package.json` (nenhum `package.json`, back ou front, mudou; só os
+  lockfiles), sem `--force`. Restam sem fix não-breaking: `esbuild` no backend (baixa severidade,
+  só afeta dev-server no Windows via `tsx`/`vitest`, dependências de dev) e `react-router` no
+  frontend (a CSRF corrigida só no major 8 se aplica ao modo "RSC" do React Router, que este
+  projeto não usa — aqui é roteamento client-side puro via `RouterProvider`; bump 7→8 é breaking
+  change, decidido não aplicar sem avaliação própria). Verificado: `npm run build` (tsc) limpo e
+  `npm test` (91 testes) sem regressão no backend; `npm run build` (tsc -b + vite build) limpo no
+  frontend.
+
 ### 2026-07-27 (continuação)
 - **Relatório "Mais vendidos" / "Menos vendidos" na tela Financeiro.** Pedido do usuário:
   lista dos 5 itens que mais saíram e dos 5 que menos saíram no período. Decisões
