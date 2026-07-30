@@ -9,6 +9,7 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import QRCode from 'qrcode'
 import { prisma } from './database.js'
+import { decidirAposDesconexao } from './utils/whatsappReconexao.js'
 
 type ConnectionStatus = 'connecting' | 'open' | 'close'
 
@@ -70,10 +71,45 @@ async function criarAuthState(estabelecimentoId: string) {
 // ── WhatsApp Manager ──────────────────────────────────────────────────────────
 
 class WhatsAppManager {
-  private sockets  = new Map<string, ReturnType<typeof makeWASocket>>()
-  private statuses = new Map<string, ConnectionStatus>()
+  private sockets         = new Map<string, ReturnType<typeof makeWASocket>>()
+  private statuses        = new Map<string, ConnectionStatus>()
+  private tentativasFalhas = new Map<string, number>()
   private logger   = pino({ level: 'silent' })
   private log      = pino({ level: 'info', base: { pid: process.pid } })
+
+  // Registra o desfecho de uma conexão fechada e decide se reconecta ou desiste.
+  // Compartilhado por reconectar()/conectar(). Ignora fechamentos de sockets que já
+  // foram substituídos por um mais novo (`this.sockets.get(id) !== socket`) — sem essa
+  // checagem, o socket antigo (encerrado por conectar() ao trocar de socket) também
+  // dispara este handler e agenda uma reconexão paralela extra, duplicando o loop.
+  private async handleFechamento(
+    estabelecimentoId: string,
+    socket: ReturnType<typeof makeWASocket>,
+    codigo: number | undefined,
+  ): Promise<void> {
+    if (this.sockets.get(estabelecimentoId) !== socket) return
+
+    this.statuses.set(estabelecimentoId, 'close')
+    this.sockets.delete(estabelecimentoId)
+    this.log.warn({ estabelecimentoId, codigo }, 'WhatsApp desconectado')
+
+    const tentativasAnteriores = this.tentativasFalhas.get(estabelecimentoId) ?? 0
+    const decisao = decidirAposDesconexao(codigo, tentativasAnteriores)
+
+    if (decisao.deveReconectar) {
+      this.tentativasFalhas.set(estabelecimentoId, tentativasAnteriores + 1)
+      setTimeout(() => this.reconectar(estabelecimentoId), 5000)
+      return
+    }
+
+    this.tentativasFalhas.delete(estabelecimentoId)
+    if (decisao.deveLimparSessao) {
+      await prisma.whatsAppSession.deleteMany({ where: { estabelecimentoId } })
+      if (codigo !== DisconnectReason.loggedOut) {
+        this.log.warn({ estabelecimentoId }, 'WhatsApp: desistiu de reconectar após tentativas consecutivas, sessão limpa')
+      }
+    }
+  }
 
   private criarSocket(
     estabelecimentoId: string,
@@ -187,18 +223,12 @@ class WhatsAppManager {
     socket.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
       if (connection === 'open') {
         this.statuses.set(estabelecimentoId, 'open')
+        this.tentativasFalhas.delete(estabelecimentoId)
         this.log.info({ estabelecimentoId }, 'WhatsApp conectado (open)')
       }
       if (connection === 'close') {
-        this.statuses.set(estabelecimentoId, 'close')
-        this.sockets.delete(estabelecimentoId)
         const codigo = (lastDisconnect?.error as Boom)?.output?.statusCode
-        this.log.warn({ estabelecimentoId, codigo }, 'WhatsApp desconectado')
-        if (codigo !== DisconnectReason.loggedOut) {
-          setTimeout(() => this.reconectar(estabelecimentoId), 5000)
-        } else {
-          await prisma.whatsAppSession.deleteMany({ where: { estabelecimentoId } })
-        }
+        await this.handleFechamento(estabelecimentoId, socket, codigo)
       }
     })
   }
@@ -231,6 +261,7 @@ class WhatsAppManager {
 
         if (connection === 'open') {
           this.statuses.set(estabelecimentoId, 'open')
+          this.tentativasFalhas.delete(estabelecimentoId)
           if (!resolvido) {
             resolvido = true
             clearTimeout(timer)
@@ -239,14 +270,8 @@ class WhatsAppManager {
         }
 
         if (connection === 'close') {
-          this.statuses.set(estabelecimentoId, 'close')
-          this.sockets.delete(estabelecimentoId)
           const codigo = (lastDisconnect?.error as Boom)?.output?.statusCode
-          if (codigo !== DisconnectReason.loggedOut) {
-            setTimeout(() => this.reconectar(estabelecimentoId), 5000)
-          } else {
-            await prisma.whatsAppSession.deleteMany({ where: { estabelecimentoId } })
-          }
+          await this.handleFechamento(estabelecimentoId, socket, codigo)
           if (!resolvido) {
             resolvido = true
             clearTimeout(timer)
@@ -282,6 +307,7 @@ class WhatsAppManager {
       this.sockets.delete(estabelecimentoId)
     }
     this.statuses.set(estabelecimentoId, 'close')
+    this.tentativasFalhas.delete(estabelecimentoId)
     await prisma.whatsAppSession.deleteMany({ where: { estabelecimentoId } })
     this.log.info({ estabelecimentoId }, 'WhatsApp: desconectado e sessão removida')
   }
