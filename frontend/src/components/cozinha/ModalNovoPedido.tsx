@@ -259,8 +259,7 @@ export default function ModalNovoPedido({ aberto, token, onFechar }: Props) {
                   { valor: 'dinheiro',       label: 'Dinheiro' },
                   { valor: 'cartao_debito',  label: 'Débito' },
                   { valor: 'cartao_credito', label: 'Crédito' },
-                  { valor: 'pix',            label: 'PIX' },
-                  { valor: 'pix_maquininha', label: 'Pix (maquininha)' },
+                  { valor: 'pix_maquininha', label: 'Pix' },
                 ] as const).map(({ valor, label }) => (
                   <button
                     key={valor}
