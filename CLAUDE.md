@@ -1437,6 +1437,26 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
    entregue em 2026-07-13, no Dashboard e na tela Financeiro)
 2. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
 3. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
+4. **Impressão via agente local (sem computador em modo quiosque)** — brainstorming iniciado
+   em 2026-07-31, ainda não tem spec/plano formal. Problema atual: cada ponto de impressão
+   exige um computador com Chrome logado na tela de Cozinha em modo quiosque, disparando
+   `window.print()` — frágil (trava com diálogo de impressão) e caro de escalar por setor
+   (ex: adicionar impressora do Churrasco hoje exigiria outro PC inteiro). Direção discutida:
+   um agente local leve (serviço em background, sem navegador/tela/login, roda em qualquer PC
+   ou até um Raspberry Pi) que conecta no mesmo Socket.IO que a Cozinha já usa, recebe o
+   evento de pedido novo e manda ESC/POS direto pra impressora via rede (IP:9100) — a
+   impressora do Churrasco só precisaria de energia + cabo de rede até o mesmo roteador, sem
+   PC dedicado, já que o agente único decide pra qual IP mandar cada ticket. Ordem de
+   execução acordada com o usuário, começando pelo mais barato de validar:
+   1. Confirmar que a(s) impressora(s) real(is) suportam ESC/POS via rede (teste simples
+      mandando texto cru pra porta 9100 do IP dela).
+   2. Construir o vínculo item do cardápio → Setor (lacuna já conhecida — o campo existe no
+      schema desde a Fase 1d do Módulo de Mesas, mas nunca ganhou UI; é pré-requisito pra
+      rotear impressão por setor).
+   3. Portar o ticket de HTML (`ImprimirRodada.tsx`/`ImprimirEnvio.tsx`) pra ESC/POS.
+   4. Construir o agente local em si (conexão Socket.IO + mapeamento setor→IP da impressora).
+   5. Empacotar pra instalar em cada restaurante + decidir rollout (paralelo ao modelo antigo
+      ou troca direta) + tratamento de impressora offline (fila/retry).
 
 > Painel de avaliações (média de estrelas + comentários no Dashboard) já estava entregue antes
 > desta lista ser revisada — ver seção "Avaliações dos clientes" em `Dashboard.tsx`.
