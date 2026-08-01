@@ -1484,7 +1484,23 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
       `ItemComanda.setorId` já estava pronta em todos os pontos de criação de item, não
       precisou mudar nada ali. Testado ao vivo em homologação pelo usuário: criou o setor
       "Churrasco" e vinculou itens novos a ele.
-   3. Portar o ticket de HTML (`ImprimirRodada.tsx`/`ImprimirEnvio.tsx`) pra ESC/POS.
+   3. [x] **Concluído em 2026-08-01** (PR #53, `feat/ticket-escpos`) — ticket de comanda
+      portado de HTML pra ESC/POS. `src/utils/escPosTicket.ts`
+      (`montarTicketRodada`/`montarTicketEnvio`) monta o mesmo conteúdo de
+      `ImprimirRodada.tsx`/`ImprimirEnvio.tsx`, só que em bytes ESC/POS crus, prontos pra
+      mandar direto pra porta 9100 — não substitui as páginas HTML existentes, o modelo de
+      quiosque continua ativo até o agente local (passo 4) existir. 9 testes automatizados
+      cobrindo o layout, **e validado na íntegra na impressora física real** (Tanca TP-650),
+      onde apareceram 2 problemas que só a impressão real revelou (nenhum teste automatizado
+      pegaria): (1) code page errada faz acento sair como caractere estranho — a opção
+      "óbvia" pela tabela padrão Epson (n=3/PC860, código de Português) saiu errada; a que
+      funcionou foi **n=16 (WPC1252/Windows-1252)**, testada uma por uma via `ESC t n`; (2)
+      sem avanço de papel extra antes do corte, a guilhotina corta o ticket antes dele sair
+      pra fora da impressora, obrigando abrir a tampa pra pegar o papel — resolvido com 8
+      linhas em branco antes do comando de corte. Achado de processo: um teste em lote
+      (varrendo n=0 a 19 de uma vez, todos os code pages numa única impressão) fez a
+      impressora não imprimir nada — teve que ser feito um valor de code page por vez,
+      isolado, pra funcionar.
    4. Construir o agente local em si (conexão Socket.IO + mapeamento setor→IP da impressora).
    5. Empacotar pra instalar em cada restaurante + decidir rollout (paralelo ao modelo antigo
       ou troca direta) + tratamento de impressora offline (fila/retry).
