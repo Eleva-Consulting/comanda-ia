@@ -385,6 +385,21 @@ Railway Environment `staging` (mesmo projeto `glorious-playfulness`, id
   pro backend de staging). Configurar em Settings → Environment Variables, editando cada uma
   (não dá pra ter duas variáveis com o mesmo nome cobrindo o mesmo ambiente — precisa remover o
   overlap primeiro).
+- **Problema recorrente conhecido: o alias fixo `comanda-ia-git-staging-comanda-project.vercel.app`
+  não atualiza sozinho a cada novo deploy da branch `staging`** (confirmado 2 vezes — 2026-07-28 e
+  2026-08-01 — não foi um caso isolado). Cada push novo em `staging` gera um deploy novo de verdade
+  (buildado certo, a partir do commit certo), mas o alias fixo continua apontando pro deploy
+  anterior até alguém apontar manualmente de novo. **Depois de todo merge em `staging`, checar e
+  corrigir se precisar:**
+  ```bash
+  # confirma se o alias está no commit certo (compara com o commit do merge)
+  vercel inspect https://comanda-ia-git-staging-comanda-project.vercel.app --logs | grep -i commit
+
+  # se estiver desatualizado: acha o deploy novo (mais recente, branch staging) e realiasa
+  vercel ls comanda-ia            # pega a URL do deploy "Preview" mais recente
+  vercel inspect <url-do-deploy-mais-recente> --logs | grep -i commit   # confirma que é o certo
+  vercel alias set <url-do-deploy-mais-recente> comanda-ia-git-staging-comanda-project.vercel.app
+  ```
 
 Resetar os dados de teste de staging (ex: depois de testes que sujaram os dados):
 
