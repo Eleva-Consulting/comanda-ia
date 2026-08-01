@@ -31,6 +31,7 @@ const CriarItemSchema = Type.Object({
   disponivel:  Type.Optional(Type.Boolean()),
   categoriaId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   estoque:     Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
+  setorId:     Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 
 const AtualizarItemSchema = Type.Object({
@@ -40,9 +41,11 @@ const AtualizarItemSchema = Type.Object({
   disponivel:  Type.Optional(Type.Boolean()),
   categoriaId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   estoque:     Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
+  setorId:     Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 
 const categoriaSelect = { select: { id: true, nome: true, ordem: true, opcoesAcompanhamento: true } } as const;
+const setorSelect = { select: { id: true, nome: true } } as const;
 
 type OpcaoAcompanhamento = { nome: string; precoAdicional: number };
 
@@ -144,7 +147,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     const itens = await prisma.itemCardapio.findMany({
       where:   { estabelecimentoId: estabelecimentoId! },
       orderBy: { nome: 'asc' },
-      include: { categoria: categoriaSelect },
+      include: { categoria: categoriaSelect, setor: setorSelect },
     });
     return itens.map(serializarItem);
   });
@@ -159,7 +162,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
 
     const item = await prisma.itemCardapio.findFirst({
       where:   { id, estabelecimentoId: estabelecimentoId! },
-      include: { categoria: categoriaSelect },
+      include: { categoria: categoriaSelect, setor: setorSelect },
     });
     if (!item) return reply.status(404).send({ erro: 'Item não encontrado' });
     return serializarItem(item);
@@ -171,13 +174,13 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     schema: { body: CriarItemSchema },
   }, async (request, reply) => {
     const dados = request.body as {
-      nome: string; descricao?: string; preco: number; disponivel?: boolean; categoriaId?: string | null;
+      nome: string; descricao?: string; preco: number; disponivel?: boolean; categoriaId?: string | null; setorId?: string | null;
     };
     const { estabelecimentoId } = request.user;
 
     const item = await prisma.itemCardapio.create({
       data:    { ...dados, estabelecimentoId: estabelecimentoId! },
-      include: { categoria: categoriaSelect },
+      include: { categoria: categoriaSelect, setor: setorSelect },
     });
     return reply.status(201).send(serializarItem(item));
   });
@@ -189,7 +192,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const { id }  = request.params as { id: string };
     const dados   = request.body as {
-      nome?: string; descricao?: string; preco?: number; disponivel?: boolean; categoriaId?: string | null;
+      nome?: string; descricao?: string; preco?: number; disponivel?: boolean; categoriaId?: string | null; setorId?: string | null;
     };
     const { estabelecimentoId } = request.user;
 
@@ -200,7 +203,7 @@ export async function cardapioRoutes(fastify: FastifyInstance) {
     if (resultado.count === 0) {
       return reply.status(404).send({ erro: 'Item não encontrado' });
     }
-    const atualizado = await prisma.itemCardapio.findUnique({ where: { id }, include: { categoria: categoriaSelect } });
+    const atualizado = await prisma.itemCardapio.findUnique({ where: { id }, include: { categoria: categoriaSelect, setor: setorSelect } });
     return serializarItem(atualizado!);
   });
 
