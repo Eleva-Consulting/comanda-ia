@@ -1448,8 +1448,18 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
    impressora do Churrasco só precisaria de energia + cabo de rede até o mesmo roteador, sem
    PC dedicado, já que o agente único decide pra qual IP mandar cada ticket. Ordem de
    execução acordada com o usuário, começando pelo mais barato de validar:
-   1. Confirmar que a(s) impressora(s) real(is) suportam ESC/POS via rede (teste simples
-      mandando texto cru pra porta 9100 do IP dela).
+   1. [x] **Confirmado em 2026-08-01** — impressora real do usuário é uma **Tanca TP-650**
+      (interface Ethernet/Serial/USB nativa, sem placa adicional, IP de fábrica
+      `192.168.1.87` fixo). Teste feito plugando ela direto no Mac do usuário (IP manual
+      `192.168.1.50/24` na interface Ethernet, sem gateway) — `ping` respondeu normal, e um
+      script Node puro (`net.createConnection` na porta `9100`, sem nenhuma lib de terceiro)
+      mandando um ticket com comandos ESC/POS crus (inicializar, centralizar, fonte dupla,
+      corte de papel) imprimiu corretamente. Confirma a premissa técnica mais arriscada do
+      plano inteiro: dá pra imprimir só com socket TCP puro, sem driver/utilitário/SDK da
+      Tanca. O utilitário oficial da Tanca ("Tanca Printer Tool", pra trocar IP fixo↔DHCP)
+      parece ser só Windows — não bloqueou esse teste, mas vai importar mais pra frente
+      (passo 5, rollout) se o IP de fábrica precisar mudar pra bater com a rede real do
+      restaurante.
    2. Construir o vínculo item do cardápio → Setor (lacuna já conhecida — o campo existe no
       schema desde a Fase 1d do Módulo de Mesas, mas nunca ganhou UI; é pré-requisito pra
       rotear impressão por setor).
