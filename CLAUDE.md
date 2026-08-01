@@ -1475,9 +1475,15 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
       parece ser só Windows — não bloqueou esse teste, mas vai importar mais pra frente
       (passo 5, rollout) se o IP de fábrica precisar mudar pra bater com a rede real do
       restaurante.
-   2. Construir o vínculo item do cardápio → Setor (lacuna já conhecida — o campo existe no
-      schema desde a Fase 1d do Módulo de Mesas, mas nunca ganhou UI; é pré-requisito pra
-      rotear impressão por setor).
+   2. [x] **Concluído em 2026-08-01** (PR #50, `feat/vinculo-item-setor`) — vínculo item do
+      cardápio → Setor. `POST`/`PATCH /cardapio` passaram a aceitar `setorId`; `GET /cardapio`
+      inclui `setor: {id, nome}`. Como não existia CRUD de Setor em nenhuma tela do frontend
+      até então (só a rota de backend, sem consumidor), a tela de Cardápio ganhou também uma
+      seção "Setores" pra criar/renomear/remover — sem isso não dava nem pra criar um setor
+      novo tipo "Churrasco" pra vincular. A propagação `ItemCardapio.setorId` →
+      `ItemComanda.setorId` já estava pronta em todos os pontos de criação de item, não
+      precisou mudar nada ali. Testado ao vivo em homologação pelo usuário: criou o setor
+      "Churrasco" e vinculou itens novos a ele.
    3. Portar o ticket de HTML (`ImprimirRodada.tsx`/`ImprimirEnvio.tsx`) pra ESC/POS.
    4. Construir o agente local em si (conexão Socket.IO + mapeamento setor→IP da impressora).
    5. Empacotar pra instalar em cada restaurante + decidir rollout (paralelo ao modelo antigo
