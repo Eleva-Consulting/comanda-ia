@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { temPermissao, moduloAtivo } from './auth.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { temPermissao, moduloAtivo, autenticar } from './auth.js';
 
 vi.mock('../database.js', () => ({
   prisma: {
@@ -9,7 +9,16 @@ vi.mock('../database.js', () => ({
   },
 }));
 
+vi.mock('bcrypt', () => ({
+  default: { compare: vi.fn() },
+}));
+
 import { prisma } from '../database.js';
+import bcrypt from 'bcrypt';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function criarRequestFake(role: string, permissoes: string[]) {
   return { user: { role, permissoes, estabelecimentoId: 'test-id' } } as unknown as Parameters<ReturnType<typeof temPermissao>>[0];
@@ -27,6 +36,75 @@ function criarReplyFake() {
     send: ReturnType<typeof vi.fn>;
   };
 }
+
+function criarAutenticarRequestFake(headers: Record<string, string> = {}, jwtVerify = vi.fn().mockResolvedValue(undefined)) {
+  return { headers, jwtVerify, user: undefined } as unknown as Parameters<typeof autenticar>[0] & {
+    headers: Record<string, string>;
+    jwtVerify: ReturnType<typeof vi.fn>;
+    user?: { userId: string; estabelecimentoId: string | null; role: string; permissoes: string[]; setorId: string | null };
+  };
+}
+
+describe('autenticar — agente de impressão local (device token)', () => {
+  it('autentica com x-device-token + x-estabelecimento-id válidos, populando role DONO', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ tokenAgenteImpressao: 'hash-salvo' } as any);
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+    const request = criarAutenticarRequestFake({ 'x-device-token': 'token-certo', 'x-estabelecimento-id': 'estab-1' });
+    const reply = criarReplyFake();
+
+    await autenticar(request, reply);
+
+    expect(reply.status).not.toHaveBeenCalled();
+    expect(request.jwtVerify).not.toHaveBeenCalled();
+    expect(request.user).toEqual({ userId: 'agente-impressao', estabelecimentoId: 'estab-1', role: 'DONO', permissoes: [], setorId: null });
+  });
+
+  it('bloqueia com 401 quando o token não bate', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ tokenAgenteImpressao: 'hash-salvo' } as any);
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+
+    const request = criarAutenticarRequestFake({ 'x-device-token': 'token-errado', 'x-estabelecimento-id': 'estab-1' });
+    const reply = criarReplyFake();
+
+    await autenticar(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(401);
+  });
+
+  it('bloqueia com 401 quando o estabelecimento não tem token de agente configurado', async () => {
+    vi.mocked(prisma.estabelecimento.findUnique).mockResolvedValue({ tokenAgenteImpressao: null } as any);
+
+    const request = criarAutenticarRequestFake({ 'x-device-token': 'qualquer', 'x-estabelecimento-id': 'estab-1' });
+    const reply = criarReplyFake();
+
+    await autenticar(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+  });
+
+  it('sem os headers de device token, cai pro fluxo normal de JWT', async () => {
+    const jwtVerify = vi.fn().mockResolvedValue(undefined);
+    const request = criarAutenticarRequestFake({}, jwtVerify);
+    const reply = criarReplyFake();
+
+    await autenticar(request, reply);
+
+    expect(jwtVerify).toHaveBeenCalled();
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia com 401 quando o JWT é inválido', async () => {
+    const jwtVerify = vi.fn().mockRejectedValue(new Error('inválido'));
+    const request = criarAutenticarRequestFake({}, jwtVerify);
+    const reply = criarReplyFake();
+
+    await autenticar(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(401);
+  });
+});
 
 describe('temPermissao', () => {
   it('libera DONO mesmo sem a permissão explícita na lista', async () => {

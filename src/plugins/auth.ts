@@ -1,4 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import bcrypt from 'bcrypt';
 import { prisma } from '../database.js';
 
 // ============================================================================
@@ -31,11 +32,32 @@ declare module '@fastify/jwt' {
 /**
  * Valida o JWT. Em caso de sucesso, popula request.user com o payload.
  * Usado em todas as rotas autenticadas.
+ *
+ * Também aceita o agente de impressão local (não é uma pessoa fazendo login, não tem
+ * JWT) via os headers `x-device-token` + `x-estabelecimento-id` — mesmo token gerado em
+ * Configurações e validado contra Estabelecimento.tokenAgenteImpressao (bcrypt), espelhando
+ * a autenticação já usada na conexão Socket.IO do agente (ver src/socket.ts). Populado como
+ * role 'DONO' (acesso de leitura equivalente ao dono, sem usuário humano de verdade por
+ * trás) pra passar direto em qualquer `temPermissao` sem precisar listar permissão nenhuma.
  */
 export async function autenticar(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
+  const deviceToken       = request.headers['x-device-token'];
+  const estabelecimentoId = request.headers['x-estabelecimento-id'];
+
+  if (typeof deviceToken === 'string' && typeof estabelecimentoId === 'string') {
+    const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId } });
+    const valido = estabelecimento?.tokenAgenteImpressao
+      ? await bcrypt.compare(deviceToken, estabelecimento.tokenAgenteImpressao)
+      : false;
+    if (!valido) return reply.status(401).send({ erro: 'Token inválido ou ausente' });
+
+    request.user = { userId: 'agente-impressao', estabelecimentoId, role: 'DONO', permissoes: [], setorId: null };
+    return;
+  }
+
   try {
     await request.jwtVerify();
   } catch {

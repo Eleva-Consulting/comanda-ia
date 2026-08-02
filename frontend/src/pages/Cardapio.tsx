@@ -19,6 +19,7 @@ interface Setor {
   id: string
   nome: string
   tempoAlvoMinutos: number | null
+  impressoraIp: string | null
 }
 
 interface ItemCardapio {
@@ -68,6 +69,7 @@ export default function Cardapio() {
   const [editandoSetor, setEditandoSetor] = useState<Setor | null>(null)
   const [nomeSetor, setNomeSetor] = useState('')
   const [tempoAlvoSetor, setTempoAlvoSetor] = useState('')
+  const [impressoraIpSetor, setImpressoraIpSetor] = useState('')
   const [salvandoSetor, setSalvandoSetor] = useState(false)
 
   const fotoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -351,6 +353,7 @@ export default function Cardapio() {
     setEditandoSetor(null)
     setNomeSetor('')
     setTempoAlvoSetor('')
+    setImpressoraIpSetor('')
     setModalSetorAberto(true)
   }
 
@@ -358,6 +361,7 @@ export default function Cardapio() {
     setEditandoSetor(setor)
     setNomeSetor(setor.nome)
     setTempoAlvoSetor(setor.tempoAlvoMinutos != null ? String(setor.tempoAlvoMinutos) : '')
+    setImpressoraIpSetor(setor.impressoraIp ?? '')
     setModalSetorAberto(true)
   }
 
@@ -374,6 +378,7 @@ export default function Cardapio() {
         body: JSON.stringify({
           nome: nomeSetor.trim(),
           tempoAlvoMinutos: tempoAlvoSetor.trim() !== '' ? parseInt(tempoAlvoSetor, 10) : null,
+          impressoraIp: impressoraIpSetor.trim() || null,
         }),
       })
       if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.erro ?? 'Erro') }
@@ -733,9 +738,11 @@ export default function Cardapio() {
           editando={editandoSetor}
           nome={nomeSetor}
           tempoAlvoMinutos={tempoAlvoSetor}
+          impressoraIp={impressoraIpSetor}
           salvando={salvandoSetor}
           onChangeNome={setNomeSetor}
           onChangeTempoAlvoMinutos={setTempoAlvoSetor}
+          onChangeImpressoraIp={setImpressoraIpSetor}
           onFechar={() => { if (!salvandoSetor) setModalSetorAberto(false) }}
           onSalvar={handleSalvarSetor}
         />
@@ -994,14 +1001,17 @@ function ModalCategoria({
 }
 
 function ModalSetor({
-  editando, nome, tempoAlvoMinutos, salvando, onChangeNome, onChangeTempoAlvoMinutos, onFechar, onSalvar,
+  editando, nome, tempoAlvoMinutos, impressoraIp, salvando,
+  onChangeNome, onChangeTempoAlvoMinutos, onChangeImpressoraIp, onFechar, onSalvar,
 }: {
   editando: Setor | null
   nome: string
   tempoAlvoMinutos: string
+  impressoraIp: string
   salvando: boolean
   onChangeNome: (v: string) => void
   onChangeTempoAlvoMinutos: (v: string) => void
+  onChangeImpressoraIp: (v: string) => void
   onFechar: () => void
   onSalvar: (e: FormEvent) => void
 }) {
@@ -1032,6 +1042,17 @@ function ModalSetor({
             <input
               type="number" min={1} step="1" value={tempoAlvoMinutos}
               onChange={(e) => onChangeTempoAlvoMinutos(e.target.value)} placeholder="ex: 15"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
+
+          <label className="mb-5 block">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">
+              IP da impressora <span className="text-zinc-500">(opcional — pro agente de impressão local)</span>
+            </span>
+            <input
+              type="text" value={impressoraIp} placeholder="ex: 192.168.1.87"
+              onChange={(e) => onChangeImpressoraIp(e.target.value)}
               className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
             />
           </label>

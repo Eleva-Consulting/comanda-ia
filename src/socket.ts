@@ -1,5 +1,7 @@
 import { Server } from 'socket.io';
 import { FastifyInstance } from 'fastify';
+import bcrypt from 'bcrypt';
+import { prisma } from './database.js';
 import { salasParaConexao } from './utils/salasSocket.js';
 
 let io: Server;
@@ -20,7 +22,27 @@ export function inicializarSocket(fastify: FastifyInstance) {
     },
   });
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
+    // Conexão do agente de impressão local (não é uma pessoa fazendo login) — autentica
+    // por token de dispositivo próprio em vez de JWT, gerado em Configurações
+    // (POST /meu-estabelecimento/agente-impressao/token). Sempre entra na sala ampla do
+    // estabelecimento (mesmo comportamento de qualquer conexão sem `contexto: 'producao'`)
+    // — precisa ver item novo de qualquer setor pra decidir em qual impressora imprimir.
+    if (socket.handshake.auth?.tipoConexao === 'agente-impressao') {
+      const { estabelecimentoId, deviceToken } = socket.handshake.auth as { estabelecimentoId?: string; deviceToken?: string };
+      if (!estabelecimentoId || !deviceToken) return next(new Error('Credenciais do agente ausentes'));
+
+      const estabelecimento = await prisma.estabelecimento.findUnique({ where: { id: estabelecimentoId } });
+      if (!estabelecimento?.tokenAgenteImpressao) return next(new Error('Agente de impressão não configurado'));
+
+      const valido = await bcrypt.compare(deviceToken, estabelecimento.tokenAgenteImpressao);
+      if (!valido) return next(new Error('Token inválido'));
+
+      socket.data.estabelecimentoId = estabelecimentoId;
+      socket.join(estabelecimentoId);
+      return next();
+    }
+
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Token ausente'));
 
