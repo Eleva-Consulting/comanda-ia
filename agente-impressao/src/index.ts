@@ -1,14 +1,18 @@
+import 'dotenv/config';
 import { io } from 'socket.io-client';
 import { montarTicketEnvio } from '../../src/utils/escPosTicket.js';
 import { agruparPorSetorEImpressora, type ComandaComItens, type SetorComImpressora } from './agrupamento.js';
 import { enviarParaImpressora } from './imprimir.js';
 
+// Lê de um arquivo `.env` na pasta do agente (mais fácil de configurar em qualquer sistema,
+// principalmente Windows) — ou de variável de ambiente de verdade, se preferir. Ver
+// `.env.example` pro formato esperado.
 const BACKEND_URL        = process.env.BACKEND_URL ?? 'https://comanda-ia-production.up.railway.app';
 const ESTABELECIMENTO_ID = process.env.ESTABELECIMENTO_ID;
 const DEVICE_TOKEN       = process.env.DEVICE_TOKEN;
 
 if (!ESTABELECIMENTO_ID || !DEVICE_TOKEN) {
-  console.error('[agente] defina ESTABELECIMENTO_ID e DEVICE_TOKEN nas variáveis de ambiente — gere o token em Configurações → Agente de impressão local, no painel do restaurante.');
+  console.error('[agente] defina ESTABELECIMENTO_ID e DEVICE_TOKEN no arquivo .env (copie .env.example pra .env e preencha) — gere o token em Configurações → Agente de impressão local, no painel do restaurante.');
   process.exit(1);
 }
 
