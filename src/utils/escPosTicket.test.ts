@@ -55,6 +55,14 @@ describe('montarTicketRodada', () => {
     expect(depoisDoItem2).toContain('obs: sem gelo');
   });
 
+  it('mostra o nome do setor de origem ao lado do item só quando nomeSetorReferencia está presente', () => {
+    const itemSemReferencia = { ...item1, nomeSetorReferencia: null };
+    const itemComReferencia = { ...item2, nomeSetorReferencia: 'Churrasqueira' };
+    const t = texto(montarTicketRodada({ ...base, itens: [itemSemReferencia, itemComReferencia] }));
+    expect(t).toContain('4x Baião de Carne de Sol\n'); // sem sufixo
+    expect(t).toContain('1x Refrigerante (Churrasqueira)\n');
+  });
+
   it('inclui número de pessoas e quem abriu só quando presentes', () => {
     const semNenhum = texto(montarTicketRodada(base));
     expect(semNenhum).not.toContain('Pessoas na mesa');

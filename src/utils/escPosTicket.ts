@@ -37,6 +37,11 @@ export interface ItemTicket {
   nomeItem:       string;
   observacao:     string | null;
   acompanhamento: string | null;
+  // Preenchido só quando o item é de OUTRO setor, num ticket "completo" (setor com
+  // recebeTicketCompleto — ver agente-impressao/src/agrupamento.ts): mostra o nome do
+  // setor de origem ao lado, deixando claro que é referência (pro garçom conferir o que
+  // buscar em outra estação), não item pra esse setor preparar.
+  nomeSetorReferencia?: string | null;
 }
 
 export interface DadosTicketRodada {
@@ -70,7 +75,8 @@ function formatarDataHora(data: Date): string {
 }
 
 function linhaItem(item: ItemTicket): string {
-  let saida = MODO_NORMAL + `${item.quantidade}x ${item.nomeItem}\n`;
+  const sufixoSetor = item.nomeSetorReferencia ? ` (${item.nomeSetorReferencia})` : '';
+  let saida = MODO_NORMAL + `${item.quantidade}x ${item.nomeItem}${sufixoSetor}\n`;
   if (item.acompanhamento) saida += `  Acompanhamento: ${item.acompanhamento}\n`;
   if (item.observacao)     saida += `  obs: ${item.observacao}\n`;
   return saida;
