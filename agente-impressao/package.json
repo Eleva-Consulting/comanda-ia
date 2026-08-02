@@ -1,0 +1,22 @@
+{
+  "name": "comanda-ia-agente-impressao",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Serviço local (sem navegador) que conecta no backend do comanda-ia e imprime pedidos automaticamente em impressoras térmicas de rede, roteando por Setor.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

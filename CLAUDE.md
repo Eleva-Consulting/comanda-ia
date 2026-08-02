@@ -385,6 +385,21 @@ Railway Environment `staging` (mesmo projeto `glorious-playfulness`, id
   pro backend de staging). Configurar em Settings → Environment Variables, editando cada uma
   (não dá pra ter duas variáveis com o mesmo nome cobrindo o mesmo ambiente — precisa remover o
   overlap primeiro).
+- **Problema recorrente conhecido: o alias fixo `comanda-ia-git-staging-comanda-project.vercel.app`
+  não atualiza sozinho a cada novo deploy da branch `staging`** (confirmado 2 vezes — 2026-07-28 e
+  2026-08-01 — não foi um caso isolado). Cada push novo em `staging` gera um deploy novo de verdade
+  (buildado certo, a partir do commit certo), mas o alias fixo continua apontando pro deploy
+  anterior até alguém apontar manualmente de novo. **Depois de todo merge em `staging`, checar e
+  corrigir se precisar:**
+  ```bash
+  # confirma se o alias está no commit certo (compara com o commit do merge)
+  vercel inspect https://comanda-ia-git-staging-comanda-project.vercel.app --logs | grep -i commit
+
+  # se estiver desatualizado: acha o deploy novo (mais recente, branch staging) e realiasa
+  vercel ls comanda-ia            # pega a URL do deploy "Preview" mais recente
+  vercel inspect <url-do-deploy-mais-recente> --logs | grep -i commit   # confirma que é o certo
+  vercel alias set <url-do-deploy-mais-recente> comanda-ia-git-staging-comanda-project.vercel.app
+  ```
 
 Resetar os dados de teste de staging (ex: depois de testes que sujaram os dados):
 
@@ -1437,6 +1452,58 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
    entregue em 2026-07-13, no Dashboard e na tela Financeiro)
 2. **QR Code** — gerar QR no link do cardápio para imprimir e colocar na mesa
 3. **Multi-unidades** — um DONO com vários estabelecimentos sob a mesma conta
+4. **Impressão via agente local (sem computador em modo quiosque)** — brainstorming iniciado
+   em 2026-07-31, ainda não tem spec/plano formal. Problema atual: cada ponto de impressão
+   exige um computador com Chrome logado na tela de Cozinha em modo quiosque, disparando
+   `window.print()` — frágil (trava com diálogo de impressão) e caro de escalar por setor
+   (ex: adicionar impressora do Churrasco hoje exigiria outro PC inteiro). Direção discutida:
+   um agente local leve (serviço em background, sem navegador/tela/login, roda em qualquer PC
+   ou até um Raspberry Pi) que conecta no mesmo Socket.IO que a Cozinha já usa, recebe o
+   evento de pedido novo e manda ESC/POS direto pra impressora via rede (IP:9100) — a
+   impressora do Churrasco só precisaria de energia + cabo de rede até o mesmo roteador, sem
+   PC dedicado, já que o agente único decide pra qual IP mandar cada ticket. Ordem de
+   execução acordada com o usuário, começando pelo mais barato de validar:
+   1. [x] **Confirmado em 2026-08-01** — impressora real do usuário é uma **Tanca TP-650**
+      (interface Ethernet/Serial/USB nativa, sem placa adicional, IP de fábrica
+      `192.168.1.87` fixo). Teste feito plugando ela direto no Mac do usuário (IP manual
+      `192.168.1.50/24` na interface Ethernet, sem gateway) — `ping` respondeu normal, e um
+      script Node puro (`net.createConnection` na porta `9100`, sem nenhuma lib de terceiro)
+      mandando um ticket com comandos ESC/POS crus (inicializar, centralizar, fonte dupla,
+      corte de papel) imprimiu corretamente. Confirma a premissa técnica mais arriscada do
+      plano inteiro: dá pra imprimir só com socket TCP puro, sem driver/utilitário/SDK da
+      Tanca. O utilitário oficial da Tanca ("Tanca Printer Tool", pra trocar IP fixo↔DHCP)
+      parece ser só Windows — não bloqueou esse teste, mas vai importar mais pra frente
+      (passo 5, rollout) se o IP de fábrica precisar mudar pra bater com a rede real do
+      restaurante.
+   2. [x] **Concluído em 2026-08-01** (PR #50, `feat/vinculo-item-setor`) — vínculo item do
+      cardápio → Setor. `POST`/`PATCH /cardapio` passaram a aceitar `setorId`; `GET /cardapio`
+      inclui `setor: {id, nome}`. Como não existia CRUD de Setor em nenhuma tela do frontend
+      até então (só a rota de backend, sem consumidor), a tela de Cardápio ganhou também uma
+      seção "Setores" pra criar/renomear/remover — sem isso não dava nem pra criar um setor
+      novo tipo "Churrasco" pra vincular. A propagação `ItemCardapio.setorId` →
+      `ItemComanda.setorId` já estava pronta em todos os pontos de criação de item, não
+      precisou mudar nada ali. Testado ao vivo em homologação pelo usuário: criou o setor
+      "Churrasco" e vinculou itens novos a ele.
+   3. [x] **Concluído em 2026-08-01** (PR #53, `feat/ticket-escpos`) — ticket de comanda
+      portado de HTML pra ESC/POS. `src/utils/escPosTicket.ts`
+      (`montarTicketRodada`/`montarTicketEnvio`) monta o mesmo conteúdo de
+      `ImprimirRodada.tsx`/`ImprimirEnvio.tsx`, só que em bytes ESC/POS crus, prontos pra
+      mandar direto pra porta 9100 — não substitui as páginas HTML existentes, o modelo de
+      quiosque continua ativo até o agente local (passo 4) existir. 9 testes automatizados
+      cobrindo o layout, **e validado na íntegra na impressora física real** (Tanca TP-650),
+      onde apareceram 2 problemas que só a impressão real revelou (nenhum teste automatizado
+      pegaria): (1) code page errada faz acento sair como caractere estranho — a opção
+      "óbvia" pela tabela padrão Epson (n=3/PC860, código de Português) saiu errada; a que
+      funcionou foi **n=16 (WPC1252/Windows-1252)**, testada uma por uma via `ESC t n`; (2)
+      sem avanço de papel extra antes do corte, a guilhotina corta o ticket antes dele sair
+      pra fora da impressora, obrigando abrir a tampa pra pegar o papel — resolvido com 8
+      linhas em branco antes do comando de corte. Achado de processo: um teste em lote
+      (varrendo n=0 a 19 de uma vez, todos os code pages numa única impressão) fez a
+      impressora não imprimir nada — teve que ser feito um valor de code page por vez,
+      isolado, pra funcionar.
+   4. Construir o agente local em si (conexão Socket.IO + mapeamento setor→IP da impressora).
+   5. Empacotar pra instalar em cada restaurante + decidir rollout (paralelo ao modelo antigo
+      ou troca direta) + tratamento de impressora offline (fila/retry).
 
 > Painel de avaliações (média de estrelas + comentários no Dashboard) já estava entregue antes
 > desta lista ser revisada — ver seção "Avaliações dos clientes" em `Dashboard.tsx`.

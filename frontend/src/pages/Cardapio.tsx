@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed, Camera, ImageOff, Tag, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Loader2, UtensilsCrossed, Camera, ImageOff, Tag, Search, Layers } from 'lucide-react'
 import Layout from '../components/Layout'
 import { API_URL } from '../lib/api'
 
@@ -15,6 +15,14 @@ interface Categoria {
   opcoesAcompanhamento: OpcaoAcompanhamento[]
 }
 
+interface Setor {
+  id: string
+  nome: string
+  tempoAlvoMinutos: number | null
+  impressoraIp: string | null
+  recebeTicketCompleto: boolean
+}
+
 interface ItemCardapio {
   id: string
   nome: string
@@ -25,6 +33,8 @@ interface ItemCardapio {
   categoriaId: string | null
   categoria: { id: string; nome: string; ordem: number } | null
   estoque: number | null
+  setorId: string | null
+  setor: { id: string; nome: string } | null
 }
 
 function formatarBRL(valor: number): string {
@@ -35,6 +45,7 @@ export default function Cardapio() {
   const token = localStorage.getItem('token')
   const [itens, setItens] = useState<ItemCardapio[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [setores, setSetores] = useState<Setor[]>([])
   const [carregando, setCarregando] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
   const [editando, setEditando] = useState<ItemCardapio | null>(null)
@@ -47,12 +58,21 @@ export default function Cardapio() {
   const [disponivel, setDisponivel] = useState(true)
   const [categoriaId, setCategoriaId] = useState<string>('')
   const [estoque, setEstoque] = useState<string>('')
+  const [setorId, setSetorId] = useState<string>('')
 
   const [modalCategoriaAberto, setModalCategoriaAberto] = useState(false)
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null)
   const [nomeCategoria, setNomeCategoria] = useState('')
   const [opcoesAcompanhamento, setOpcoesAcompanhamento] = useState<OpcaoAcompanhamento[]>([])
   const [salvandoCategoria, setSalvandoCategoria] = useState(false)
+
+  const [modalSetorAberto, setModalSetorAberto] = useState(false)
+  const [editandoSetor, setEditandoSetor] = useState<Setor | null>(null)
+  const [nomeSetor, setNomeSetor] = useState('')
+  const [tempoAlvoSetor, setTempoAlvoSetor] = useState('')
+  const [impressoraIpSetor, setImpressoraIpSetor] = useState('')
+  const [recebeTicketCompletoSetor, setRecebeTicketCompletoSetor] = useState(false)
+  const [salvandoSetor, setSalvandoSetor] = useState(false)
 
   const fotoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [uploadandoFotoId, setUploadandoFotoId] = useState<string | null>(null)
@@ -78,14 +98,17 @@ export default function Cardapio() {
     setCarregando(true)
     try {
       const headers = { Authorization: `Bearer ${token}` }
-      const [rItens, rCats] = await Promise.all([
+      const [rItens, rCats, rSetores] = await Promise.all([
         fetch(`${API_URL}/cardapio`, { headers }),
         fetch(`${API_URL}/cardapio/categorias`, { headers }),
+        fetch(`${API_URL}/setores`, { headers }),
       ])
       const dadosItens: ItemCardapio[] = await rItens.json()
       const dadosCats: Categoria[]     = await rCats.json()
-      if (Array.isArray(dadosItens)) setItens(dadosItens)
-      if (Array.isArray(dadosCats))  setCategorias(dadosCats)
+      const dadosSetores: Setor[]      = await rSetores.json()
+      if (Array.isArray(dadosItens))   setItens(dadosItens)
+      if (Array.isArray(dadosCats))    setCategorias(dadosCats)
+      if (Array.isArray(dadosSetores)) setSetores(dadosSetores)
     } catch (e) {
       console.error('Erro ao carregar cardápio:', e)
     } finally {
@@ -128,6 +151,7 @@ export default function Cardapio() {
     setDisponivel(true)
     setCategoriaId('')
     setEstoque('')
+    setSetorId('')
     setModalAberto(true)
   }
 
@@ -139,6 +163,7 @@ export default function Cardapio() {
     setDisponivel(item.disponivel)
     setCategoriaId(item.categoriaId ?? '')
     setEstoque(item.estoque != null ? String(item.estoque) : '')
+    setSetorId(item.setorId ?? '')
     setModalAberto(true)
   }
 
@@ -150,6 +175,7 @@ export default function Cardapio() {
       if (descricao.trim()) body.descricao = descricao.trim()
       body.categoriaId = categoriaId || null
       body.estoque = estoque.trim() !== '' ? parseInt(estoque, 10) : null
+      body.setorId = setorId || null
 
       const url    = editando ? `${API_URL}/cardapio/${editando.id}` : `${API_URL}/cardapio`
       const method = editando ? 'PATCH' : 'POST'
@@ -323,6 +349,73 @@ export default function Cardapio() {
     }
   }
 
+  // ── Modal de setor ───────────────────────────────────────────────────────
+  // Setor define pra qual estação/impressora da produção o item de um pedido vai.
+  function abrirModalNovoSetor() {
+    setEditandoSetor(null)
+    setNomeSetor('')
+    setTempoAlvoSetor('')
+    setImpressoraIpSetor('')
+    setRecebeTicketCompletoSetor(false)
+    setModalSetorAberto(true)
+  }
+
+  function abrirModalEditarSetor(setor: Setor) {
+    setEditandoSetor(setor)
+    setNomeSetor(setor.nome)
+    setTempoAlvoSetor(setor.tempoAlvoMinutos != null ? String(setor.tempoAlvoMinutos) : '')
+    setImpressoraIpSetor(setor.impressoraIp ?? '')
+    setRecebeTicketCompletoSetor(setor.recebeTicketCompleto)
+    setModalSetorAberto(true)
+  }
+
+  async function handleSalvarSetor(e: FormEvent) {
+    e.preventDefault()
+    setSalvandoSetor(true)
+    try {
+      const url    = editandoSetor ? `${API_URL}/setores/${editandoSetor.id}` : `${API_URL}/setores`
+      const method = editandoSetor ? 'PATCH' : 'POST'
+
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          nome: nomeSetor.trim(),
+          tempoAlvoMinutos: tempoAlvoSetor.trim() !== '' ? parseInt(tempoAlvoSetor, 10) : null,
+          impressoraIp: impressoraIpSetor.trim() || null,
+          recebeTicketCompleto: recebeTicketCompletoSetor,
+        }),
+      })
+      if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.erro ?? 'Erro') }
+      const salvo: Setor = await r.json()
+
+      setSetores((prev) =>
+        editandoSetor
+          ? prev.map((s) => (s.id === salvo.id ? salvo : s))
+          : [...prev, salvo],
+      )
+      setModalSetorAberto(false)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Não foi possível salvar.')
+    } finally {
+      setSalvandoSetor(false)
+    }
+  }
+
+  async function handleDeletarSetor(setor: Setor) {
+    if (!confirm(`Remover o setor "${setor.nome}"?`)) return
+
+    try {
+      const r = await fetch(`${API_URL}/setores/${setor.id}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.erro ?? 'Não foi possível remover o setor.') }
+      setSetores((prev) => prev.filter((s) => s.id !== setor.id))
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Não foi possível remover o setor.')
+    }
+  }
+
   return (
     <Layout>
       <div className="mb-6 flex items-center justify-between">
@@ -416,6 +509,46 @@ export default function Cardapio() {
           >
             <Plus className="h-3 w-3" />
             Nova categoria
+          </button>
+        </div>
+      </div>
+
+      {/* ── Seção de setores ── */}
+      <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Layers className="h-4 w-4 text-zinc-400" />
+          <span className="text-sm font-semibold text-zinc-300">Setores</span>
+          <span className="text-xs text-zinc-600">· define pra qual estação/impressora da produção o item vai</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {setores.map((setor) => (
+            <div
+              key={setor.id}
+              className="flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200"
+            >
+              {setor.nome}
+              <button
+                onClick={() => abrirModalEditarSetor(setor)}
+                className="ml-0.5 rounded p-0.5 text-zinc-400 transition hover:text-zinc-100"
+                title="Renomear"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => handleDeletarSetor(setor)}
+                className="rounded p-0.5 text-zinc-400 transition hover:text-red-400"
+                title="Remover"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={abrirModalNovoSetor}
+            className="flex items-center gap-1.5 rounded-full border border-dashed border-zinc-700 px-3 py-1 text-sm text-zinc-400 transition hover:border-orange-500 hover:text-orange-400"
+          >
+            <Plus className="h-3 w-3" />
+            Novo setor
           </button>
         </div>
       </div>
@@ -554,7 +687,7 @@ export default function Cardapio() {
       )}
 
       {/* ── Botão flutuante "Novo item" (aparece ao rolar, quando o do header some) ── */}
-      {mostrarBotaoFlutuante && !modalAberto && !modalCategoriaAberto && (
+      {mostrarBotaoFlutuante && !modalAberto && !modalCategoriaAberto && !modalSetorAberto && (
         <button
           onClick={abrirModalNovo}
           className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-orange-500 px-5 py-3.5 font-semibold text-white shadow-lg shadow-orange-500/40 transition hover:bg-orange-600 sm:bottom-8 sm:right-8"
@@ -569,12 +702,14 @@ export default function Cardapio() {
         <ModalForm
           editando={editando}
           categorias={categorias}
+          setores={setores}
           nome={nome}
           descricao={descricao}
           preco={preco}
           disponivel={disponivel}
           categoriaId={categoriaId}
           estoque={estoque}
+          setorId={setorId}
           salvando={salvando}
           onChangeNome={setNome}
           onChangeDescricao={setDescricao}
@@ -582,6 +717,7 @@ export default function Cardapio() {
           onChangeDisponivel={setDisponivel}
           onChangeCategoriaId={setCategoriaId}
           onChangeEstoque={setEstoque}
+          onChangeSetorId={setSetorId}
           onFechar={() => { if (!salvando) setModalAberto(false) }}
           onSalvar={handleSalvar}
         />
@@ -598,6 +734,24 @@ export default function Cardapio() {
           onChangeOpcoesAcompanhamento={setOpcoesAcompanhamento}
           onFechar={() => { if (!salvandoCategoria) setModalCategoriaAberto(false) }}
           onSalvar={handleSalvarCategoria}
+        />
+      )}
+
+      {/* ── Modal de setor ── */}
+      {modalSetorAberto && (
+        <ModalSetor
+          editando={editandoSetor}
+          nome={nomeSetor}
+          tempoAlvoMinutos={tempoAlvoSetor}
+          impressoraIp={impressoraIpSetor}
+          recebeTicketCompleto={recebeTicketCompletoSetor}
+          salvando={salvandoSetor}
+          onChangeNome={setNomeSetor}
+          onChangeTempoAlvoMinutos={setTempoAlvoSetor}
+          onChangeImpressoraIp={setImpressoraIpSetor}
+          onChangeRecebeTicketCompleto={setRecebeTicketCompletoSetor}
+          onFechar={() => { if (!salvandoSetor) setModalSetorAberto(false) }}
+          onSalvar={handleSalvarSetor}
         />
       )}
     </Layout>
@@ -620,18 +774,20 @@ function Toggle({
 }
 
 function ModalForm({
-  editando, categorias, nome, descricao, preco, disponivel, categoriaId, estoque, salvando,
-  onChangeNome, onChangeDescricao, onChangePreco, onChangeDisponivel, onChangeCategoriaId, onChangeEstoque,
+  editando, categorias, setores, nome, descricao, preco, disponivel, categoriaId, estoque, setorId, salvando,
+  onChangeNome, onChangeDescricao, onChangePreco, onChangeDisponivel, onChangeCategoriaId, onChangeEstoque, onChangeSetorId,
   onFechar, onSalvar,
 }: {
   editando: ItemCardapio | null
   categorias: Categoria[]
+  setores: Setor[]
   nome: string
   descricao: string
   preco: string
   disponivel: boolean
   categoriaId: string
   estoque: string
+  setorId: string
   salvando: boolean
   onChangeNome: (v: string) => void
   onChangeDescricao: (v: string) => void
@@ -639,6 +795,7 @@ function ModalForm({
   onChangeDisponivel: (v: boolean) => void
   onChangeCategoriaId: (v: string) => void
   onChangeEstoque: (v: string) => void
+  onChangeSetorId: (v: string) => void
   onFechar: () => void
   onSalvar: (e: FormEvent) => void
 }) {
@@ -693,6 +850,24 @@ function ModalForm({
                 <option value="">Sem categoria</option>
                 {categorias.map((c) => (
                   <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {setores.length > 0 && (
+            <label className="mb-4 block">
+              <span className="mb-2 block text-sm font-medium text-zinc-300">
+                Setor <span className="text-zinc-500">(opcional — define pra qual estação/impressora esse item vai na produção)</span>
+              </span>
+              <select
+                value={setorId}
+                onChange={(e) => onChangeSetorId(e.target.value)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-orange-500"
+              >
+                <option value="">Sem setor</option>
+                {setores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
                 ))}
               </select>
             </label>
@@ -815,6 +990,98 @@ function ModalCategoria({
               <Plus className="h-4 w-4" /> Adicionar opção
             </button>
           </div>
+
+          <div className="flex gap-2">
+            <button type="button" onClick={onFechar} disabled={salvando}
+              className="flex-1 rounded-xl border border-zinc-800 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50">
+              Cancelar
+            </button>
+            <button type="submit" disabled={salvando || !nome.trim()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500">
+              {salvando ? <><Loader2 className="h-4 w-4 animate-spin" />Salvando...</> : editando ? 'Salvar' : 'Criar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function ModalSetor({
+  editando, nome, tempoAlvoMinutos, impressoraIp, recebeTicketCompleto, salvando,
+  onChangeNome, onChangeTempoAlvoMinutos, onChangeImpressoraIp, onChangeRecebeTicketCompleto, onFechar, onSalvar,
+}: {
+  editando: Setor | null
+  nome: string
+  tempoAlvoMinutos: string
+  impressoraIp: string
+  recebeTicketCompleto: boolean
+  salvando: boolean
+  onChangeNome: (v: string) => void
+  onChangeTempoAlvoMinutos: (v: string) => void
+  onChangeImpressoraIp: (v: string) => void
+  onChangeRecebeTicketCompleto: (v: boolean) => void
+  onFechar: () => void
+  onSalvar: (e: FormEvent) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onFechar}>
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="text-lg font-bold">{editando ? 'Editar setor' : 'Novo setor'}</h3>
+          <button onClick={onFechar} disabled={salvando} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 disabled:opacity-50">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={onSalvar}>
+          <label className="mb-4 block">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">Nome do setor</span>
+            <input
+              type="text" required minLength={1} maxLength={60} value={nome} autoFocus
+              onChange={(e) => onChangeNome(e.target.value)} placeholder="ex: Churrasco"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
+
+          <label className="mb-5 block">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">
+              Tempo alvo de preparo (min) <span className="text-zinc-500">(opcional)</span>
+            </span>
+            <input
+              type="number" min={1} step="1" value={tempoAlvoMinutos}
+              onChange={(e) => onChangeTempoAlvoMinutos(e.target.value)} placeholder="ex: 15"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
+
+          <label className="mb-5 block">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">
+              IP da impressora <span className="text-zinc-500">(opcional — pro agente de impressão local)</span>
+            </span>
+            <input
+              type="text" value={impressoraIp} placeholder="ex: 192.168.1.87"
+              onChange={(e) => onChangeImpressoraIp(e.target.value)}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
+            />
+          </label>
+
+          <label className="mb-5 flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={recebeTicketCompleto}
+              onChange={(e) => onChangeRecebeTicketCompleto(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-600 accent-orange-500"
+            />
+            <span className="text-sm text-zinc-300">
+              Recebe o pedido completo da mesa
+              <span className="mt-0.5 block text-xs text-zinc-500">
+                Imprime todos os itens do pedido aqui (não só os deste setor) — itens de outro
+                setor saem marcados com o nome dele, como referência. Use no setor onde o garçom
+                confere e retira o pedido (normalmente a Cozinha).
+              </span>
+            </span>
+          </label>
 
           <div className="flex gap-2">
             <button type="button" onClick={onFechar} disabled={salvando}

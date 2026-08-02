@@ -126,6 +126,7 @@ model Estabelecimento {
   taxaPlataforma   Decimal?              @db.Decimal(5, 2)
   imprimirAutomaticoBalcao Boolean       @default(true)
   senhaReabrirPedido       String?
+  tokenAgenteImpressao     String? // hash bcrypt — mesmo padrão de senhaReabrirPedido; autentica o agente de impressão local no Socket.IO
   modulosAtivos    String[]              @default([])
   criadoEm         DateTime              @default(now())
 
@@ -351,6 +352,8 @@ model Setor {
   id               String   @id @default(uuid())
   nome             String
   tempoAlvoMinutos Int?
+  impressoraIp     String? // IP:porta (ou só IP, porta 9100 assumida) da impressora térmica de rede desse setor — usado pelo agente de impressão local
+  recebeTicketCompleto Boolean @default(false) // imprime o pedido inteiro da mesa (não só os itens deste setor) — itens de outro setor saem marcados com o nome dele, pra servir de referência de conferência (ex: garçom confere na Cozinha o que precisa buscar na Churrasqueira)
   criadoEm         DateTime @default(now())
 
   estabelecimentoId String

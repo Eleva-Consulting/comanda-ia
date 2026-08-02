@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
 import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 import { whatsApp } from '../whatsapp.js';
@@ -31,8 +32,12 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ erro: 'Estabelecimento não encontrado' });
     }
 
-    const { senhaReabrirPedido, ...resto } = estabelecimento;
-    return { ...resto, senhaReabrirPedidoConfigurada: senhaReabrirPedido !== null };
+    const { senhaReabrirPedido, tokenAgenteImpressao, ...resto } = estabelecimento;
+    return {
+      ...resto,
+      senhaReabrirPedidoConfigurada:   senhaReabrirPedido !== null,
+      agenteImpressaoConfigurado:      tokenAgenteImpressao !== null,
+    };
   });
 
   fastify.patch('/meu-estabelecimento', {
@@ -53,7 +58,30 @@ export async function estabelecimentosRoutes(fastify: FastifyInstance) {
       data:  dados,
     });
 
-    return atualizado;
+    // Nunca devolver hash de senha/token nesta resposta, mesmo que esta rota não os altere —
+    // mesma exclusão que GET /meu-estabelecimento já faz.
+    const { senhaReabrirPedido, tokenAgenteImpressao, ...resto } = atualizado;
+    return resto;
+  });
+
+  // ── POST /meu-estabelecimento/agente-impressao/token ────────────────────────
+  // Gera (ou regenera) o token do agente de impressão local — devolvido em texto puro só
+  // nesta resposta, nunca mais recuperável depois (mesmo padrão de segredo já usado no
+  // projeto). Regenerar invalida qualquer agente já conectado com o token anterior.
+  fastify.post('/meu-estabelecimento/agente-impressao/token', {
+    onRequest: [autenticar, temPermissao('configuracoes')],
+  }, async (request) => {
+    const { estabelecimentoId } = request.user;
+
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(token, 12);
+
+    await prisma.estabelecimento.update({
+      where: { id: estabelecimentoId! },
+      data:  { tokenAgenteImpressao: tokenHash },
+    });
+
+    return { token };
   });
 
   // ── PATCH /meu-estabelecimento/aceitando-pedidos ──────────────────────────

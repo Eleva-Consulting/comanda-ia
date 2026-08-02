@@ -4,13 +4,17 @@ import { prisma } from '../database.js';
 import { autenticar, temPermissao } from '../plugins/auth.js';
 
 const CriarSetorSchema = Type.Object({
-  nome:             Type.String({ minLength: 1, maxLength: 60 }),
-  tempoAlvoMinutos: Type.Optional(Type.Union([Type.Integer({ minimum: 1 }), Type.Null()])),
+  nome:                 Type.String({ minLength: 1, maxLength: 60 }),
+  tempoAlvoMinutos:     Type.Optional(Type.Union([Type.Integer({ minimum: 1 }), Type.Null()])),
+  impressoraIp:         Type.Optional(Type.Union([Type.String({ maxLength: 100 }), Type.Null()])),
+  recebeTicketCompleto: Type.Optional(Type.Boolean()),
 });
 
 const AtualizarSetorSchema = Type.Object({
-  nome:             Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
-  tempoAlvoMinutos: Type.Optional(Type.Union([Type.Integer({ minimum: 1 }), Type.Null()])),
+  nome:                 Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+  tempoAlvoMinutos:     Type.Optional(Type.Union([Type.Integer({ minimum: 1 }), Type.Null()])),
+  impressoraIp:         Type.Optional(Type.Union([Type.String({ maxLength: 100 }), Type.Null()])),
+  recebeTicketCompleto: Type.Optional(Type.Boolean()),
 });
 
 const SetorParamsSchema = Type.Object({ id: Type.String() });
@@ -32,7 +36,7 @@ export async function setoresRoutes(fastify: FastifyInstance) {
     onRequest: [autenticar, temPermissao('configuracoes')],
     schema: { body: CriarSetorSchema },
   }, async (request, reply) => {
-    const { nome, tempoAlvoMinutos } = request.body as { nome: string; tempoAlvoMinutos?: number | null };
+    const { nome, tempoAlvoMinutos, impressoraIp, recebeTicketCompleto } = request.body as { nome: string; tempoAlvoMinutos?: number | null; impressoraIp?: string | null; recebeTicketCompleto?: boolean };
     const { estabelecimentoId } = request.user;
 
     const existente = await prisma.setor.findUnique({
@@ -41,7 +45,13 @@ export async function setoresRoutes(fastify: FastifyInstance) {
     if (existente) return reply.status(409).send({ erro: 'Já existe um setor com esse nome' });
 
     const setor = await prisma.setor.create({
-      data: { nome, tempoAlvoMinutos: tempoAlvoMinutos ?? null, estabelecimentoId: estabelecimentoId! },
+      data: {
+        nome,
+        tempoAlvoMinutos: tempoAlvoMinutos ?? null,
+        impressoraIp: impressoraIp ?? null,
+        recebeTicketCompleto: recebeTicketCompleto ?? false,
+        estabelecimentoId: estabelecimentoId!,
+      },
     });
     return reply.status(201).send(setor);
   });
@@ -52,7 +62,7 @@ export async function setoresRoutes(fastify: FastifyInstance) {
     schema: { params: SetorParamsSchema, body: AtualizarSetorSchema },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const dados = request.body as { nome?: string; tempoAlvoMinutos?: number | null };
+    const dados = request.body as { nome?: string; tempoAlvoMinutos?: number | null; impressoraIp?: string | null; recebeTicketCompleto?: boolean };
     const { estabelecimentoId } = request.user;
 
     const resultado = await prisma.setor.updateMany({
