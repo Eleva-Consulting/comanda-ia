@@ -15,6 +15,7 @@ interface Estabelecimento {
   cidade:           string | null
   taxaEntrega:      number | null
   senhaReabrirPedidoConfigurada: boolean
+  agenteImpressaoConfigurado:    boolean
 }
 
 interface Bairro {
@@ -74,6 +75,13 @@ export default function Configuracoes() {
   const [erroSenhaReabrir, setErroSenhaReabrir]                 = useState<string | null>(null)
   const [sucessoSenhaReabrir, setSucessoSenhaReabrir]           = useState(false)
 
+  // Agente de impressão local
+  const [agenteConfigurado, setAgenteConfigurado] = useState(false)
+  const [tokenAgenteGerado, setTokenAgenteGerado] = useState<string | null>(null)
+  const [gerandoTokenAgente, setGerandoTokenAgente] = useState(false)
+  const [erroTokenAgente, setErroTokenAgente]       = useState<string | null>(null)
+  const [tokenAgenteCopiado, setTokenAgenteCopiado] = useState(false)
+
   // Bairros
   const [bairros, setBairros]                   = useState<Bairro[]>([])
   const [carregandoBairros, setCarregandoBairros] = useState(true)
@@ -112,6 +120,7 @@ export default function Configuracoes() {
         setCidade(est.cidade ?? '')
         setTaxaEntrega(est.taxaEntrega != null ? String(est.taxaEntrega) : '')
         setSenhaReabrirConfigurada(est.senhaReabrirPedidoConfigurada)
+        setAgenteConfigurado(est.agenteImpressaoConfigurado)
         verificarStatus()
         verificarStatusMp()
       })
@@ -358,6 +367,34 @@ export default function Configuracoes() {
     } finally {
       setSalvandoSenhaReabrir(false)
     }
+  }
+
+  async function gerarTokenAgente() {
+    if (agenteConfigurado && !confirm('Gerar um novo token invalida o agente já conectado (se houver) até ele ser reconfigurado com o novo token. Continuar?')) return
+    setErroTokenAgente(null)
+    setGerandoTokenAgente(true)
+    try {
+      const r = await fetch(`${API_URL}/meu-estabelecimento/agente-impressao/token`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await r.json()
+      if (!r.ok) { setErroTokenAgente(data.erro ?? 'Erro ao gerar token'); return }
+      setTokenAgenteGerado(data.token)
+      setAgenteConfigurado(true)
+    } catch {
+      setErroTokenAgente('Falha ao gerar token')
+    } finally {
+      setGerandoTokenAgente(false)
+    }
+  }
+
+  function copiarTokenAgente() {
+    if (!tokenAgenteGerado) return
+    navigator.clipboard.writeText(tokenAgenteGerado).then(() => {
+      setTokenAgenteCopiado(true)
+      setTimeout(() => setTokenAgenteCopiado(false), 2000)
+    })
   }
 
   function copiarLink() {
@@ -785,6 +822,69 @@ export default function Configuracoes() {
               {salvandoSenhaReabrir ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
             </button>
           </form>
+        </div>
+
+        {/* Agente de impressão local */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
+          <div>
+            <h2 className="font-semibold text-zinc-200">Agente de impressão local</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Token usado pelo agente de impressão (serviço instalado num computador do
+              restaurante, sem navegador) pra se conectar e imprimir os pedidos automaticamente
+              nas impressoras de cada setor. Gerar um token novo invalida o anterior.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+              agenteConfigurado
+                ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30'
+                : 'bg-zinc-700 text-zinc-400 ring-zinc-600'
+            }`}>
+              {agenteConfigurado ? 'Token configurado' : 'Nenhum token gerado'}
+            </span>
+          </div>
+
+          {erroTokenAgente && (
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 ring-1 ring-red-500/30">
+              {erroTokenAgente}
+            </p>
+          )}
+
+          {tokenAgenteGerado && dados && (
+            <div className="space-y-2 rounded-xl border border-orange-500/30 bg-orange-500/5 p-3">
+              <p className="text-xs font-medium text-orange-400">
+                Copie agora — esse token não será mostrado de novo. Cole no arquivo de
+                configuração do agente junto com o ID do estabelecimento.
+              </p>
+              <div className="space-y-1 text-xs text-zinc-400">
+                <p>ID do estabelecimento: <code className="text-zinc-200">{dados.id}</code></p>
+                <p>URL do backend: <code className="text-zinc-200">{API_URL}</code></p>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded-lg bg-zinc-950 px-3 py-2.5 text-sm text-orange-400">
+                  {tokenAgenteGerado}
+                </code>
+                <button
+                  onClick={copiarTokenAgente}
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-700"
+                >
+                  {tokenAgenteCopiado ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  {tokenAgenteCopiado ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={gerarTokenAgente}
+            disabled={gerandoTokenAgente}
+            className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+          >
+            {gerandoTokenAgente
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : agenteConfigurado ? 'Gerar novo token' : 'Gerar token'}
+          </button>
         </div>
 
         {/* Info somente leitura */}
