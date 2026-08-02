@@ -55,6 +55,14 @@ describe('montarTicketRodada', () => {
     expect(depoisDoItem2).toContain('obs: sem gelo');
   });
 
+  it('mostra o setor de destino em destaque no topo só quando presente', () => {
+    const semSetor = texto(montarTicketRodada(base));
+    expect(semSetor).not.toContain('>>>');
+
+    const comSetor = texto(montarTicketRodada({ ...base, setorDestino: 'churrasqueira' }));
+    expect(comSetor).toContain('>>> CHURRASQUEIRA <<<');
+  });
+
   it('mostra o nome do setor de origem ao lado do item só quando nomeSetorReferencia está presente', () => {
     const itemSemReferencia = { ...item1, nomeSetorReferencia: null };
     const itemComReferencia = { ...item2, nomeSetorReferencia: 'Churrasqueira' };

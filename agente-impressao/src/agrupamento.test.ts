@@ -19,6 +19,7 @@ describe('agruparPorSetorEImpressora — sem setor hub', () => {
     expect(grupos).toEqual([
       {
         setorId: 'setor-cozinha',
+        setorNome: 'Cozinha',
         impressoraIp: '192.168.1.10',
         comandas: [{ nome: 'Cláudio', itens: [{ ...item({ setorId: 'setor-cozinha', nomeItem: 'Arroz' }), nomeSetorReferencia: null }] }],
       },
