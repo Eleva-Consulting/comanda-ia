@@ -44,6 +44,7 @@ export interface ComandaParaImprimir {
 
 export interface GrupoParaImprimir {
   setorId:      string;
+  setorNome:    string;
   impressoraIp: string;
   comandas:     ComandaParaImprimir[]; // só as comandas (e só os itens delas) relevantes pra esse setor
 }
@@ -77,7 +78,7 @@ export function agruparPorSetorEImpressora(
     }
 
     if (comandasFiltradas.length > 0) {
-      grupos.push({ setorId: setor.id, impressoraIp: setor.impressoraIp, comandas: comandasFiltradas });
+      grupos.push({ setorId: setor.id, setorNome: setor.nome, impressoraIp: setor.impressoraIp, comandas: comandasFiltradas });
     }
   }
 

@@ -71,6 +71,7 @@ async function processarRodada(rodadaId: string, envioId: string | null): Promis
         numeroPessoas: dados.numeroPessoas,
         abertaPorNome: dados.abertaPorNome,
         comandas:      grupo.comandas,
+        setorDestino:  grupo.setorNome,
       });
       try {
         await enviarParaImpressora(grupo.impressoraIp, ticket);

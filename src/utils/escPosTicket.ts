@@ -52,6 +52,10 @@ export interface DadosTicketRodada {
   numeroPessoas:        number | null;
   abertaPorNome:        string | null;
   itens:                ItemTicket[];
+  // Nome do setor/estação dona desse ticket (ex: "Churrasqueira") — impresso em destaque no
+  // topo pra diferenciar tickets do mesmo pedido saindo em impressoras diferentes. Omitido
+  // (ou null) quando não há mais de um destino possível pra esse ticket.
+  setorDestino?:        string | null;
 }
 
 export interface ComandaEnvio {
@@ -66,6 +70,7 @@ export interface DadosTicketEnvio {
   numeroPessoas:        number | null;
   abertaPorNome:        string | null;
   comandas:             ComandaEnvio[];
+  setorDestino?:        string | null;
 }
 
 function formatarDataHora(data: Date): string {
@@ -89,10 +94,12 @@ function cabecalho(params: {
   criadaEm:             Date;
   numeroPessoas:        number | null;
   abertaPorNome:        string | null;
+  setorDestino?:        string | null;
 }): string {
   let saida = ALINHAR_CENTRO;
   saida += MODO_TITULO + `${params.estabelecimentoNome}\n`;
   saida += MODO_NORMAL + linhaSeparadora;
+  if (params.setorDestino) saida += MODO_TITULO + `>>> ${params.setorDestino.toUpperCase()} <<<\n` + MODO_NORMAL;
   saida += MODO_NEGRITO + `${params.mesaNumero ? `Mesa ${params.mesaNumero}` : 'Sem mesa'}${params.subtitulo}\n`;
   saida += MODO_NORMAL + `${formatarDataHora(params.criadaEm)}\n`;
   if (params.numeroPessoas)  saida += `Pessoas na mesa: ${params.numeroPessoas}\n`;
@@ -111,6 +118,7 @@ export function montarTicketRodada(dados: DadosTicketRodada): Buffer {
     criadaEm:             dados.criadaEm,
     numeroPessoas:        dados.numeroPessoas,
     abertaPorNome:        dados.abertaPorNome,
+    setorDestino:         dados.setorDestino,
   });
   for (const item of dados.itens) texto += linhaItem(item);
   texto += AVANCO_ANTES_DO_CORTE + CORTE_PAPEL;
@@ -126,6 +134,7 @@ export function montarTicketEnvio(dados: DadosTicketEnvio): Buffer {
     criadaEm:             dados.criadaEm,
     numeroPessoas:        dados.numeroPessoas,
     abertaPorNome:        dados.abertaPorNome,
+    setorDestino:         dados.setorDestino,
   });
   for (const comanda of dados.comandas) {
     texto += MODO_NEGRITO + `${comanda.nome}\n` + MODO_NORMAL;
