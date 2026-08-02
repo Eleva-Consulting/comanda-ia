@@ -20,6 +20,7 @@ interface Setor {
   nome: string
   tempoAlvoMinutos: number | null
   impressoraIp: string | null
+  recebeTicketCompleto: boolean
 }
 
 interface ItemCardapio {
@@ -70,6 +71,7 @@ export default function Cardapio() {
   const [nomeSetor, setNomeSetor] = useState('')
   const [tempoAlvoSetor, setTempoAlvoSetor] = useState('')
   const [impressoraIpSetor, setImpressoraIpSetor] = useState('')
+  const [recebeTicketCompletoSetor, setRecebeTicketCompletoSetor] = useState(false)
   const [salvandoSetor, setSalvandoSetor] = useState(false)
 
   const fotoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -354,6 +356,7 @@ export default function Cardapio() {
     setNomeSetor('')
     setTempoAlvoSetor('')
     setImpressoraIpSetor('')
+    setRecebeTicketCompletoSetor(false)
     setModalSetorAberto(true)
   }
 
@@ -362,6 +365,7 @@ export default function Cardapio() {
     setNomeSetor(setor.nome)
     setTempoAlvoSetor(setor.tempoAlvoMinutos != null ? String(setor.tempoAlvoMinutos) : '')
     setImpressoraIpSetor(setor.impressoraIp ?? '')
+    setRecebeTicketCompletoSetor(setor.recebeTicketCompleto)
     setModalSetorAberto(true)
   }
 
@@ -379,6 +383,7 @@ export default function Cardapio() {
           nome: nomeSetor.trim(),
           tempoAlvoMinutos: tempoAlvoSetor.trim() !== '' ? parseInt(tempoAlvoSetor, 10) : null,
           impressoraIp: impressoraIpSetor.trim() || null,
+          recebeTicketCompleto: recebeTicketCompletoSetor,
         }),
       })
       if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.erro ?? 'Erro') }
@@ -739,10 +744,12 @@ export default function Cardapio() {
           nome={nomeSetor}
           tempoAlvoMinutos={tempoAlvoSetor}
           impressoraIp={impressoraIpSetor}
+          recebeTicketCompleto={recebeTicketCompletoSetor}
           salvando={salvandoSetor}
           onChangeNome={setNomeSetor}
           onChangeTempoAlvoMinutos={setTempoAlvoSetor}
           onChangeImpressoraIp={setImpressoraIpSetor}
+          onChangeRecebeTicketCompleto={setRecebeTicketCompletoSetor}
           onFechar={() => { if (!salvandoSetor) setModalSetorAberto(false) }}
           onSalvar={handleSalvarSetor}
         />
@@ -1001,17 +1008,19 @@ function ModalCategoria({
 }
 
 function ModalSetor({
-  editando, nome, tempoAlvoMinutos, impressoraIp, salvando,
-  onChangeNome, onChangeTempoAlvoMinutos, onChangeImpressoraIp, onFechar, onSalvar,
+  editando, nome, tempoAlvoMinutos, impressoraIp, recebeTicketCompleto, salvando,
+  onChangeNome, onChangeTempoAlvoMinutos, onChangeImpressoraIp, onChangeRecebeTicketCompleto, onFechar, onSalvar,
 }: {
   editando: Setor | null
   nome: string
   tempoAlvoMinutos: string
   impressoraIp: string
+  recebeTicketCompleto: boolean
   salvando: boolean
   onChangeNome: (v: string) => void
   onChangeTempoAlvoMinutos: (v: string) => void
   onChangeImpressoraIp: (v: string) => void
+  onChangeRecebeTicketCompleto: (v: boolean) => void
   onFechar: () => void
   onSalvar: (e: FormEvent) => void
 }) {
@@ -1055,6 +1064,23 @@ function ModalSetor({
               onChange={(e) => onChangeImpressoraIp(e.target.value)}
               className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-orange-500"
             />
+          </label>
+
+          <label className="mb-5 flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={recebeTicketCompleto}
+              onChange={(e) => onChangeRecebeTicketCompleto(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-600 accent-orange-500"
+            />
+            <span className="text-sm text-zinc-300">
+              Recebe o pedido completo da mesa
+              <span className="mt-0.5 block text-xs text-zinc-500">
+                Imprime todos os itens do pedido aqui (não só os deste setor) — itens de outro
+                setor saem marcados com o nome dele, como referência. Use no setor onde o garçom
+                confere e retira o pedido (normalmente a Cozinha).
+              </span>
+            </span>
           </label>
 
           <div className="flex gap-2">
