@@ -128,6 +128,7 @@ export async function publicoRoutes(fastify: FastifyInstance) {
 
   // POST /publico/:slug/pedido — cliente final cria pedido (sem auth)
   fastify.post('/publico/:slug/pedido', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     schema: { params: SlugParamsSchema, body: FazerPedidoSchema },
   }, async (request, reply) => {
     const { slug } = request.params as { slug: string };

@@ -30,7 +30,16 @@ Nenhum achado desta auditoria é especulativo — cada item foi confirmado lendo
 
 ## Achados, por severidade
 
-### 1. [Alto] Nenhum rate limiting em nenhuma rota do backend
+### 1. [Alto] Nenhum rate limiting em nenhuma rota do backend — ✅ Resolvido em 2026-08-06
+
+> **Correção:** `@fastify/rate-limit` instalado e registrado globalmente em `src/server.ts`
+> (300 req/min por IP, default pra qualquer rota sem override). Limites específicos por
+> rota via `config: { rateLimit: {...} }`: `POST /auth/login` (5/15min),
+> `POST /auth/esqueci-senha` (3/15min — resolve também o achado #6),
+> `POST /auth/redefinir-senha` (10/15min), `POST /publico/:slug/pedido` (20/min). Validado
+> com 3 testes de integração (`src/rateLimit.test.ts`, via `fastify.inject()`) confirmando
+> que o bloqueio (429) realmente acontece após o limite, é por rota, e não vaza pra outras
+> rotas.
 
 **Local:** `src/server.ts` (nenhum registro de `@fastify/rate-limit` ou equivalente em nenhum
 lugar do backend — confirmado por leitura completa do arquivo e do `package.json`, que não lista
@@ -145,7 +154,12 @@ verificação nunca volta ao banco para checar se a sessão ainda é válida.
 
 ---
 
-### 6. [Baixo] Sem cooldown entre pedidos de reset de senha
+### 6. [Baixo] Sem cooldown entre pedidos de reset de senha — ✅ Resolvido em 2026-08-06 (via achado #1)
+
+> **Correção:** `POST /auth/esqueci-senha` agora limitado a 3 tentativas / 15 min por IP
+> (mesmo rate limiting do achado #1) — não implementado o cooldown por-usuário sugerido
+> como alternativa (reenviar o mesmo token em vez de gerar outro), avaliado como
+> redundante depois do rate limit por IP já cobrir o cenário de exploração real.
 
 **Local:** `src/routes/auth.ts:142-172` (`POST /auth/esqueci-senha`).
 
@@ -279,7 +293,8 @@ Para deixar claro o que foi checado e não apresentou vulnerabilidade:
 
 ## Plano de ação sugerido (priorização)
 
-1. **Rate limiting** (achado #1) — maior impacto, esforço baixo-médio (`@fastify/rate-limit`).
+1. ✅ **Rate limiting** (achado #1) — maior impacto, esforço baixo-médio (`@fastify/rate-limit`).
+   Resolvido em 2026-08-06.
 2. **Criptografar segredos em repouso** (achados #2 e #3) — impacto alto, esforço médio (definir
    estratégia de chave + migrar dados já persistidos).
 3. **Corrigir `POST /push/subscribe`** (achado #4) — esforço muito baixo, fix isolado.
