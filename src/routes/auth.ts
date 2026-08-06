@@ -88,6 +88,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // ── POST /auth/login ─────────────────────────────────────────────────────
   fastify.post('/auth/login', {
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
     schema: { body: LoginSchema },
   }, async (request, reply) => {
     const { email, senha } = request.body as { email: string; senha: string };
@@ -140,6 +141,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // ── POST /auth/esqueci-senha ─────────────────────────────────────────────────
   fastify.post('/auth/esqueci-senha', {
+    config: { rateLimit: { max: 3, timeWindow: '15 minutes' } },
     schema: { body: EsqueciSenhaSchema },
   }, async (request) => {
     const { email } = request.body as { email: string };
@@ -173,6 +175,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // ── POST /auth/redefinir-senha ───────────────────────────────────────────────
   fastify.post('/auth/redefinir-senha', {
+    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
     schema: { body: RedefinirSenhaSchema },
   }, async (request, reply) => {
     const { token, novaSenha } = request.body as { token: string; novaSenha: string };

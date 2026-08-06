@@ -3,6 +3,7 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { rootRoutes } from './routes/root.js';
 import { saudeRoutes } from './routes/saude.js';
 import { pedidosRoutes } from './routes/pedidos.js';
@@ -59,6 +60,15 @@ export async function buildServer() {
       fileSize: 5 * 1024 * 1024, // 5 MB
       files:    1,
     },
+  });
+
+  // Limite geral pra qualquer rota (contém abuso grosseiro/scraping) — rotas sensíveis
+  // (login, reset de senha, pedido público) têm limite bem mais apertado configurado na
+  // própria rota via `config: { rateLimit: {...} }`, que sobrescreve este default.
+  await fastify.register(fastifyRateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: '1 minute',
   });
 
   await fastify.register(fastifyJwt, {
