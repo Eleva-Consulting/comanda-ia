@@ -7,8 +7,8 @@ import fastifyRateLimit from '@fastify/rate-limit';
 // aplicação (sem precisar de banco de dados) — garante que a sintaxe/comportamento
 // realmente bloqueia como esperado, não só que compila.
 
-async function servidorDeTeste() {
-  const fastify = Fastify();
+async function servidorDeTeste(opts: { trustProxy?: boolean } = {}) {
+  const fastify = Fastify({ trustProxy: opts.trustProxy ?? false });
   await fastify.register(fastifyRateLimit, { global: true, max: 300, timeWindow: '1 minute' });
 
   fastify.get('/rota-normal', async () => ({ ok: true }));
@@ -51,5 +51,45 @@ describe('rate limiting (padrão usado em server.ts)', () => {
 
     const normal = await fastify.inject({ method: 'GET', url: '/rota-normal' });
     expect(normal.statusCode).toBe(200);
+  });
+});
+
+// Achado real testando em produção/homologação (2026-08-06): atrás do proxy do Railway,
+// sem `trustProxy: true` o Fastify usa o peer TCP direto (o proxy, que varia a cada
+// requisição) como `request.ip` — cada requisição do mesmo cliente cai num "IP" diferente
+// pro rate limiter, e o bloqueio nunca fecha. Simula esse cenário controlando
+// `remoteAddress` (peer TCP) e `x-forwarded-for` (IP real, só confiável com trustProxy)
+// em requisições separadas — reproduz o bug e confirma a correção.
+describe('rate limiting atrás de proxy (trustProxy)', () => {
+  it('sem trustProxy: peer TCP variando faz o limite nunca bloquear (bug reproduzido)', async () => {
+    const fastify = await servidorDeTeste({ trustProxy: false });
+
+    const resp1 = await fastify.inject({ method: 'POST', url: '/rota-restrita', remoteAddress: '10.0.0.1', headers: { 'x-forwarded-for': '203.0.113.9' } });
+    const resp2 = await fastify.inject({ method: 'POST', url: '/rota-restrita', remoteAddress: '10.0.0.2', headers: { 'x-forwarded-for': '203.0.113.9' } });
+    const resp3 = await fastify.inject({ method: 'POST', url: '/rota-restrita', remoteAddress: '10.0.0.3', headers: { 'x-forwarded-for': '203.0.113.9' } });
+
+    expect([resp1.statusCode, resp2.statusCode, resp3.statusCode]).toEqual([200, 200, 200]);
+  });
+
+  it('com trustProxy: usa o IP real (x-forwarded-for), bloqueia corretamente mesmo com peer TCP variando', async () => {
+    const fastify = await servidorDeTeste({ trustProxy: true });
+
+    const resp1 = await fastify.inject({ method: 'POST', url: '/rota-restrita', remoteAddress: '10.0.0.1', headers: { 'x-forwarded-for': '203.0.113.9' } });
+    const resp2 = await fastify.inject({ method: 'POST', url: '/rota-restrita', remoteAddress: '10.0.0.2', headers: { 'x-forwarded-for': '203.0.113.9' } });
+    const resp3 = await fastify.inject({ method: 'POST', url: '/rota-restrita', remoteAddress: '10.0.0.3', headers: { 'x-forwarded-for': '203.0.113.9' } });
+
+    expect([resp1.statusCode, resp2.statusCode, resp3.statusCode]).toEqual([200, 200, 429]);
+  });
+
+  it('com trustProxy: clientes reais diferentes (x-forwarded-for diferente) continuam isolados um do outro', async () => {
+    const fastify = await servidorDeTeste({ trustProxy: true });
+
+    await fastify.inject({ method: 'POST', url: '/rota-restrita', headers: { 'x-forwarded-for': '203.0.113.1' } });
+    await fastify.inject({ method: 'POST', url: '/rota-restrita', headers: { 'x-forwarded-for': '203.0.113.1' } });
+    const clienteA = await fastify.inject({ method: 'POST', url: '/rota-restrita', headers: { 'x-forwarded-for': '203.0.113.1' } });
+    const clienteB = await fastify.inject({ method: 'POST', url: '/rota-restrita', headers: { 'x-forwarded-for': '203.0.113.2' } });
+
+    expect(clienteA.statusCode).toBe(429);
+    expect(clienteB.statusCode).toBe(200);
   });
 });

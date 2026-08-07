@@ -40,6 +40,11 @@ function origensPermitidas(): string[] {
 export async function buildServer() {
   const fastify = Fastify({
     logger: true,
+    // Railway coloca o app atrás de um proxy — sem isso, request.ip pega o peer TCP direto
+    // (o proxy, instável entre requisições), não o IP real do cliente. Necessário pro
+    // @fastify/rate-limit (chave padrão é request.ip) funcionar de verdade em produção —
+    // achado ao testar ao vivo em homologação: sem trustProxy, o rate limit nunca fechava.
+    trustProxy: true,
     ajv: {
       customOptions: {
         coerceTypes: false,
