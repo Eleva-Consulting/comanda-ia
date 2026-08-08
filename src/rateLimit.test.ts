@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { FastifyRequest } from 'fastify';
 import fastifyRateLimit from '@fastify/rate-limit';
 
 // Testa o MESMO padrão de configuração usado em server.ts/auth.ts/publico.ts (plugin
@@ -113,5 +113,65 @@ describe('rate limiting atrás de proxy (trustProxy)', () => {
 
     expect(clienteA.statusCode).toBe(429);
     expect(clienteB.statusCode).toBe(200);
+  });
+});
+
+// Achado do usuário (2026-08-08): bloqueio por IP tem dois problemas sérios num endpoint
+// de login — (1) várias contas atrás do mesmo IP compartilhado (Wi-Fi único do
+// restaurante) ficam bloqueadas por causa de UMA sofrendo ataque; (2) o atacante
+// contorna só trocando de IP. Mesmo padrão usado em POST /auth/login e
+// /auth/esqueci-senha (src/routes/auth.ts): chave do limite é a conta (email do corpo),
+// não o IP de origem.
+function chavePorEmailDoCorpo(request: FastifyRequest): string {
+  const email = (request.body as { email?: string } | undefined)?.email;
+  return email ? `conta:${email.toLowerCase()}` : request.ip;
+}
+
+async function servidorDeTesteLoginPorConta() {
+  const fastify = Fastify({ trustProxy: true });
+  await fastify.register(fastifyRateLimit, { global: false });
+
+  fastify.post('/login', {
+    config: { rateLimit: { max: 2, timeWindow: '1 minute', hook: 'preHandler', keyGenerator: chavePorEmailDoCorpo } },
+  }, async () => ({ ok: true }));
+
+  return fastify;
+}
+
+describe('rate limiting por conta (email), não por IP — login/esqueci-senha', () => {
+  it('persegue a conta mesmo trocando de IP a cada tentativa (não dá pra contornar só trocando de IP)', async () => {
+    const fastify = await servidorDeTesteLoginPorConta();
+    const corpo = { email: 'vitima@teste.com', senha: 'errada' };
+
+    const resp1 = await fastify.inject({ method: 'POST', url: '/login', payload: corpo, headers: { 'x-forwarded-for': '203.0.113.1' } });
+    const resp2 = await fastify.inject({ method: 'POST', url: '/login', payload: corpo, headers: { 'x-forwarded-for': '203.0.113.2' } });
+    const resp3 = await fastify.inject({ method: 'POST', url: '/login', payload: corpo, headers: { 'x-forwarded-for': '203.0.113.3' } });
+
+    expect([resp1.statusCode, resp2.statusCode, resp3.statusCode]).toEqual([200, 200, 429]);
+  });
+
+  it('não bloqueia contas diferentes atacadas do mesmo IP compartilhado (ex: Wi-Fi do restaurante)', async () => {
+    const fastify = await servidorDeTesteLoginPorConta();
+    const mesmoIp = { 'x-forwarded-for': '198.51.100.1' };
+
+    // esgota o limite da conta A
+    await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'contaA@teste.com' }, headers: mesmoIp });
+    await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'contaA@teste.com' }, headers: mesmoIp });
+    const contaABloqueada = await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'contaA@teste.com' }, headers: mesmoIp });
+    expect(contaABloqueada.statusCode).toBe(429);
+
+    // conta B, mesmo IP, continua livre
+    const contaB = await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'contaB@teste.com' }, headers: mesmoIp });
+    expect(contaB.statusCode).toBe(200);
+  });
+
+  it('email é normalizado (case-insensitive) — maiúsculas não resetam o contador', async () => {
+    const fastify = await servidorDeTesteLoginPorConta();
+
+    await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'Carlos@Teste.com' } });
+    await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'carlos@teste.com' } });
+    const bloqueada = await fastify.inject({ method: 'POST', url: '/login', payload: { email: 'CARLOS@TESTE.COM' } });
+
+    expect(bloqueada.statusCode).toBe(429);
   });
 });

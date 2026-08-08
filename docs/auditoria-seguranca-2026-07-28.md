@@ -37,9 +37,24 @@ Nenhum achado desta auditoria é especulativo — cada item foi confirmado lendo
 > rota via `config: { rateLimit: {...} }`: `POST /auth/login` (5/15min),
 > `POST /auth/esqueci-senha` (3/15min — resolve também o achado #6),
 > `POST /auth/redefinir-senha` (10/15min), `POST /publico/:slug/pedido` (20/min). Validado
-> com 3 testes de integração (`src/rateLimit.test.ts`, via `fastify.inject()`) confirmando
+> com testes de integração (`src/rateLimit.test.ts`, via `fastify.inject()`) confirmando
 > que o bloqueio (429) realmente acontece após o limite, é por rota, e não vaza pra outras
 > rotas.
+>
+> **Iteração adicional em 2026-08-08** (achado do usuário testando ao vivo, com razão):
+> bloqueio por IP em `POST /auth/login`/`esqueci-senha` tem dois problemas sérios —
+> (1) várias contas atrás do mesmo IP compartilhado (ex: Wi-Fi único do restaurante) ficam
+> bloqueadas por causa de UMA conta sofrendo ataque, um risco real de disponibilidade;
+> (2) um atacante de verdade contorna o limite só trocando de IP (VPN/proxy/rede móvel),
+> já que o limite nunca perseguia a conta-alvo. Essas duas rotas passaram a usar
+> `keyGenerator` customizado (chave = email do corpo da requisição, normalizado
+> case-insensitive, hook `preHandler` pra rodar depois da validação do schema) em vez do
+> IP — o bloqueio agora persegue a conta específica sob ataque, sobrevive troca de IP do
+> atacante, e não afeta nenhuma outra conta no mesmo IP/rede. `POST /auth/redefinir-senha`
+> e `POST /publico/:slug/pedido` continuam por IP (não têm o mesmo risco: o primeiro não é
+> usado no dia a dia normal, o segundo não tem "conta" pra perseguir). 3 testes novos
+> provando o comportamento (persegue mesmo com IP trocando, não bloqueia conta vizinha no
+> mesmo IP, normalização de maiúsculas).
 
 **Local:** `src/server.ts` (nenhum registro de `@fastify/rate-limit` ou equivalente em nenhum
 lugar do backend — confirmado por leitura completa do arquivo e do `package.json`, que não lista

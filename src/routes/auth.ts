@@ -1,10 +1,22 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { prisma } from '../database.js';
 import { enviarEmail, templates } from '../mailer.js';
 import { gerarSlugUnico } from '../utils/slug.js';
+
+// Rate limit por CONTA visada (email), não por IP — combate os dois problemas do
+// limite por IP num endpoint de login/reset: (1) várias pessoas atrás do mesmo IP
+// compartilhado (ex: Wi-Fi único do restaurante) não são bloqueadas por causa de UMA
+// conta sofrendo ataque; (2) o atacante não consegue contornar o limite só trocando de
+// IP — a chave persegue a conta específica, não a origem da requisição. Cai pra IP só
+// Usa hook `preHandler` (roda depois da validação do schema da rota) — o email já chega
+// validado; o fallback pra IP é só defensivo, não deveria disparar na prática.
+function chavePorEmailDoCorpo(request: FastifyRequest): string {
+  const email = (request.body as { email?: string } | undefined)?.email;
+  return email ? `conta:${email.toLowerCase()}` : request.ip;
+}
 
 const SignupSchema = Type.Object({
   nomeEstabelecimento: Type.String({ minLength: 2, maxLength: 100 }),
@@ -88,7 +100,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // ── POST /auth/login ─────────────────────────────────────────────────────
   fastify.post('/auth/login', {
-    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes', hook: 'preHandler', keyGenerator: chavePorEmailDoCorpo } },
     schema: { body: LoginSchema },
   }, async (request, reply) => {
     const { email, senha } = request.body as { email: string; senha: string };
@@ -141,7 +153,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // ── POST /auth/esqueci-senha ─────────────────────────────────────────────────
   fastify.post('/auth/esqueci-senha', {
-    config: { rateLimit: { max: 3, timeWindow: '15 minutes' } },
+    config: { rateLimit: { max: 3, timeWindow: '15 minutes', hook: 'preHandler', keyGenerator: chavePorEmailDoCorpo } },
     schema: { body: EsqueciSenhaSchema },
   }, async (request) => {
     const { email } = request.body as { email: string };
