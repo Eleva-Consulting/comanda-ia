@@ -9,7 +9,15 @@ import fastifyRateLimit from '@fastify/rate-limit';
 
 async function servidorDeTeste(opts: { trustProxy?: boolean } = {}) {
   const fastify = Fastify({ trustProxy: opts.trustProxy ?? false });
-  await fastify.register(fastifyRateLimit, { global: true, max: 300, timeWindow: '1 minute' });
+  await fastify.register(fastifyRateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: '1 minute',
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      erro: `Muitas tentativas. Tente novamente em ${context.after}.`,
+    }),
+  });
 
   fastify.get('/rota-normal', async () => ({ ok: true }));
 
@@ -39,6 +47,20 @@ describe('rate limiting (padrão usado em server.ts)', () => {
     expect(resp1.statusCode).toBe(200);
     expect(resp2.statusCode).toBe(200);
     expect(resp3.statusCode).toBe(429);
+  });
+
+  it('resposta de bloqueio usa o formato {erro} do resto da aplicação, não o padrão do plugin', async () => {
+    // achado real: o frontend só lê `dados.erro` — o formato padrão do plugin
+    // ({statusCode, error, message}) fazia cair sempre na mensagem genérica de fallback
+    const fastify = await servidorDeTeste();
+    await fastify.inject({ method: 'POST', url: '/rota-restrita' });
+    await fastify.inject({ method: 'POST', url: '/rota-restrita' });
+    const bloqueada = await fastify.inject({ method: 'POST', url: '/rota-restrita' });
+
+    const corpo = bloqueada.json();
+    expect(corpo).toHaveProperty('erro');
+    expect(typeof corpo.erro).toBe('string');
+    expect(corpo).not.toHaveProperty('message');
   });
 
   it('bloqueio é por rota — a rota restrita atingir o limite não afeta a rota normal', async () => {

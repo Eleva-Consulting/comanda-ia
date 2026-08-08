@@ -74,6 +74,18 @@ export async function buildServer() {
     global: true,
     max: 300,
     timeWindow: '1 minute',
+    // Achado ao vivo em homologação (2026-08-07): a resposta padrão do plugin
+    // ({statusCode, error, message}) não bate com o formato {erro: '...'} que todo o
+    // resto do backend usa — o frontend (Login.tsx e outros, que só leem `dados.erro`)
+    // caía sempre na mensagem genérica de fallback, sem indicar que era um bloqueio
+    // temporário. Uniformiza o formato pra qualquer rota com limite.
+    errorResponseBuilder: (_request, context) => ({
+      // statusCode aqui não é só cosmético — o plugin lança esse objeto como erro, e o
+      // Fastify usa essa propriedade pra decidir o código HTTP de verdade da resposta
+      // (sem ela, cai em 500 em vez de 429, mesmo com o corpo certo).
+      statusCode: 429,
+      erro: `Muitas tentativas. Tente novamente em ${context.after}.`,
+    }),
   });
 
   await fastify.register(fastifyJwt, {
