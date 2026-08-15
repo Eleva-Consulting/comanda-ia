@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams }           from 'react-router'
 import { API_URL }             from '../lib/api'
+import { notificarErroImpressao } from '../lib/impressao'
 
 interface ItemPedido {
   id:             string
@@ -49,17 +50,20 @@ export default function ImprimirComanda() {
   const [erro, setErro]                 = useState<string | null>(null)
 
   useEffect(() => {
-    if (!token || !pedidoId) return
+    if (!token || !pedidoId) {
+      if (!token) notificarErroImpressao('Sessão expirada — faça login novamente para a impressão automática voltar a funcionar.')
+      return
+    }
     Promise.all([
       fetch(`${API_URL}/pedidos/${pedidoId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch(`${API_URL}/meu-estabelecimento`,  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
     ])
       .then(([p, e]) => {
-        if (p.erro) { setErro(p.erro); return }
+        if (p.erro) { setErro(p.erro); notificarErroImpressao(p.erro); return }
         setPedido(p)
         setEstab(e)
       })
-      .catch(() => setErro('Falha ao carregar dados'))
+      .catch(() => { setErro('Falha ao carregar dados'); notificarErroImpressao('Falha ao carregar dados para impressão') })
   }, [token, pedidoId])
 
   useEffect(() => {
