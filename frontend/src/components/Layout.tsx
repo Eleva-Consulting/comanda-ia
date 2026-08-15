@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router'
 import {
   Bell, BellOff, ChefHat, LogOut, Users, X, Table2, Wallet, ShieldCheck,
   Package, TrendingUp, Landmark, Home, Flame, BookOpen, History, Settings,
-  Sun, Moon, ChevronLeft,
+  Sun, Moon, ChevronLeft, AlertTriangle,
 } from 'lucide-react'
 import { useSocket } from '../hooks/useSocket'
 import { usePush } from '../hooks/usePush'
@@ -13,6 +13,7 @@ import { useSidebarColapsada } from '../hooks/useSidebarColapsada'
 import { getRole } from '../lib/auth'
 import { temPermissao } from '../lib/permissoes'
 import { API_URL } from '../lib/api'
+import { TIPO_ERRO_IMPRESSAO } from '../lib/impressao'
 
 interface NavItem {
   to:    string
@@ -47,6 +48,7 @@ export default function Layout({ children, headerExtra }: Props) {
   const role = getRole()
   const { socket } = useSocket(token)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [erroImpressao, setErroImpressao] = useState<string | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
 
   function tocarBeep() {
@@ -85,6 +87,18 @@ export default function Layout({ children, headerExtra }: Props) {
     socket.on('pedido:novo', handler)
     return () => { socket.off('pedido:novo', handler) }
   }, [socket])
+
+  // As páginas /imprimir/* rodam num iframe invisível fora da tela (ver Cozinha.tsx) —
+  // sem isso, um erro ali (ex: sessão expirada) some sem ninguém nunca ver.
+  useEffect(() => {
+    function aoReceberMensagem(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.tipo !== TIPO_ERRO_IMPRESSAO) return
+      setErroImpressao(event.data.mensagem)
+    }
+    window.addEventListener('message', aoReceberMensagem)
+    return () => window.removeEventListener('message', aoReceberMensagem)
+  }, [])
 
   function removerToast(id: number) {
     setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -268,6 +282,36 @@ export default function Layout({ children, headerExtra }: Props) {
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>
         </main>
       </div>
+
+      {/* Erro de impressão — vindo do iframe invisível de /imprimir/*, ver useEffect acima */}
+      {erroImpressao && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-start justify-center px-4 pt-3 sm:pt-4">
+          <div className="flex w-full max-w-lg items-start gap-3 rounded-2xl border border-red-500/30 bg-zinc-900 p-4 shadow-lg ring-1 ring-red-500/20">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-zinc-100">Falha ao imprimir comanda</p>
+              <p className="text-xs text-zinc-400">{erroImpressao}</p>
+              {(erroImpressao.includes('Token') || erroImpressao.includes('Sessão expirada')) && (
+                <button
+                  onClick={handleSair}
+                  className="mt-2 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20"
+                >
+                  Fazer login novamente
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setErroImpressao(null)}
+              className="shrink-0 rounded p-0.5 text-zinc-500 hover:text-zinc-300"
+              aria-label="Fechar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toasts de novo pedido */}
       {toasts.length > 0 && (

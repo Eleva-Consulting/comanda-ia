@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams }           from 'react-router'
 import { API_URL }             from '../lib/api'
+import { notificarErroImpressao } from '../lib/impressao'
 
 interface ItemEnvio {
   id:             string
@@ -39,17 +40,20 @@ export default function ImprimirEnvio() {
   const [erro, setErro]     = useState<string | null>(null)
 
   useEffect(() => {
-    if (!token || !envioId) return
+    if (!token || !envioId) {
+      if (!token) notificarErroImpressao('Sessão expirada — faça login novamente para a impressão automática voltar a funcionar.')
+      return
+    }
     Promise.all([
       fetch(`${API_URL}/rodadas/envio/${envioId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch(`${API_URL}/meu-estabelecimento`,      { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
     ])
       .then(([e, es]) => {
-        if (e.erro) { setErro(e.erro); return }
+        if (e.erro) { setErro(e.erro); notificarErroImpressao(e.erro); return }
         setEnvio(e)
         setEstab(es)
       })
-      .catch(() => setErro('Falha ao carregar dados'))
+      .catch(() => { setErro('Falha ao carregar dados'); notificarErroImpressao('Falha ao carregar dados para impressão') })
   }, [token, envioId])
 
   useEffect(() => {

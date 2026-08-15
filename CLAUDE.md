@@ -423,6 +423,33 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-08-15
+- **Impressão "some" silenciosamente com sessão expirada — erro agora aparece na tela
+  (PR #65).** Cliente da galeteria relatou que a impressão de comanda parou de funcionar
+  do nada. Investigado via systematic-debugging (não foi chute): confirmado com o cliente
+  que o pedido chegava normal na Cozinha (toast/beep ok) mas nem a impressão manual saía
+  papel nenhum, sem erro visível em lugar nenhum. Causa raiz: o JWT expira em 7 dias, mas
+  o Socket.IO só valida o token **uma vez, na conexão** (`src/socket.ts`) — uma aba aberta
+  além disso continua recebendo eventos normalmente (dá a falsa impressão de que "está
+  tudo bem"), mas qualquer `fetch` novo passa a receber 401. E o mecanismo de impressão
+  (automática e manual, mesmo código) roda dentro de um **iframe invisível fora da tela**
+  — o erro do fetch era renderizado ali dentro, sem ninguém nunca ver. É a manifestação
+  prática do achado (4) da auditoria de segurança de 2026-07-28 ("JWT sem revogação") —
+  não resolvido aqui (isso exigiria `tokenVersion` e é mais custoso), só a sintoma ficou
+  visível agora.
+  - `frontend/src/lib/impressao.ts` (novo): a página de impressão avisa a janela principal
+    via `postMessage` quando falha (token ausente, resposta com `erro`, falha de rede).
+  - `ImprimirComanda.tsx`/`ImprimirRodada.tsx`/`ImprimirEnvio.tsx` chamam esse aviso em
+    todo caminho de erro. `Layout.tsx` (montado em toda tela autenticada) escuta e mostra
+    um banner vermelho no topo com a mensagem real, com botão "Fazer login novamente"
+    quando a causa é sessão expirada.
+  - Testado ao vivo no navegador via Playwright (login real, token corrompido em runtime,
+    iframe de impressão disparado manualmente): banner aparece com a mensagem certa,
+    "Fazer login novamente" desloga e redireciona pro `/login`, X fecha o aviso. `npm test`
+    (103 testes) e build do frontend sem regressão. Não resolve sessões já expiradas
+    retroativamente (operador precisa logar de novo mesmo) — só evita que aconteça de novo
+    em silêncio.
+
 ### 2026-07-28
 - **Auditoria de segurança completa do sistema (PR #38, `docs/auditoria-seguranca-2026-07-28.md`).**
   Pedido do usuário: achar vulnerabilidades reais e pontos de melhoria de segurança, sem escopo
