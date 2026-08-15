@@ -3,6 +3,7 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { rootRoutes } from './routes/root.js';
 import { saudeRoutes } from './routes/saude.js';
 import { pedidosRoutes } from './routes/pedidos.js';
@@ -39,6 +40,11 @@ function origensPermitidas(): string[] {
 export async function buildServer() {
   const fastify = Fastify({
     logger: true,
+    // Railway coloca o app atrás de um proxy — sem isso, request.ip pega o peer TCP direto
+    // (o proxy, instável entre requisições), não o IP real do cliente. Necessário pro
+    // @fastify/rate-limit (chave padrão é request.ip) funcionar de verdade em produção —
+    // achado ao testar ao vivo em homologação: sem trustProxy, o rate limit nunca fechava.
+    trustProxy: true,
     ajv: {
       customOptions: {
         coerceTypes: false,
@@ -59,6 +65,27 @@ export async function buildServer() {
       fileSize: 5 * 1024 * 1024, // 5 MB
       files:    1,
     },
+  });
+
+  // Limite geral pra qualquer rota (contém abuso grosseiro/scraping) — rotas sensíveis
+  // (login, reset de senha, pedido público) têm limite bem mais apertado configurado na
+  // própria rota via `config: { rateLimit: {...} }`, que sobrescreve este default.
+  await fastify.register(fastifyRateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: '1 minute',
+    // Achado ao vivo em homologação (2026-08-07): a resposta padrão do plugin
+    // ({statusCode, error, message}) não bate com o formato {erro: '...'} que todo o
+    // resto do backend usa — o frontend (Login.tsx e outros, que só leem `dados.erro`)
+    // caía sempre na mensagem genérica de fallback, sem indicar que era um bloqueio
+    // temporário. Uniformiza o formato pra qualquer rota com limite.
+    errorResponseBuilder: (_request, context) => ({
+      // statusCode aqui não é só cosmético — o plugin lança esse objeto como erro, e o
+      // Fastify usa essa propriedade pra decidir o código HTTP de verdade da resposta
+      // (sem ela, cai em 500 em vez de 429, mesmo com o corpo certo).
+      statusCode: 429,
+      erro: `Muitas tentativas. Tente novamente em ${context.after}.`,
+    }),
   });
 
   await fastify.register(fastifyJwt, {

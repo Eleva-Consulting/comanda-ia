@@ -423,6 +423,33 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-08-15
+- **Impressão "some" silenciosamente com sessão expirada — erro agora aparece na tela
+  (PR #65).** Cliente da galeteria relatou que a impressão de comanda parou de funcionar
+  do nada. Investigado via systematic-debugging (não foi chute): confirmado com o cliente
+  que o pedido chegava normal na Cozinha (toast/beep ok) mas nem a impressão manual saía
+  papel nenhum, sem erro visível em lugar nenhum. Causa raiz: o JWT expira em 7 dias, mas
+  o Socket.IO só valida o token **uma vez, na conexão** (`src/socket.ts`) — uma aba aberta
+  além disso continua recebendo eventos normalmente (dá a falsa impressão de que "está
+  tudo bem"), mas qualquer `fetch` novo passa a receber 401. E o mecanismo de impressão
+  (automática e manual, mesmo código) roda dentro de um **iframe invisível fora da tela**
+  — o erro do fetch era renderizado ali dentro, sem ninguém nunca ver. É a manifestação
+  prática do achado (4) da auditoria de segurança de 2026-07-28 ("JWT sem revogação") —
+  não resolvido aqui (isso exigiria `tokenVersion` e é mais custoso), só a sintoma ficou
+  visível agora.
+  - `frontend/src/lib/impressao.ts` (novo): a página de impressão avisa a janela principal
+    via `postMessage` quando falha (token ausente, resposta com `erro`, falha de rede).
+  - `ImprimirComanda.tsx`/`ImprimirRodada.tsx`/`ImprimirEnvio.tsx` chamam esse aviso em
+    todo caminho de erro. `Layout.tsx` (montado em toda tela autenticada) escuta e mostra
+    um banner vermelho no topo com a mensagem real, com botão "Fazer login novamente"
+    quando a causa é sessão expirada.
+  - Testado ao vivo no navegador via Playwright (login real, token corrompido em runtime,
+    iframe de impressão disparado manualmente): banner aparece com a mensagem certa,
+    "Fazer login novamente" desloga e redireciona pro `/login`, X fecha o aviso. `npm test`
+    (103 testes) e build do frontend sem regressão. Não resolve sessões já expiradas
+    retroativamente (operador precisa logar de novo mesmo) — só evita que aconteça de novo
+    em silêncio.
+
 ### 2026-07-28
 - **Auditoria de segurança completa do sistema (PR #38, `docs/auditoria-seguranca-2026-07-28.md`).**
   Pedido do usuário: achar vulnerabilidades reais e pontos de melhoria de segurança, sem escopo
@@ -1501,9 +1528,63 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
       (varrendo n=0 a 19 de uma vez, todos os code pages numa única impressão) fez a
       impressora não imprimir nada — teve que ser feito um valor de code page por vez,
       isolado, pra funcionar.
-   4. Construir o agente local em si (conexão Socket.IO + mapeamento setor→IP da impressora).
-   5. Empacotar pra instalar em cada restaurante + decidir rollout (paralelo ao modelo antigo
-      ou troca direta) + tratamento de impressora offline (fila/retry).
+   4. [x] **Concluído em 2026-08-02** (PRs #55-#59, `agente-impressao/` — pacote novo no
+      mesmo repositório, `package.json` próprio) — o agente em si, **testado ao vivo de
+      ponta a ponta em homologação e já em produção**. Decisões confirmadas com o usuário
+      antes de implementar: código no mesmo repo (não repo separado); autenticação por
+      **token de dispositivo próprio** (gerado/regenerado em Configurações → "Agente de
+      impressão local", nunca mais recuperável depois de gerado — mesmo padrão de segredo
+      já usado no projeto); item sem Setor vinculado não imprime automaticamente (só
+      continua visível no Kanban).
+      - Backend: `Setor.impressoraIp` + `Estabelecimento.tokenAgenteImpressao` (hash
+        bcrypt); `POST /meu-estabelecimento/agente-impressao/token`; `socket.ts` ganhou
+        uma branch de auth pra conexão do agente (`tipoConexao: 'agente-impressao'`);
+        `plugins/auth.ts` (`autenticar`) passou a aceitar também os headers
+        `x-device-token`/`x-estabelecimento-id` pras chamadas REST do agente (`GET
+        /setores`, `GET /rodadas/...` — reaproveitadas sem mudança, já traziam `setorId`
+        por item). `GET`/`PATCH /meu-estabelecimento` corrigidos pra nunca devolver os
+        hashes de senha/token (o PATCH nunca excluía nenhum antes — corrigido de brinde).
+      - `agente-impressao/index.ts`: conecta no Socket.IO com o token, escuta
+        `producao:item-novo`, deduplica por rodada/envio, busca detalhes completos via
+        REST, agrupa por Setor (`agrupamento.ts`, função pura testada) e manda um ticket
+        por impressora via socket TCP cru (`imprimir.ts`) — reaproveita
+        `montarTicketEnvio` do passo 3 via import relativo cross-pacote (decisão interina,
+        já anotada desde o passo 3).
+      - **2 achados reais só descobertos testando com impressora física de verdade** (nenhum
+        teste automatizado pegaria):
+        1. **Setor "hub"** (`Setor.recebeTicketCompleto`) — no fluxo do restaurante, o
+           garçom retira o pedido na Cozinha e usa aquela comanda como checklist do que
+           precisa buscar em outras estações. Sem isso, a Cozinha só via os itens dela
+           mesma. Um setor marcado como hub recebe TODOS os itens da rodada/envio, com os
+           de outro setor saindo marcados com o nome dele (`nomeSetorReferencia` em
+           `ItemTicket`) — ex: "1x Espetinho de Coração (Churrasqueira)".
+        2. **Setor de destino em destaque no ticket** (`setorDestino` em
+           `DadosTicketRodada`/`DadosTicketEnvio`, texto `>>> NOME DO SETOR <<<` no topo)
+           — com dois tickets do mesmo pedido saindo quase juntos (Cozinha completo +
+           Churrasqueira só dela), não dava pra diferenciar um do outro sem isso.
+      - Suporte a arquivo `.env` (via `dotenv`) — facilita instalar em qualquer sistema,
+        principal motivador foi Windows (variável de ambiente permanente é mais chato de
+        configurar lá). Testado ao vivo pelo usuário instalando num PC Windows novo,
+        baixando o ZIP do repo (público) direto da branch `staging` — **achado de
+        processo**: o "Download ZIP" do GitHub baixa a branch `main` por padrão, precisa
+        trocar pra `staging` antes (ou acessar `/tree/staging` direto) enquanto a feature
+        não tiver sido promovida.
+      - **CI**: novo job `Agente de impressão (build + test)`, já marcado como obrigatório
+        em staging/main (branch protection atualizada via API).
+      - **Confirmado com o usuário**: zero impacto em quem não usa a feature (telas de
+        impressão via quiosque nunca foram tocadas; auth nova só ativa com
+        `tipoConexao: 'agente-impressao'` explícito, que nenhum navegador manda; campos
+        novos no banco são opcionais/com default). O dispositivo do garçom não precisa
+        estar na mesma rede da impressora/agente — só internet; a exigência de rede local
+        é só entre o agente e as impressoras.
+      - **Já em produção** (PR #59, `staging → main`, mesclado em 2026-08-02).
+   5. **Não iniciado formalmente** — empacotar pra instalar em cada restaurante (hoje é
+      `git clone`/baixar ZIP + `npm install` + configurar `.env` manualmente, documentado
+      no PDF `docs/agente-impressao-windows-passo-a-passo.pdf`) + decidir se roda em
+      paralelo ao modelo antigo (quiosque) ou substitui de vez, por restaurante + iniciar
+      junto com o sistema operacional automaticamente (hoje precisa rodar `npm start`
+      manual a cada reboot) + tratamento de impressora offline (fila/retry — hoje só loga
+      erro e segue, sem reenviar).
 
 > Painel de avaliações (média de estrelas + comentários no Dashboard) já estava entregue antes
 > desta lista ser revisada — ver seção "Avaliações dos clientes" em `Dashboard.tsx`.
