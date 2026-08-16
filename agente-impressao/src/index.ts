@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { io } from 'socket.io-client';
 import { montarTicketEnvio } from '../../src/utils/escPosTicket.js';
 import { agruparPorSetorEImpressora, type ComandaComItens, type SetorComImpressora } from './agrupamento.js';
+import { carregarFila, descartarExpirados, enfileirar, listarProntosParaRetry, removerDaFila, salvarFila, type TicketEnfileirado } from './filaImpressao.js';
 import { enviarParaImpressora } from './imprimir.js';
 
 // Lê de um arquivo `.env` na pasta do agente (mais fácil de configurar em qualquer sistema,
@@ -24,8 +25,16 @@ const headersAgente = {
 const RECARREGAR_CONTEXTO_MS = 5 * 60 * 1000; // pega impressora nova cadastrada em Configurações sem precisar reiniciar
 const ATRASO_ANTES_DE_BUSCAR_MS = 300; // o envio de rascunho emite 1 evento por item — espera todos chegarem antes de buscar a rodada completa
 
+// Fila de retry (impressora offline) — persistida ao lado do .env pra sobreviver a reinício do
+// agente/serviço. TTL configurável: depois desse tempo o ticket é descartado (nunca imprime um
+// pedido de horas atrás quando a impressora enfim voltar).
+const FILA_IMPRESSAO_PATH = process.env.FILA_IMPRESSAO_PATH ?? './fila-impressao.json';
+const FILA_IMPRESSAO_TTL_MS = Number(process.env.FILA_IMPRESSAO_TTL_MS ?? 45 * 60 * 1000);
+const RETRY_FILA_MS = 30 * 1000;
+
 let estabelecimentoNome = '';
 let setoresCache: SetorComImpressora[] = [];
+let filaAtual: TicketEnfileirado[] = [];
 
 async function carregarContexto(): Promise<void> {
   const [estResp, setoresResp] = await Promise.all([
@@ -82,11 +91,42 @@ async function processarRodada(rodadaId: string, envioId: string | null): Promis
         console.log(`[agente] impresso — setor ${grupo.setorId} (${grupo.impressoraIp})`);
       } catch (err) {
         console.error(`[agente] falha ao imprimir no setor ${grupo.setorId} (${grupo.impressoraIp}):`, (err as Error).message);
+        filaAtual = enfileirar(filaAtual, {
+          id:           `${rodadaId}-${grupo.setorId}-${Date.now()}`,
+          impressoraIp: grupo.impressoraIp,
+          ticket,
+          criadoEm:     Date.now(),
+          tentativas:   0,
+        });
+        await salvarFila(FILA_IMPRESSAO_PATH, filaAtual);
+        console.log(`[agente] ticket enfileirado pra retry — setor ${grupo.setorId} (${grupo.impressoraIp})`);
       }
     }
   } catch (err) {
     console.error(`[agente] erro processando rodada ${rodadaId}:`, (err as Error).message);
   }
+}
+
+async function processarFilaRetry(): Promise<void> {
+  const agora = Date.now();
+  const { ativos, expirados } = descartarExpirados(filaAtual, agora, FILA_IMPRESSAO_TTL_MS);
+  for (const item of expirados) {
+    console.error(`[agente] ticket descartado após expirar (impressora ${item.impressoraIp} seguiu offline) — id ${item.id}`);
+  }
+
+  let filaRestante = ativos;
+  for (const item of listarProntosParaRetry(ativos)) {
+    try {
+      await enviarParaImpressora(item.impressoraIp, item.ticket);
+      console.log(`[agente] retry bem-sucedido — impressora ${item.impressoraIp} (id ${item.id})`);
+      filaRestante = removerDaFila(filaRestante, item.id);
+    } catch {
+      // continua na fila — próxima tentativa no próximo tick
+    }
+  }
+
+  filaAtual = filaRestante;
+  await salvarFila(FILA_IMPRESSAO_PATH, filaAtual);
 }
 
 function aoReceberItemNovo(item: { rodadaId: string | null; envioId: string | null }): void {
@@ -98,6 +138,11 @@ function aoReceberItemNovo(item: { rodadaId: string | null; envioId: string | nu
 }
 
 async function main(): Promise<void> {
+  filaAtual = await carregarFila(FILA_IMPRESSAO_PATH);
+  if (filaAtual.length > 0) {
+    console.log(`[agente] ${filaAtual.length} ticket(s) pendente(s) de tentativa(s) anterior(es) recarregado(s) da fila`);
+  }
+
   await carregarContexto();
 
   const socket = io(BACKEND_URL, {
@@ -113,6 +158,10 @@ async function main(): Promise<void> {
   setInterval(() => {
     carregarContexto().catch((err) => console.error('[agente] falha ao recarregar contexto:', (err as Error).message));
   }, RECARREGAR_CONTEXTO_MS);
+
+  setInterval(() => {
+    processarFilaRetry().catch((err) => console.error('[agente] falha ao processar fila de retry:', (err as Error).message));
+  }, RETRY_FILA_MS);
 }
 
 main().catch((err) => {
