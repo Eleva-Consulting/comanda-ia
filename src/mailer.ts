@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { escapeHtml } from './utils/escapeHtml.js';
 
 const remetente = process.env.SMTP_FROM ?? 'Comanda IA <onboarding@resend.dev>';
 
@@ -35,7 +36,9 @@ export async function enviarEmail(opts: {
 }
 
 export const templates = {
-  cadastroPendente(nome: string, nomeEstabelecimento: string): string {
+  cadastroPendente(nomeRaw: string, nomeEstabelecimentoRaw: string): string {
+    const nome = escapeHtml(nomeRaw);
+    const nomeEstabelecimento = escapeHtml(nomeEstabelecimentoRaw);
     return `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -117,7 +120,9 @@ export const templates = {
     `;
   },
 
-  definirSenha(nome: string, nomeEstabelecimento: string, urlDefinicao: string): string {
+  definirSenha(nomeRaw: string, nomeEstabelecimentoRaw: string, urlDefinicao: string): string {
+    const nome = escapeHtml(nomeRaw);
+    const nomeEstabelecimento = escapeHtml(nomeEstabelecimentoRaw);
     return `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
       <h2 style="color:#f97316">Bem-vindo(a) à Comanda IA! 🎉</h2>
@@ -139,7 +144,8 @@ export const templates = {
   `;
   },
 
-  resetSenha(nome: string, urlRedefinicao: string): string {
+  resetSenha(nomeRaw: string, urlRedefinicao: string): string {
+    const nome = escapeHtml(nomeRaw);
     return `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
       <h2 style="color:#f97316">Redefinição de senha</h2>
@@ -158,7 +164,9 @@ export const templates = {
   `;
   },
 
-  cadastroAprovado(nome: string, nomeEstabelecimento: string, urlFrontend: string): string {
+  cadastroAprovado(nomeRaw: string, nomeEstabelecimentoRaw: string, urlFrontend: string): string {
+    const nome = escapeHtml(nomeRaw);
+    const nomeEstabelecimento = escapeHtml(nomeEstabelecimentoRaw);
     return `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
         <h2 style="color:#22c55e">Estabelecimento aprovado! ✅</h2>
@@ -185,11 +193,14 @@ export const templates = {
     total: number;
     urlFrontend: string;
   }): string {
+    const nomeEstabelecimento = escapeHtml(params.nomeEstabelecimento);
+    const clienteNome = escapeHtml(params.clienteNome);
+
     const linhasItens = params.itens
       .map(
         (i) => `
           <tr>
-            <td style="padding:7px 10px;border-bottom:1px solid #e4e4e7">${i.nomeItem}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #e4e4e7">${escapeHtml(i.nomeItem)}</td>
             <td style="padding:7px 10px;border-bottom:1px solid #e4e4e7;text-align:center">${i.quantidade}x</td>
             <td style="padding:7px 10px;border-bottom:1px solid #e4e4e7;text-align:right">R$ ${(i.precoUnit * i.quantidade).toFixed(2)}</td>
           </tr>`,
@@ -199,8 +210,8 @@ export const templates = {
     return `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#18181b">
         <h2 style="color:#f97316;margin-bottom:4px">Novo pedido! 🔔</h2>
-        <p style="color:#71717a;margin:0 0 16px">${params.nomeEstabelecimento}</p>
-        <p><strong>${params.clienteNome}</strong> acabou de fazer um pedido.</p>
+        <p style="color:#71717a;margin:0 0 16px">${nomeEstabelecimento}</p>
+        <p><strong>${clienteNome}</strong> acabou de fazer um pedido.</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden">
           <thead>
             <tr style="background:#f4f4f5">
