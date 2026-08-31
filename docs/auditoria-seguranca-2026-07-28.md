@@ -196,7 +196,18 @@ não (sem enumeração de contas por essa via).
 
 ---
 
-### 7. [Baixo] HTML de cliente final não sanitizado nos templates de email
+### 7. [Baixo→Médio, reclassificado em 2026-08-29] HTML de cliente final não sanitizado nos templates de email — ✅ Resolvido em 2026-08-31
+
+> **Correção:** nova função pura `escapeHtml` (`src/utils/escapeHtml.ts`, com testes em
+> `src/utils/escapeHtml.test.ts`) escapa os 5 caracteres especiais de HTML (`&<>"'`). Aplicada em
+> `src/mailer.ts` a **todo** campo de entrada de usuário interpolado nos 5 templates —
+> `clienteNome`/`nomeEstabelecimento`/`nomeItem` (`novoPedido`), `nome`/`nomeEstabelecimento`
+> (`cadastroPendente`, `definirSenha`, `cadastroAprovado`), `nome` (`resetSenha`) — nunca em URLs
+> (`urlFrontend`/`urlDefinicao`/`urlRedefinicao`, que são construídas pelo servidor, não entrada de
+> usuário, e escapar quebraria o link). Verificado rechamando os 5 templates com o mesmo payload
+> usado na verificação ao vivo (`<img src=x onerror="alert(document.cookie)">`) — todos passaram a
+> devolver a versão escapada (`&lt;img ... &gt;`) em vez do markup cru. Suíte completa (156 testes)
+> e `tsc` sem regressão.
 
 **Local:** `src/mailer.ts` (templates `novoPedido`, `cadastroPendente`, entre outros).
 
@@ -212,6 +223,74 @@ canal.
 
 **Recomendação:** escapar (`encodeURIComponent`/lib de escape HTML) qualquer campo de entrada de
 usuário antes de interpolar nos templates de `mailer.ts`.
+
+> **Verificado ao vivo em 2026-08-29** (pergunta do usuário: "o sistema está protegido contra
+> XSS?" — varredura pedida sem aplicar nenhuma correção). Confirmado com um teste real, chamando
+> `templates.novoPedido()` diretamente (sem enviar email de verdade) com
+> `clienteNome = '<img src=x onerror="alert(document.cookie)">'`: **o payload passa 100% intacto
+> para o HTML final**, sem qualquer neutralização — ver "Como reproduzir" abaixo. A vítima real é
+> o **dono do estabelecimento** (`dono.email` em `src/routes/publico.ts:305`), não o atacante —
+> ou seja, é injeção contra terceiro, não self-XSS. A afirmação original de que "clientes de email
+> bloqueiam JavaScript" é uma suposição, não uma garantia (Gmail/Outlook web tendem a remover
+> `<script>`/handlers `on*`, mas isso varia por cliente e não deveria ser a única defesa) — vale
+> reconsiderar a severidade para **Médio** na próxima revisão do plano de ação, já que o vetor é
+> concretamente explorável por qualquer visitante anônimo do link público de pedido.
+>
+> Restante da varredura de 2026-08-29 (sem outros achados de XSS): zero ocorrências de
+> `dangerouslySetInnerHTML`/`innerHTML`/`insertAdjacentHTML`/`document.write`/`eval` em todo
+> `frontend/src` e `src` (já registrado na seção "Áreas verificadas sem achados relevantes", mas
+> reconfirmado). Páginas de impressão (`ImprimirRodada`/`ImprimirComanda`/`ImprimirEnvio`) e o
+> comentário de avaliação do cliente no Dashboard (`{a.comentarioAvaliacao}`) renderizam via JSX
+> puro, escapado automaticamente pelo React — não são vetor. `nomeItem` nos templates de email
+> vem do cardápio do próprio estabelecimento (`ic.nome`), não do cliente final — risco é só
+> self-XSS do dono contra si mesmo, não um vetor de terceiro. Também notado, como gap de defesa em
+> profundidade (não é a causa da vulnerabilidade, mas mitigaria o impacto): nenhum `helmet`/CSP
+> configurado em `src/server.ts`.
+>
+> **Como reproduzir este teste você mesmo** (não executa nenhum ataque real, não envia email —
+> só chama a função de template em isolado e inspeciona a string HTML resultante):
+> ```bash
+> cat > scratch-teste-xss.mjs << 'EOF'
+> import { templates } from './src/mailer.ts';
+>
+> const payload = '<img src=x onerror="alert(document.cookie)">';
+> const html = templates.novoPedido({
+>   nomeEstabelecimento: 'Teste',
+>   clienteNome: payload,
+>   itens: [{ nomeItem: 'Item', quantidade: 1, precoUnit: 10 }],
+>   total: 10,
+>   urlFrontend: 'http://localhost',
+> });
+>
+> console.log(html.includes(payload) ? '⚠️  NÃO escapado' : '✅ escapado');
+> EOF
+> npx tsx scratch-teste-xss.mjs
+> rm scratch-teste-xss.mjs
+> ```
+> Rodar a partir da raiz do repo (precisa do `tsx`, já é devDependency do backend). Resultado
+> hoje: `⚠️  NÃO escapado`. Depois de um fix (escapar HTML antes de interpolar), o mesmo script
+> deve imprimir `✅ escapado` — útil como checagem de regressão manual.
+>
+> **Mesmo padrão confirmado também no fluxo de criação de estabelecimento pelo Super Admin**
+> (`POST /admin/estabelecimentos`, `src/routes/admin.ts:105`, template `definirSenha`) — testado
+> da mesma forma, `templates.definirSenha(payload, ...)` com o mesmo `<img onerror>` não é
+> escapado. Diferença de modelo de ameaça em relação ao vetor do checkout: aqui quem digita
+> `nomeDono`/`nomeEstabelecimento` é o **próprio SUPER_ADMIN** autenticado (`apenasAdmin`), não um
+> visitante anônimo — mas a vítima (`emailDono`, quem recebe o link de "definir senha") é um
+> **terceiro real**, diferente de quem digitou. Exploração exigiria um SUPER_ADMIN malicioso ou
+> com a conta comprometida — risco de insider, não de atacante externo — bem menos provável que o
+> vetor do checkout público, mas seria coberto pelo mesmo fix (escapar antes de interpolar em
+> `mailer.ts`, aplicado uma vez para todos os templates).
+>
+> **Confirmado de ponta a ponta em produção pelo próprio usuário (2026-08-29):** auto-cadastro
+> com email real → aprovação via painel Admin → item de cardápio cadastrado → pedido real feito
+> no link público (`/c/<slug>`) com `clienteNome = '<b style="color:red;font-size:22px">TESTE
+> XSS</b>'` → email chegou na caixa de entrada real com o texto **renderizado em negrito
+> vermelho**, não como texto literal escapado. Terceira confirmação independente do mesmo achado
+> (função isolada → template chamado direto → agora fluxo real de produção), sem qualquer dúvida
+> restante sobre a exploração ser real. Estabelecimento de teste criado nessa verificação deve ser
+> removido do banco de produção depois (via `DELETE /admin/estabelecimentos/:id` no painel Admin)
+> pra não deixar dado de teste em prod.
 
 ---
 
