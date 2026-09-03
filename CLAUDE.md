@@ -423,6 +423,44 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-09-03
+- **Deploy do fix de HTML nos emails (achado #7, PR #67) nunca tinha chegado em
+  produção — achado e corrigido nesta sessão, sem código novo.** Usuário pediu só pra
+  confirmar que o fix de 31/08 estava no ar; investigação (sem chute, comparando
+  commit do `main` local com o deploy ativo do Railway) revelou que o serviço
+  `comanda-ia` em produção ainda rodava o commit `e552924` de **15/08** (PR #66) — bem
+  anterior ao fix. Causa: mais cedo no mesmo dia o usuário, mexendo no Railway, excluiu
+  sem querer o deploy pendente que ia subir o commit certo (`b6b0369`, merge do PR #69);
+  o Railway caiu de volta pro último deploy bem-sucedido anterior (15/08) e marcou isso
+  como "sucesso", mascarando o problema — sem essa investigação, teria passado
+  despercebido. Corrigido com `railway up --detach` a partir do `main` local (já
+  sincronizado com `origin/main`) — novo deploy confirmado `SUCCESS`. Vercel (frontend)
+  não teve o mesmo problema — deploy automático da PR #69 já tinha funcionado normal.
+- **Verificação end-to-end do fix em produção, com o próprio usuário conferindo o
+  resultado.** Em vez de simular um pedido numa conta de cliente real (mandaria email
+  de teste pra dono de restaurante de verdade — descartado por afetar terceiro), o teste
+  usou o cadastro público (`POST /auth/signup`, mesma função `escapeHtml` do achado
+  original) com o email do próprio usuário (`+tag` do Gmail) e payloads maliciosos como
+  nome/nome do estabelecimento: primeiro um clássico `<script>`/`<img onerror>`, depois
+  (a pedido do usuário, pra um teste mais definitivo — Gmail filtra `<script>` por conta
+  própria, o que mascararia um fix quebrado) um `<span style="color:...">` tentando
+  colorir o texto do email — estilo inline não costuma ser removido pelo sanitizador do
+  Gmail, então só o `escapeHtml` do backend impede a cor de aparecer. Usuário confirmou
+  ao vivo: texto chegou preto, sem estilo nenhum, tags aparecendo como texto literal —
+  fix confirmado ativo no código realmente rodando em produção. Os dois estabelecimentos
+  de teste (`status: pendente`) foram apagados via `DELETE /admin/estabelecimentos/:id`
+  logo depois de cada teste — nenhum resíduo ficou no banco.
+- **Achados de documentação, não corrigidos ainda (fora do pedido original):** (1) a
+  URL de produção do frontend documentada nas seções "Variáveis de ambiente" e "Produção"
+  deste arquivo (`comanda-ia.vercel.app`/`www.comanda-ia.com`) está desatualizada — o
+  domínio real hoje é **`comanda.cloud`** (confirmado pelo usuário; o próprio app
+  redireciona pra lá após login). (2) as "Credenciais de teste" documentadas acima
+  (Galeteria `vinicius@teste.com`, Pizzaria `carlos@teste.com`) devolveram "Credenciais
+  inválidas" testadas direto em produção — só a do Super Admin funcionou; parecem ser só
+  do seed local/homologação, não existem no banco de produção real. Nenhum dos dois foi
+  corrigido nesta sessão (não pedido); considerar atualizar se/quando confundir alguém
+  testando em prod de novo.
+
 ### 2026-08-15
 - **Impressão "some" silenciosamente com sessão expirada — erro agora aparece na tela
   (PR #65).** Cliente da galeteria relatou que a impressão de comanda parou de funcionar
