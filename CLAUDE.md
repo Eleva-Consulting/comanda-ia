@@ -423,6 +423,55 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-09-05
+- **Empacotamento do agente de impressão (passo 5 do roadmap) — retomado de uma branch local
+  esquecida desde 15/08, e levado até o fim (código completo, falta só validar em Windows
+  real).** Usuário pediu pra começar o empacotamento; antes de fazer brainstorm do zero, uma
+  checagem de branches locais (`git log --all`) achou `feat/agente-impressao-fila-retry-bundle`
+  — uma sessão anterior já tinha feito o brainstorm, escrito spec+plano completo
+  (`docs/superpowers/specs/2026-08-15-agente-impressao-empacotamento-design.md` e
+  `docs/superpowers/plans/2026-08-15-agente-impressao-empacotamento.md`, ambos aprovados pelo
+  usuário na época) e implementado as Tasks 1-3, mas nunca chegou a enviar pro GitHub nem
+  registrar no log — ficou completamente esquecida. Verificado que o trabalho estava sólido
+  (23 testes + `tsc` + bundle esbuild rodando limpo) antes de continuar em cima dele, em vez de
+  descartar e recomeçar.
+  - **Task 4 (executável único via Node SEA)**: `agente-impressao/scripts/build-exe.mjs` +
+    `sea-config.json` — gera o blob SEA a partir do bundle da Task 3 e injeta via `postject` no
+    `node.exe` copiado, produzindo um binário autocontido (sem precisar de Node/npm instalado
+    no PC do restaurante). Script é multiplataforma na lógica (detecta `darwin`/`win32` em
+    runtime, ajusta os passos de assinatura só no macOS), mas **o `.exe` de verdade pra
+    distribuir precisa ser gerado rodando `npm run build:exe` numa máquina Windows real** — só
+    testado aqui como smoke test no Mac (o binário `darwin` gerado roda e reproduz a mesma
+    mensagem de erro de configuração que o `npm start` normal já dava).
+  - **Task 5 (serviço do Windows via NSSM)**: `agente-impressao/instalar-servico-windows.bat`
+    registra o `.exe` como serviço (sobrevive a reboot, reinicia sozinho se cair), checando
+    antes se está rodando como Administrador e se `.exe`/`.env`/`nssm.exe` existem na pasta —
+    erro claro em cada caso em vez de falha genérica do NSSM. Guia
+    (`docs/agente-impressao-windows-passo-a-passo.pdf`) **regenerado do zero** (não existia
+    nenhuma fonte editável do PDF original, só o binário — gerado via HTML com o mesmo estilo
+    visual + Chrome headless `--print-to-pdf`) refletindo o novo fluxo: baixar 3 arquivos
+    prontos (`.exe`, `.env.example`, o `.bat`) em vez de clonar o repositório inteiro
+    (resolve de brinde o vazamento de código-fonte do repo público que o design original
+    apontava), mesma configuração de `.env` de sempre, baixar o NSSM à parte, rodar o `.bat`
+    como admin — mais tabela de comandos pra parar/reiniciar/desinstalar o serviço e uma nota
+    nova sobre a fila de retry (Tasks 1-2) pro caso de impressora cair da rede no meio do
+    expediente.
+  - **Achado de processo, não específico desta feature**: a branch retomada tinha sido criada a
+    partir de um ponto de `main` de 15/08 — 3 semanas de commits atrás (rate limiting, fix de
+    HTML nos emails, `npm audit fix`), incluindo a sessão de verificação de deploy do dia
+    03/09 registrada logo abaixo. Mesclado `main` atual na branch antes de prosseguir (sem
+    conflito — o merge só trouxe o fix de HTML/`escapeHtml` que essa branch não tinha; o
+    `CLAUDE.md` do `main` ainda não tinha a entrada de 03/09 porque aquele PR (#70) segue
+    pendente contra `staging`, não `main`), com `npm test`/`tsc` reconferidos limpos nos dois
+    pacotes (backend e `agente-impressao`) depois do merge. Lição: ao retomar um pedido do
+    usuário que pode já ter passado por trabalho anterior, vale checar `git log --all`/branches
+    órfãs antes de assumir que é preciso começar do zero — e, ao reaproveitar uma branch antiga,
+    sempre reconciliar com o `main` atual antes de continuar, não só no final.
+  - Ainda não commitado/enviado: falta a validação end-to-end numa máquina Windows real (Task 4
+    Step 3 e Task 5 Step 3 do plano — reboot, crash do processo reiniciando sozinho via NSSM),
+    sinalizada desde o plano original como o maior risco. Sem isso, marcar o passo 5 do roadmap
+    como 100% concluído seria prematuro.
+
 ### 2026-08-15
 - **Impressão "some" silenciosamente com sessão expirada — erro agora aparece na tela
   (PR #65).** Cliente da galeteria relatou que a impressão de comanda parou de funcionar
@@ -1578,7 +1627,7 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
         estar na mesma rede da impressora/agente — só internet; a exigência de rede local
         é só entre o agente e as impressoras.
       - **Já em produção** (PR #59, `staging → main`, mesclado em 2026-08-02).
-   5. [x] **Código completo, falta só validar numa máquina Windows real** —
+   5. [ ] **Código completo, falta só validar numa máquina Windows real** —
       `docs/superpowers/plans/2026-08-15-agente-impressao-empacotamento.md` (spec:
       `docs/superpowers/specs/2026-08-15-agente-impressao-empacotamento-design.md`).
       Executável único (Node SEA), fila de retry com expiração, e serviço do Windows via
