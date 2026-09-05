@@ -1578,13 +1578,14 @@ desenhada no documento — não implementar sem revisitar a spec primeiro.
         estar na mesma rede da impressora/agente — só internet; a exigência de rede local
         é só entre o agente e as impressoras.
       - **Já em produção** (PR #59, `staging → main`, mesclado em 2026-08-02).
-   5. **Não iniciado formalmente** — empacotar pra instalar em cada restaurante (hoje é
-      `git clone`/baixar ZIP + `npm install` + configurar `.env` manualmente, documentado
-      no PDF `docs/agente-impressao-windows-passo-a-passo.pdf`) + decidir se roda em
-      paralelo ao modelo antigo (quiosque) ou substitui de vez, por restaurante + iniciar
-      junto com o sistema operacional automaticamente (hoje precisa rodar `npm start`
-      manual a cada reboot) + tratamento de impressora offline (fila/retry — hoje só loga
-      erro e segue, sem reenviar).
+   5. [x] **Código completo, falta só validar numa máquina Windows real** —
+      `docs/superpowers/plans/2026-08-15-agente-impressao-empacotamento.md` (spec:
+      `docs/superpowers/specs/2026-08-15-agente-impressao-empacotamento-design.md`).
+      Executável único (Node SEA), fila de retry com expiração, e serviço do Windows via
+      NSSM — ver detalhes completos no Log de mudanças de 2026-09-05. Falta rodar
+      `npm run build:exe` numa máquina Windows de verdade (só gerado/testado no Mac até
+      aqui, como smoke test) e instalar como serviço lá pra confirmar reboot/crash-restart
+      de ponta a ponta — sinalizado desde o plano original como o ponto de maior risco.
 
 > Painel de avaliações (média de estrelas + comentários no Dashboard) já estava entregue antes
 > desta lista ser revisada — ver seção "Avaliações dos clientes" em `Dashboard.tsx`.
