@@ -423,6 +423,35 @@ de mudanças abaixo). Se alguém do time ainda tiver o remote antigo:
 
 > Registrar aqui um resumo de cada sessão de trabalho (mais recente no topo), com base nos commits feitos (`git log`) e no que ainda estiver em andamento sem commit. Objetivo: consultar rapidamente "o que foi feito" sem precisar vasculhar o histórico do git.
 
+### 2026-10-02
+- **WhatsApp não gerava QR code ("Não foi possível gerar o QR code. Tente novamente.") —
+  versão do WhatsApp Web anunciada pelo Baileys foi rejeitada pelo servidor (405).** Cliente
+  real em produção ficou sem WhatsApp (bot + todas as notificações de pedido falhando com
+  "WhatsApp não conectado"). Investigado via systematic-debugging: o log do Railway mostrava
+  `WhatsApp desconectado codigo=405` em toda tentativa, inclusive em pareação nova sem sessão
+  salva — ou seja, não era sessão corrompida. Causa raiz: o Baileys (`7.0.0-rc13`) anuncia uma
+  versão do WhatsApp Web **fixa no código da lib** (`[2,3000,1035194821]`), e o WhatsApp parou
+  de aceitá-la. Reproduzido localmente fora do app: versão embutida → fecha com 405; versão
+  atual (`fetchLatestWaWebVersion`/`fetchLatestBaileysVersion`) → QR gerado.
+  - `src/utils/whatsappVersao.ts` (novo, 11 testes): resolve a versão atual em tempo de
+    execução — primeiro a publicada pelo próprio WhatsApp Web, depois a do repositório do
+    Baileys como reserva — com cache de 6h, timeout de 5s por fonte (os fetchers do Baileys
+    não têm timeout nenhum), deduplicação de chamadas simultâneas (no boot toda sessão
+    reconecta junto) e fallback pra última versão conhecida. `conectar()`/`reconectar()`
+    passam essa versão pro `makeWASocket`.
+  - Achado da revisão de código, corrigido antes do merge: o `await` novo, se ficasse entre
+    encerrar o socket antigo e registrar o novo em `conectar()`, deixava o `close` do socket
+    antigo ganhar a corrida e agendar uma reconexão paralela (o mesmo loop duplicado já
+    corrigido em `134f472`) — a versão é resolvida antes de tocar no socket existente.
+  - **Efeito colateral do incidente:** depois de 5 tentativas com 405 a sessão salva é apagada
+    (regra de `whatsappReconexao.ts`), então todo estabelecimento que estava conectado
+    **precisa parear de novo pelo QR code** depois do deploy — não reconecta sozinho.
+  - **Se voltar a dar 405:** checar primeiro o log por "falha ao consultar a versão atual do
+    WhatsApp Web" (as duas fontes fora do ar → cai na versão embutida). Pendências conhecidas,
+    não resolvidas aqui: (1) com as duas fontes fora no boot, a versão embutida leva 5×405 e
+    apaga a sessão — o ideal seria não contar 405 como falha de sessão quando a versão não foi
+    resolvida; (2) versão em cache rejeitada dentro das 6h não é invalidada.
+
 ### 2026-08-15
 - **Impressão "some" silenciosamente com sessão expirada — erro agora aparece na tela
   (PR #65).** Cliente da galeteria relatou que a impressão de comanda parou de funcionar
