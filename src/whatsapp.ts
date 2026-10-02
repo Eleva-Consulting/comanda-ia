@@ -2,6 +2,8 @@ import makeWASocket, {
   DisconnectReason,
   BufferJSON,
   initAuthCreds,
+  fetchLatestWaWebVersion,
+  fetchLatestBaileysVersion,
   type AuthenticationCreds,
   type SignalDataTypeMap,
 } from '@whiskeysockets/baileys'
@@ -10,6 +12,17 @@ import pino from 'pino'
 import QRCode from 'qrcode'
 import { prisma } from './database.js'
 import { decidirAposDesconexao } from './utils/whatsappReconexao.js'
+import { criarResolvedorVersao, type VersaoWhatsApp } from './utils/whatsappVersao.js'
+
+// Versão publicada pelo próprio WhatsApp Web primeiro; a do repositório do Baileys como reserva.
+const logVersao = pino({ level: 'info', base: { pid: process.pid } })
+const resolverVersao = criarResolvedorVersao(
+  [
+    () => fetchLatestWaWebVersion(),
+    () => fetchLatestBaileysVersion(),
+  ],
+  { aoFalhar: (err) => logVersao.warn({ err }, 'WhatsApp: falha ao consultar a versão atual do WhatsApp Web') },
+)
 
 type ConnectionStatus = 'connecting' | 'open' | 'close'
 
@@ -115,8 +128,17 @@ class WhatsAppManager {
     estabelecimentoId: string,
     state: Awaited<ReturnType<typeof criarAuthState>>['state'],
     saveCreds: () => Promise<void>,
+    version: VersaoWhatsApp | undefined,
   ) {
-    const socket = makeWASocket({ auth: state, logger: this.logger, printQRInTerminal: false })
+    if (!version) {
+      this.log.warn({ estabelecimentoId }, 'WhatsApp: não foi possível obter a versão atual do WhatsApp Web, usando a embutida no Baileys')
+    }
+    const socket = makeWASocket({
+      auth: state,
+      logger: this.logger,
+      printQRInTerminal: false,
+      ...(version ? { version } : {}),
+    })
     this.sockets.set(estabelecimentoId, socket)
     socket.ev.on('creds.update', saveCreds)
     socket.ev.on('messages.upsert', ({ messages, type }: { messages: any[]; type: string }) => {
@@ -216,8 +238,9 @@ class WhatsAppManager {
   }
 
   async reconectar(estabelecimentoId: string): Promise<void> {
+    const version = await resolverVersao()
     const { state, saveCreds } = await criarAuthState(estabelecimentoId)
-    const socket = this.criarSocket(estabelecimentoId, state, saveCreds)
+    const socket = this.criarSocket(estabelecimentoId, state, saveCreds, version)
     this.statuses.set(estabelecimentoId, 'connecting')
 
     socket.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
@@ -234,11 +257,16 @@ class WhatsAppManager {
   }
 
   async conectar(estabelecimentoId: string): Promise<{ qrCode: string | null; status: ConnectionStatus }> {
+    // Resolve a versão ANTES de encerrar o socket atual: a consulta é uma chamada de rede, e
+    // se ficasse entre o end() e o registro do socket novo, o 'close' do socket antigo
+    // chegaria primeiro em handleFechamento e agendaria uma reconexão paralela.
+    const version = await resolverVersao()
+
     const socketExistente = this.sockets.get(estabelecimentoId)
     if (socketExistente) socketExistente.end(undefined)
 
     const { state, saveCreds } = await criarAuthState(estabelecimentoId)
-    const socket = this.criarSocket(estabelecimentoId, state, saveCreds)
+    const socket = this.criarSocket(estabelecimentoId, state, saveCreds, version)
     this.statuses.set(estabelecimentoId, 'connecting')
 
     return new Promise((resolve) => {
