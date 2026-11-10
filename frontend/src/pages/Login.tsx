@@ -115,10 +115,15 @@ export default function Login() {
           </button>
 
           <p className="mt-4 text-center text-sm text-zinc-500">
-            Não tem conta?{' '}
-            <Link to="/cadastro" className="font-medium text-orange-400 hover:text-orange-300">
-              Cadastrar estabelecimento
-            </Link>
+            Quer usar no seu restaurante?{' '}
+            <a
+              href="https://wa.me/5516992301119?text=Ol%C3%A1!%20Gostaria%20de%20testar%20o%20Comanda%20IA%20no%20meu%20restaurante."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-orange-400 hover:text-orange-300"
+            >
+              Fale conosco no WhatsApp
+            </a>
           </p>
 
           <p className="mt-2 text-center text-sm text-zinc-500">

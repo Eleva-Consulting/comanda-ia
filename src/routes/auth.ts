@@ -4,7 +4,6 @@ import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { prisma } from '../database.js';
 import { enviarEmail, templates } from '../mailer.js';
-import { gerarSlugUnico } from '../utils/slug.js';
 
 // Rate limit por CONTA visada (email), não por IP — combate os dois problemas do
 // limite por IP num endpoint de login/reset: (1) várias pessoas atrás do mesmo IP
@@ -17,15 +16,6 @@ function chavePorEmailDoCorpo(request: FastifyRequest): string {
   const email = (request.body as { email?: string } | undefined)?.email;
   return email ? `conta:${email.toLowerCase()}` : request.ip;
 }
-
-const SignupSchema = Type.Object({
-  nomeEstabelecimento: Type.String({ minLength: 2, maxLength: 100 }),
-  telefoneEstabelecimento: Type.String({ minLength: 8, maxLength: 20 }),
-  nome: Type.String({ minLength: 2, maxLength: 100 }),
-  email: Type.String({ format: 'email' }),
-  senha: Type.String({ minLength: 8, maxLength: 100 }),
-  website: Type.Optional(Type.String()), // Honeypot: campo invisível preenchido apenas por bots
-});
 
 const LoginSchema = Type.Object({
   email: Type.String({ format: 'email' }),
@@ -43,75 +33,10 @@ const RedefinirSenhaSchema = Type.Object({
 
 export async function authRoutes(fastify: FastifyInstance) {
   // ── POST /auth/signup ────────────────────────────────────────────────────
-  // Cria estabelecimento com status 'pendente' — aguarda aprovação do Super Admin
-  fastify.post('/auth/signup', {
-    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
-    schema: { body: SignupSchema },
-  }, async (request, reply) => {
-    const dados = request.body as {
-      nomeEstabelecimento: string;
-      telefoneEstabelecimento: string;
-      nome: string;
-      email: string;
-      senha: string;
-      website?: string;
-    };
-
-    // Honeypot: se vier preenchido, é um bot.
-    // Retorna 201 simulado para enganar o bot sem executar bcrypt, sem banco e sem gastar CPU/RAM.
-    if (dados.website) {
-      fastify.log.warn({ ip: request.ip, website: dados.website }, 'Bot bloqueado pelo honeypot no signup');
-      return reply.status(201).send({
-        mensagem: 'Cadastro realizado! Aguarde a aprovação da plataforma para acessar o sistema.',
-        estabelecimento: {
-          nome: dados.nomeEstabelecimento,
-          slug: 'pending',
-          status: 'pendente',
-        },
-      });
-    }
-
-    const emailExistente = await prisma.usuario.findUnique({ where: { email: dados.email } });
-    if (emailExistente) {
-      return reply.status(409).send({ erro: 'Email já cadastrado' });
-    }
-
-    const slug = await gerarSlugUnico(dados.nomeEstabelecimento);
-    const senhaHash = await bcrypt.hash(dados.senha, 12);
-
-    const resultado = await prisma.estabelecimento.create({
-      data: {
-        nome: dados.nomeEstabelecimento,
-        telefone: dados.telefoneEstabelecimento,
-        slug,
-        status: 'pendente', // aguarda aprovação do Super Admin
-        usuarios: {
-          create: {
-            nome: dados.nome,
-            email: dados.email,
-            senhaHash,
-            role: 'DONO',
-          },
-        },
-      },
-      include: { usuarios: true },
-    });
-
-    // Notifica o novo DONO — fire-and-forget
-    const dono = resultado.usuarios[0];
-    enviarEmail({
-      to:      dono.email,
-      subject: `Cadastro recebido — ${resultado.nome}`,
-      html:    templates.cadastroPendente(dono.nome, resultado.nome),
-    }).catch((err) => fastify.log.error({ err }, 'Falha ao enviar email de cadastro'));
-
-    return reply.status(201).send({
-      mensagem: 'Cadastro realizado! Aguarde a aprovação da plataforma para acessar o sistema.',
-      estabelecimento: {
-        nome: resultado.nome,
-        slug: resultado.slug,
-        status: resultado.status,
-      },
+  // Cadastro público desativado — novos estabelecimentos são liberados pelo WhatsApp / Super Admin
+  fastify.post('/auth/signup', async (_request, reply) => {
+    return reply.status(403).send({
+      erro: 'O cadastro público foi desativado. Solicite acesso através do nosso WhatsApp: (16) 99230-1119',
     });
   });
 
