@@ -24,6 +24,7 @@ const SignupSchema = Type.Object({
   nome: Type.String({ minLength: 2, maxLength: 100 }),
   email: Type.String({ format: 'email' }),
   senha: Type.String({ minLength: 8, maxLength: 100 }),
+  website: Type.Optional(Type.String()), // Honeypot: campo invisível preenchido apenas por bots
 });
 
 const LoginSchema = Type.Object({
@@ -44,6 +45,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   // ── POST /auth/signup ────────────────────────────────────────────────────
   // Cria estabelecimento com status 'pendente' — aguarda aprovação do Super Admin
   fastify.post('/auth/signup', {
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
     schema: { body: SignupSchema },
   }, async (request, reply) => {
     const dados = request.body as {
@@ -52,7 +54,22 @@ export async function authRoutes(fastify: FastifyInstance) {
       nome: string;
       email: string;
       senha: string;
+      website?: string;
     };
+
+    // Honeypot: se vier preenchido, é um bot.
+    // Retorna 201 simulado para enganar o bot sem executar bcrypt, sem banco e sem gastar CPU/RAM.
+    if (dados.website) {
+      fastify.log.warn({ ip: request.ip, website: dados.website }, 'Bot bloqueado pelo honeypot no signup');
+      return reply.status(201).send({
+        mensagem: 'Cadastro realizado! Aguarde a aprovação da plataforma para acessar o sistema.',
+        estabelecimento: {
+          nome: dados.nomeEstabelecimento,
+          slug: 'pending',
+          status: 'pendente',
+        },
+      });
+    }
 
     const emailExistente = await prisma.usuario.findUnique({ where: { email: dados.email } });
     if (emailExistente) {
