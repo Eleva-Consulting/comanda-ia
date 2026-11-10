@@ -16,6 +16,7 @@ export default function Cadastro() {
     email: '',
     senha: '',
     confirmarSenha: '',
+    website: '', // Honeypot: bots preenchem, humanos não vêem
   })
 
   function atualizar(campo: string, valor: string) {
@@ -42,6 +43,7 @@ export default function Cadastro() {
           nome: form.nome,
           email: form.email,
           senha: form.senha,
+          website: form.website,
         }),
       })
 
@@ -73,6 +75,18 @@ export default function Cadastro() {
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+          {/* Honeypot: Invisível para usuários, bots preenchem automaticamente */}
+          <div className="absolute -left-[9999px] -top-[9999px] opacity-0 pointer-events-none" aria-hidden="true">
+            <input
+              type="text"
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              value={form.website}
+              onChange={(e) => atualizar('website', e.target.value)}
+            />
+          </div>
+
           {/* Seção estabelecimento */}
           <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">
             Dados do estabelecimento
