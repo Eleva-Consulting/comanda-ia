@@ -15,6 +15,9 @@ import {
   TrendingUp,
 } from 'lucide-react'
 
+const WHATSAPP_URL =
+  'https://wa.me/5516992301119?text=Ol%C3%A1!%20Gostaria%20de%20testar%20o%20Comanda%20IA%20no%20meu%20restaurante.'
+
 // --- Animate on scroll hook ---
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null)
@@ -267,12 +270,14 @@ export default function Landing() {
               >
                 Entrar
               </Link>
-              <Link
-                to="/cadastro"
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-400 rounded-lg transition-colors flex items-center gap-1.5"
               >
-                Começar grátis <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+                Começar no WhatsApp <ArrowRight className="h-3.5 w-3.5" />
+              </a>
             </div>
 
             {/* Mobile menu toggle */}
@@ -295,13 +300,15 @@ export default function Landing() {
               >
                 Entrar
               </Link>
-              <Link
-                to="/cadastro"
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-4 py-2.5 text-sm font-semibold text-white bg-orange-500 rounded-lg text-center"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Começar grátis →
-              </Link>
+                Começar no WhatsApp →
+              </a>
             </div>
           )}
         </div>
@@ -336,12 +343,14 @@ export default function Landing() {
 
             <Reveal delay={240}>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link
-                  to="/cadastro"
+                <a
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-white font-semibold text-base px-6 py-3.5 rounded-xl transition-colors"
                 >
-                  Criar minha conta grátis <ArrowRight className="h-4 w-4" />
-                </Link>
+                  Experimentar no WhatsApp <ArrowRight className="h-4 w-4" />
+                </a>
                 <a
                   href="#como-funciona"
                   className="inline-flex items-center justify-center gap-2 text-zinc-300 border border-zinc-700 hover:border-zinc-500 hover:text-white font-medium text-base px-6 py-3.5 rounded-xl transition-colors"
@@ -417,12 +426,14 @@ export default function Landing() {
               <FeatureItem text="Zero instalação para o cliente" />
               <FeatureItem text="Disponível 24h, no celular de qualquer pessoa" />
             </ul>
-            <Link
-              to="/cadastro"
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-orange-400 font-semibold text-sm hover:text-orange-300 transition-colors"
             >
               Criar meu cardápio <ArrowRight className="h-4 w-4" />
-            </Link>
+            </a>
           </Reveal>
         </div>
 
@@ -446,12 +457,14 @@ export default function Landing() {
               <FeatureItem text="Notificação sonora a cada novo pedido" />
               <FeatureItem text="Funciona em qualquer tablet ou computador" />
             </ul>
-            <Link
-              to="/cadastro"
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-orange-400 font-semibold text-sm hover:text-orange-300 transition-colors"
             >
               Ver o painel <ArrowRight className="h-4 w-4" />
-            </Link>
+            </a>
           </Reveal>
           <Reveal delay={200} className="flex justify-center">
             {/* Kitchen dashboard mock - smaller version */}
@@ -501,12 +514,14 @@ export default function Landing() {
               <FeatureItem text="Cadastro de operadores para a equipe" />
               <FeatureItem text="Pausa a cozinha com um clique quando precisar" />
             </ul>
-            <Link
-              to="/cadastro"
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-orange-400 font-semibold text-sm hover:text-orange-300 transition-colors"
             >
               Começar agora <ArrowRight className="h-4 w-4" />
-            </Link>
+            </a>
           </Reveal>
         </div>
       </section>
@@ -584,12 +599,14 @@ export default function Landing() {
           </Reveal>
           <Reveal delay={120}>
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-              <Link
-                to="/cadastro"
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 bg-white text-orange-500 font-bold text-base px-8 py-4 rounded-xl hover:bg-orange-50 transition-colors"
               >
-                Criar minha conta grátis <ArrowRight className="h-4 w-4" />
-              </Link>
+                Solicitar acesso no WhatsApp <ArrowRight className="h-4 w-4" />
+              </a>
               <Link
                 to="/login"
                 className="inline-flex items-center justify-center gap-2 border-2 border-white/60 text-white font-semibold text-base px-8 py-4 rounded-xl hover:border-white hover:bg-white/10 transition-colors"
